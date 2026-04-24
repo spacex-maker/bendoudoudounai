@@ -1,0 +1,135 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* 与 tailwind 的 bg-romantic-mesh 保持一致：底层统一铺粉渐变，任何缝都不露近纯白
+     body 用透明，让 html 承担底色（原先 bg-warm-50 在屏上像一大块白边） */
+  html {
+    -webkit-font-smoothing: antialiased;
+    /* clip 不连带把 overflow-y 算成 auto，避免 html 自己多出一截可滚区域 */
+    overflow-x: clip;
+    background-color: #ffd6e0;
+    background-image:
+      radial-gradient(ellipse 120% 80% at 20% 10%, rgba(255, 182, 193, 0.45), transparent 50%),
+      radial-gradient(ellipse 100% 60% at 80% 90%, rgba(255, 218, 185, 0.4), transparent 50%),
+      linear-gradient(165deg, #fff5f0 0%, #ffe4ec 40%, #ffd6e0 100%);
+    /* 不设 min-height：与内容等高，避免短页在 footer 下多出一截可滚空白 */
+  }
+  body {
+    @apply m-0 min-h-0 text-stone-800;
+    background: transparent;
+  }
+  /* 日本語：ゴシック系を先に、欧文 UI フォールバック */
+  html[lang="ja"] body {
+    font-family:
+      "Hiragino Kaku Gothic ProN",
+      "Hiragino Sans",
+      "Noto Sans JP",
+      ui-sans-serif,
+      system-ui,
+      sans-serif;
+  }
+  #root {
+    background: transparent;
+  }
+}
+
+@layer utilities {
+  .romantic-glow {
+    box-shadow: 0 0 40px rgba(255, 140, 160, 0.15), 0 8px 32px rgba(200, 80, 100, 0.08);
+  }
+}
+
+/* 底部播放器：进度条略粗、音量条更细；拇指带高光与 hover */
+@layer components {
+  .music-progress-range,
+  .music-volume-range {
+    -webkit-appearance: none;
+    appearance: none;
+    background: transparent;
+  }
+
+  .music-progress-range::-webkit-slider-runnable-track {
+    height: 5px;
+    border-radius: 9999px;
+    background: linear-gradient(180deg, rgba(24, 24, 27, 0.95), rgba(39, 39, 42, 0.9));
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.45);
+  }
+
+  .music-volume-range::-webkit-slider-runnable-track {
+    height: 4px;
+    border-radius: 9999px;
+    background: rgba(39, 39, 42, 0.9);
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35);
+  }
+
+  .music-progress-range::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    margin-top: -4.5px;
+    border-radius: 9999px;
+    border: 2px solid rgba(255, 255, 255, 0.35);
+    background: linear-gradient(165deg, #fca5a5 0%, #dc2626 55%, #991b1b 100%);
+    box-shadow:
+      0 1px 3px rgba(0, 0, 0, 0.5),
+      0 0 0 1px rgba(0, 0, 0, 0.25),
+      inset 0 1px 0 rgba(255, 255, 255, 0.35);
+    transition: transform 0.12s ease, box-shadow 0.12s ease;
+  }
+
+  .music-progress-range:hover::-webkit-slider-thumb {
+    transform: scale(1.06);
+    box-shadow:
+      0 2px 8px rgba(220, 38, 38, 0.45),
+      0 0 0 1px rgba(0, 0, 0, 0.2),
+      inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  }
+
+  .music-volume-range::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 11px;
+    height: 11px;
+    margin-top: -3.5px;
+    border-radius: 9999px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: linear-gradient(180deg, #e4e4e7, #71717a);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+    transition: transform 0.12s ease;
+  }
+
+  .music-volume-range:hover::-webkit-slider-thumb {
+    transform: scale(1.08);
+  }
+
+  .music-progress-range::-moz-range-track {
+    height: 5px;
+    border-radius: 9999px;
+    background: rgba(39, 39, 42, 0.95);
+  }
+
+  .music-volume-range::-moz-range-track {
+    height: 4px;
+    border-radius: 9999px;
+    background: rgba(39, 39, 42, 0.9);
+  }
+
+  .music-progress-range::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border-radius: 9999px;
+    border: 2px solid rgba(255, 255, 255, 0.35);
+    background: linear-gradient(165deg, #fca5a5, #b91c1c);
+  }
+
+  .music-volume-range::-moz-range-thumb {
+    width: 11px;
+    height: 11px;
+    border-radius: 9999px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: linear-gradient(180deg, #e4e4e7, #71717a);
+  }
+}

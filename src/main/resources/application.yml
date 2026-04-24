@@ -1,0 +1,44 @@
+spring:
+  application:
+    name: bendoudou-server
+  datasource:
+    # 库名: bendoudoudounai，首次可在服务端执行: CREATE DATABASE bendoudoudounai CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+    url: jdbc:mysql://175.27.255.29:33306/bendoudoudounai?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    username: root
+    password: "Aimate2026!MySQL"
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+  servlet:
+    multipart:
+      max-file-size: 120MB
+      max-request-size: 125MB
+
+server:
+  port: 8080
+  error:
+    # 便于接口返回具体原因（如 COS 未配置、multipart 校验）；生产若需隐藏可改为 never
+    include-message: always
+
+security:
+  jwt:
+    secret: ${BENDOUDOU_JWT_SECRET:BendoudouOurLittleSiteJwtSecretKey2026MustBe32B+}
+    access-token-validity-seconds: 2592000
+
+bendoudou:
+  # 本地上传目录，相对 JAR 运行目录
+  music-upload-dir: ${BENDOUDOU_MUSIC_UPLOAD:uploads/music}
+  # 腾讯云 COS（与 productx 可共用桶 px-1258150206 / ap-nanjing；密钥请用环境变量，勿提交到仓库）
+  cos:
+    enabled: ${BENDOUDOU_COS_ENABLED:true}
+    secret-id: ${TENCENT_COS_SECRET_ID:}
+    secret-key: ${TENCENT_COS_SECRET_KEY:}
+    bucket: ${TENCENT_COS_BUCKET:px-1258150206}
+    region: ${TENCENT_COS_REGION:ap-nanjing}
+    path-prefix: ${TENCENT_COS_PATH_PREFIX:bendoudou/music/}
