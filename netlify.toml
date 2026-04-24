@@ -1,5 +1,5 @@
-# 仓库根目录连接 Netlify 时使用；子目录为 Vite 前端、产物在 frontend/dist
+# base 为 frontend 时，publish 须相对该子目录，否则会变成 frontend/frontend/dist
 [build]
   base = "frontend"
   command = "npm run build"
-  publish = "frontend/dist"
+  publish = "dist"
