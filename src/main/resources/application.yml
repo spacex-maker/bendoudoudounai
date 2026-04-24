@@ -21,7 +21,7 @@ spring:
       max-request-size: 125MB
 
 server:
-  port: 8080
+  port: 8882
   error:
     # 便于接口返回具体原因（如 COS 未配置、multipart 校验）；生产若需隐藏可改为 never
     include-message: always

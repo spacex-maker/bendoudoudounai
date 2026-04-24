@@ -16,8 +16,22 @@ export class ApiHttpError extends Error {
 /** 供前端在 catch 中替换为多语言的「加载失败」占位 */
 export const I18N_LOAD_FAILED = "__I18N_LOAD_FAILED__";
 
+/** 产线 API 域名（浏览器走 443/80，无端口；服务端反代到后端由运维配置） */
+const PROD_API_ORIGIN = "https://api.bendoudoudounai.com";
+
+/**
+ * 后端 API 根地址。
+ * - 若设置 `VITE_BACKEND_BASE`，则始终使用该值（可覆盖下述默认）
+ * - 生产构建：默认 `PROD_API_ORIGIN`
+ * - 本地开发：空字符串，走 Vite 代理的相对路径 `/api/...`（见 vite.config 的 proxy）
+ */
 export function getBackendBase(): string {
-  if (import.meta.env.VITE_BACKEND_BASE) return import.meta.env.VITE_BACKEND_BASE;
+  if (import.meta.env.VITE_BACKEND_BASE) {
+    return import.meta.env.VITE_BACKEND_BASE;
+  }
+  if (import.meta.env.PROD) {
+    return PROD_API_ORIGIN;
+  }
   return "";
 }
 
