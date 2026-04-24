@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { Home, ListMusic, Play, Pause, Search, Heart, Radio, Music2, ChevronRight, Settings2, LayoutDashboard } from "lucide-react";
+import { Home, ListMusic, Search, Heart, Radio, Music2, ChevronRight, Settings2, LayoutDashboard, History } from "lucide-react";
 import clsx from "clsx";
 import { mapApiError } from "../i18n/mapApiError";
 import { LanguageSwitch } from "../components/LanguageSwitch";
@@ -15,6 +15,8 @@ import { PlaylistSettingsModal } from "../components/PlaylistSettingsModal";
 import { CreatePlaylistModal } from "../components/CreatePlaylistModal";
 import { UserAvatar } from "../components/UserAvatar";
 import { UserProfileModal } from "../components/UserProfileModal";
+import { ConfirmModal } from "../components/ConfirmModal";
+import { MusicTrackTable } from "../components/MusicTrackTable";
 import { FOR_NAME } from "../siteMeta";
 import { getActiveLyricText } from "../music/lyricsUtils";
 import { useSyncedLyrics } from "../music/useSyncedLyrics";
@@ -22,8 +24,6 @@ import {
   type MusicTrackDto,
   type PlaylistItemDto,
   type InvitationItemDto,
-  getStoredToken,
-  getTrackFileUrl,
   coverDisplayUrl,
   fetchMusicTracks,
   recordTrackPlay,
@@ -35,7 +35,15 @@ import {
   setStoredPlaylistId,
   playlistWallpaperDisplayUrl,
   userIsAdmin,
+  fetchHeartTracks,
+  fetchPlayHistoryTracks,
+  addHeartTrack,
+  removeHeartTrack,
+  deleteTrackFromPlaylist,
 } from "../api/client";
+
+type PlayMode = "single" | "list" | "shuffle";
+const PLAY_MODE_KEY = "bendoudou_play_mode";
 
 export function MusicPage() {
   const { t } = useTranslation();
@@ -59,12 +67,30 @@ export function MusicPage() {
   const [playlistSettingsOpen, setPlaylistSettingsOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [createPlaylistOpen, setCreatePlaylistOpen] = useState(false);
+  const [removeTrackDialog, setRemoveTrackDialog] = useState<{
+    kind: "liked" | "playlist";
+    track: MusicTrackDto;
+  } | null>(null);
+  const [currentTrack, setCurrentTrack] = useState<MusicTrackDto | null>(null);
   const [currentId, setCurrentId] = useState<number | null>(null);
   const [playing, setPlaying] = useState(false);
   const [playPos, setPlayPos] = useState(0);
   const [playDur, setPlayDur] = useState(0);
   const [audioObjectUrl, setAudioObjectUrl] = useState<string | null>(null);
   const [scrubbing, setScrubbing] = useState(false);
+  const [historyPanelOpen, setHistoryPanelOpen] = useState(false);
+  const [historyTracks, setHistoryTracks] = useState<MusicTrackDto[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyErr, setHistoryErr] = useState<string | null>(null);
+  const [playMode, setPlayMode] = useState<PlayMode>(() => {
+    try {
+      const v = localStorage.getItem(PLAY_MODE_KEY);
+      if (v === "single" || v === "list" || v === "shuffle") return v;
+    } catch {
+      /* ignore */
+    }
+    return "list";
+  });
   const recordedPlayForTrackRef = useRef<number | null>(null);
 
   const [volume, setVolume] = useState(() => {
@@ -118,8 +144,12 @@ export function MusicPage() {
   }, [currentPlaylistId]);
 
   useEffect(() => {
+    if (activeNav === "liked" || activeNav === "history") {
+      setWallpaperTargetPlaylistId(null);
+      return;
+    }
     setWallpaperTargetPlaylistId(currentPlaylistId);
-  }, [currentPlaylistId, setWallpaperTargetPlaylistId]);
+  }, [activeNav, currentPlaylistId, setWallpaperTargetPlaylistId]);
 
   useEffect(() => {
     recordedPlayForTrackRef.current = null;
@@ -134,7 +164,13 @@ export function MusicPage() {
         const updated = await recordTrackPlay(currentId);
         setTracks((prev) =>
           prev.map((x) =>
-            x.id === updated.id ? { ...x, playCount: updated.playCount ?? x.playCount ?? 0 } : x
+            x.id === updated.id
+              ? {
+                  ...x,
+                  playCount: updated.playCount ?? x.playCount ?? 0,
+                  hearted: updated.hearted ?? x.hearted,
+                }
+              : x
           )
         );
         setPlaylists((pls) =>
@@ -156,10 +192,99 @@ export function MusicPage() {
   );
 
   useEffect(() => {
+    if (activeNav === "liked" || activeNav === "history") {
+      setWallpaperDisplayUrl(null);
+      return;
+    }
     setWallpaperDisplayUrl(playlistWallpaperDisplayUrl(currentPl));
-  }, [currentPl, setWallpaperDisplayUrl]);
+  }, [activeNav, currentPl, setWallpaperDisplayUrl]);
 
-  const playlistName = currentPl?.name ?? t("music.myPlaylist");
+  const playlistName =
+    activeNav === "liked"
+      ? t("music.likedPlaylist", { defaultValue: "我喜欢的音乐" })
+      : activeNav === "history"
+        ? t("music.playHistory", { defaultValue: "播放历史" })
+        : (currentPl?.name ?? t("music.myPlaylist"));
+
+  const showRemoveTrack =
+    activeNav === "liked" || (activeNav === "discover" && Boolean(currentPl?.iAmOwner));
+
+  const onPickLiked = useCallback(async () => {
+    setActiveNav("liked");
+    setListLoading(true);
+    setListErr(null);
+    try {
+      const list = await fetchHeartTracks();
+      setTracks(list);
+    } catch (e) {
+      setListErr(mapApiError(t, e));
+    } finally {
+      setListLoading(false);
+    }
+  }, [t]);
+
+  const onPickHistory = useCallback(async () => {
+    setActiveNav("history");
+    setListLoading(true);
+    setListErr(null);
+    try {
+      const list = await fetchPlayHistoryTracks();
+      setTracks(list);
+    } catch (e) {
+      setListErr(mapApiError(t, e));
+    } finally {
+      setListLoading(false);
+    }
+  }, [t]);
+
+  const openHistoryPanel = useCallback(() => {
+    setHistoryPanelOpen(true);
+    setHistoryLoading(true);
+    setHistoryErr(null);
+    void (async () => {
+      try {
+        const rows = await fetchPlayHistoryTracks();
+        setHistoryTracks(rows);
+      } catch (e) {
+        setHistoryErr(mapApiError(t, e));
+      } finally {
+        setHistoryLoading(false);
+      }
+    })();
+  }, [t]);
+
+  const onToggleHeart = useCallback(
+    async (tr: MusicTrackDto) => {
+      try {
+        if (tr.hearted) {
+          const updated = await removeHeartTrack(tr.id);
+          setTracks((prev) => {
+            if (activeNav === "liked") return prev.filter((x) => x.id !== tr.id);
+            return prev.map((x) => (x.id === tr.id ? { ...x, ...updated } : x));
+          });
+        } else {
+          const updated = await addHeartTrack(tr.id);
+          setTracks((prev) => prev.map((x) => (x.id === tr.id ? { ...x, ...updated } : x)));
+        }
+      } catch (e) {
+        alert(mapApiError(t, e));
+      }
+    },
+    [t, activeNav]
+  );
+
+  const requestRemoveTrack = useCallback(
+    (tr: MusicTrackDto) => {
+      if (activeNav === "liked") {
+        setRemoveTrackDialog({ kind: "liked", track: tr });
+        return;
+      }
+      if (currentPl?.iAmOwner) {
+        setRemoveTrackDialog({ kind: "playlist", track: tr });
+      }
+    },
+    [activeNav, currentPl?.iAmOwner]
+  );
 
   const onPickPlaylist = useCallback(async (id: number) => {
     setCurrentPlaylistId(id);
@@ -185,10 +310,7 @@ export function MusicPage() {
     [loadList]
   );
 
-  const current = useMemo(
-    () => (currentId == null ? null : tracks.find((t) => t.id === currentId) ?? null),
-    [currentId, tracks]
-  );
+  const current = useMemo(() => currentTrack, [currentTrack]);
   const listDuration = current?.durationSeconds ?? 0;
 
   const filtered = useMemo(() => {
@@ -203,7 +325,14 @@ export function MusicPage() {
     );
   }, [search, tracks]);
 
-  // 有对象存储直链则直连；否则拉取 /file 为 blob 并带 Authorization
+  useEffect(() => {
+    if (currentId == null) return;
+    const matched = tracks.find((x) => x.id === currentId);
+    if (!matched) return;
+    setCurrentTrack((prev) => (prev?.id === matched.id ? { ...prev, ...matched } : matched));
+  }, [tracks, currentId]);
+
+  // COS-only：只使用后端返回的公网直链
   useEffect(() => {
     if (current == null) {
       setAudioObjectUrl((prev) => {
@@ -212,35 +341,10 @@ export function MusicPage() {
       });
       return;
     }
-    if (current.audioUrl) {
-      setAudioObjectUrl((prev) => {
-        if (prev && prev.startsWith("blob:")) URL.revokeObjectURL(prev);
-        return current.audioUrl;
-      });
-      return;
-    }
-    const aborter = new AbortController();
-    let objectUrl: string | null = null;
-    (async () => {
-      try {
-        const res = await fetch(getTrackFileUrl(current.id), {
-          headers: { Authorization: `Bearer ${getStoredToken()}` },
-          signal: aborter.signal,
-        });
-        if (!res.ok) return;
-        const b = await res.blob();
-        objectUrl = URL.createObjectURL(b);
-        setAudioObjectUrl((prev) => {
-          if (prev && prev.startsWith("blob:")) URL.revokeObjectURL(prev);
-          return objectUrl;
-        });
-      } catch (e) {
-        if (e instanceof DOMException && e.name === "AbortError") return;
-      }
-    })();
-    return () => {
-      aborter.abort();
-    };
+    setAudioObjectUrl((prev) => {
+      if (prev && prev.startsWith("blob:")) URL.revokeObjectURL(prev);
+      return current.audioUrl ?? null;
+    });
   }, [current?.id, current?.audioUrl]);
 
   /** 封面：公网直链或「你们服务器」上的 /cover URL + token（不是用户电脑里的文件） */
@@ -287,6 +391,14 @@ export function MusicPage() {
   }, [volume]);
 
   useEffect(() => {
+    try {
+      localStorage.setItem(PLAY_MODE_KEY, playMode);
+    } catch {
+      /* ignore */
+    }
+  }, [playMode]);
+
+  useEffect(() => {
     const a = audioRef.current;
     if (!a) return;
     if (playing) {
@@ -297,16 +409,37 @@ export function MusicPage() {
   }, [playing]);
 
   const selectTrack = useCallback((t: MusicTrackDto, autoplay: boolean) => {
+    const isSameTrack = currentId === t.id;
+    setCurrentTrack(t);
     setCurrentId(t.id);
     setPlayPos(0);
     setPlayDur(0);
     if (autoplay) {
       setPlaying(true);
+      // 双击时强制触发播放，避免仅靠状态流转导致偶发“不自动播”
+      requestAnimationFrame(() => {
+        const a = audioRef.current;
+        if (!a) return;
+        if (isSameTrack) {
+          a.currentTime = 0;
+        }
+        void a.play().catch(() => setPlaying(false));
+      });
     }
-  }, []);
+  }, [currentId]);
 
-  const seekPrev = () => {
+  const seekPrev = useCallback(() => {
     if (!current || filtered.length === 0) return;
+    if (playMode === "shuffle") {
+      if (filtered.length === 1) {
+        selectTrack(filtered[0]!, true);
+        return;
+      }
+      const choices = filtered.filter((t) => t.id !== current.id);
+      const next = choices[Math.floor(Math.random() * choices.length)] ?? filtered[0]!;
+      selectTrack(next, true);
+      return;
+    }
     const idx = filtered.findIndex((t) => t.id === current.id);
     if (idx <= 0) {
       const last = filtered[filtered.length - 1]!;
@@ -314,17 +447,27 @@ export function MusicPage() {
     } else {
       selectTrack(filtered[idx - 1]!, true);
     }
-  };
+  }, [current, filtered, playMode, selectTrack]);
 
-  const seekNext = () => {
+  const seekNext = useCallback(() => {
     if (!current || filtered.length === 0) return;
+    if (playMode === "shuffle") {
+      if (filtered.length === 1) {
+        selectTrack(filtered[0]!, true);
+        return;
+      }
+      const choices = filtered.filter((t) => t.id !== current.id);
+      const next = choices[Math.floor(Math.random() * choices.length)] ?? filtered[0]!;
+      selectTrack(next, true);
+      return;
+    }
     const idx = filtered.findIndex((t) => t.id === current.id);
     if (idx < 0 || idx >= filtered.length - 1) {
       selectTrack(filtered[0]!, true);
     } else {
       selectTrack(filtered[idx + 1]!, true);
     }
-  };
+  }, [current, filtered, playMode, selectTrack]);
 
   const barMax =
     playDur > 0 && Number.isFinite(playDur) ? playDur : listDuration > 0 ? listDuration : 0;
@@ -333,13 +476,14 @@ export function MusicPage() {
   return (
     <div
       className={clsx(
-        "relative flex h-dvh max-h-dvh min-h-0 flex-col overflow-hidden text-zinc-200",
+        "relative flex h-dvh max-h-dvh min-h-0 flex-col overflow-hidden text-zinc-200 font-semibold",
         wallpaperActive ? "bg-netease-bg/68 backdrop-blur-sm" : "bg-netease-bg"
       )}
     >
       <audio
         ref={audioRef}
         className="hidden"
+        crossOrigin="anonymous"
         preload="auto"
         onTimeUpdate={(e) => {
           if (!scrubbing) {
@@ -357,8 +501,25 @@ export function MusicPage() {
           }
         }}
         onEnded={() => {
-          setPlaying(false);
-          setPlayPos(0);
+          if (filtered.length === 0 || !current) {
+            setPlaying(false);
+            setPlayPos(0);
+            return;
+          }
+          if (playMode === "single") {
+            const a = audioRef.current;
+            if (!a) {
+              setPlaying(false);
+              setPlayPos(0);
+              return;
+            }
+            a.currentTime = 0;
+            setPlayPos(0);
+            setPlaying(true);
+            void a.play().catch(() => setPlaying(false));
+            return;
+          }
+          seekNext();
         }}
       />
 
@@ -391,6 +552,33 @@ export function MusicPage() {
               <Radio className="h-4 w-4 shrink-0" />
               {t("music.privateFm")}
             </button>
+            <button
+              type="button"
+              onClick={() => void onPickLiked()}
+              className={clsx(
+                "flex w-full items-center gap-2 rounded-full px-3 py-2 text-left transition",
+                activeNav === "liked" ? "bg-white/10 text-white" : "text-zinc-400 hover:bg-white/5"
+              )}
+            >
+              <Heart
+                className={clsx(
+                  "h-4 w-4 shrink-0",
+                  activeNav === "liked" ? "fill-red-500 text-red-500" : "text-red-400/80"
+                )}
+              />
+              {t("music.likedPlaylist", { defaultValue: "我喜欢的音乐" })}
+            </button>
+            <button
+              type="button"
+              onClick={() => void onPickHistory()}
+              className={clsx(
+                "flex w-full items-center gap-2 rounded-full px-3 py-2 text-left transition",
+                activeNav === "history" ? "bg-white/10 text-white" : "text-zinc-400 hover:bg-white/5"
+              )}
+            >
+              <History className="h-4 w-4 shrink-0" />
+              {t("music.playHistory", { defaultValue: "播放历史" })}
+            </button>
             <div className="my-2 border-t border-netease-line/70" aria-hidden />
             <h2 className="mb-1.5 px-2 pt-0.5 text-[11px] font-semibold tracking-wide text-zinc-500">
               {t("music.myPlaylist")}
@@ -408,7 +596,9 @@ export function MusicPage() {
                 }}
                 className={clsx(
                   "flex w-full items-center gap-2 rounded-full px-3 py-2 text-left transition",
-                  currentPlaylistId === p.id ? "bg-white/10 text-white" : "text-zinc-400 hover:bg-white/5"
+                  currentPlaylistId === p.id && activeNav === "discover"
+                    ? "bg-white/10 text-white"
+                    : "text-zinc-400 hover:bg-white/5"
                 )}
               >
                 <ListMusic className="h-4 w-4 shrink-0 opacity-80" />
@@ -536,7 +726,7 @@ export function MusicPage() {
                 compact
                 className="border border-netease-line bg-[#2a2a2a] p-0.5 text-[10px] text-zinc-300"
               />
-              {currentPl != null && currentPlaylistId != null ? (
+              {activeNav === "discover" && currentPl != null && currentPlaylistId != null ? (
                 <button
                   type="button"
                   onClick={() => setPlaylistSettingsOpen(true)}
@@ -553,7 +743,7 @@ export function MusicPage() {
           <div className="min-h-0 flex-1 overflow-y-auto p-4 pb-40">
             {activeNav !== "fm" && (
               <>
-                {activeNav === "discover" && (
+                {activeNav === "discover" && currentPlaylistId == null && (
                   <div
                     className="mb-4 flex min-h-[120px] flex-col items-center justify-center gap-1 rounded-2xl border border-dashed border-netease-line/70 bg-zinc-900/25 px-4 py-10 text-center"
                     role="status"
@@ -565,16 +755,16 @@ export function MusicPage() {
                 )}
                 <h2 className="mb-2 text-sm font-medium text-zinc-300">{playlistName}</h2>
 
-                {current != null && (
-                  <div
-                    className={clsx(
-                      "mb-4 grid w-full max-h-[min(54vh,600px)] min-h-[min(40vh,320px)] grid-cols-1 grid-rows-[auto_1fr] gap-4 overflow-hidden rounded-2xl bg-[#141414]/60 p-4",
-                      "md:min-h-[min(44vh,420px)] md:grid-cols-[360px_minmax(0,1fr)] md:grid-rows-1 md:items-stretch md:gap-0"
-                    )}
-                  >
-                    {/* 左栏：黑胶 + 歌曲信息；桌面端在格内垂直居中 */}
-                    <div className="flex flex-col items-center gap-4 md:h-full md:justify-center md:pr-4">
-                      <div className="w-full max-w-[min(90vw,380px)] shrink-0 md:w-[336px] md:max-w-[336px]">
+                <div
+                  className={clsx(
+                    "mb-4 grid w-full h-[min(54vh,600px)] grid-cols-1 grid-rows-[auto_1fr] gap-4 overflow-hidden rounded-2xl p-4",
+                    "md:h-[min(44vh,420px)] md:grid-cols-[360px_minmax(0,1fr)] md:grid-rows-1 md:items-stretch md:gap-0"
+                  )}
+                >
+                  {/* 左栏：黑胶 + 歌曲信息；桌面端在格内垂直居中 */}
+                  <div className="flex flex-col items-center gap-4 md:h-full md:justify-center md:pr-4">
+                    <div className="w-full max-w-[min(90vw,380px)] shrink-0 md:w-[336px] md:max-w-[336px]">
+                      {current ? (
                         <NeteaseVinylDisc
                           trackId={current.id}
                           coverSrc={playerCoverSrc}
@@ -584,100 +774,54 @@ export function MusicPage() {
                           onTogglePlay={() => setPlaying((p) => !p)}
                           className="!max-w-none w-full"
                         />
-                      </div>
-                      <div className="w-full max-w-[min(90vw,380px)] text-center md:w-[336px] md:max-w-[336px]">
-                        <div className="line-clamp-2 text-sm font-semibold leading-snug text-zinc-100">
-                          {current.title}
+                      ) : (
+                        <div className="flex aspect-square w-full items-center justify-center rounded-full border border-white/10 bg-zinc-900/60 text-zinc-600">
+                          <Music2 className="h-10 w-10" />
                         </div>
-                        <div className="mt-1 truncate text-xs text-zinc-500">{current.artist}</div>
-                        {current.album ? (
-                          <div className="mt-1 truncate text-[11px] text-zinc-600">{current.album}</div>
-                        ) : null}
-                      </div>
-                    </div>
-
-                    {/* 右栏：歌词（与左栏顶对齐，竖线分隔） */}
-                    <div
-                      className={clsx(
-                        "flex w-full min-w-0 flex-col border-t border-white/[0.07] pt-4",
-                        "min-h-[min(32vh,260px)] md:h-full md:min-h-0 md:border-l md:border-t-0 md:pl-6 md:pt-0"
                       )}
-                    >
-                      <TrackLyricsScroll
-                        track={current}
-                        currentTimeSec={playPos}
-                        className="min-h-0 min-w-0 w-full flex-1 md:min-h-0"
-                      />
+                    </div>
+                    <div className="w-full max-w-[min(90vw,380px)] text-center md:w-[336px] md:max-w-[336px]">
+                      <div className="line-clamp-2 text-sm font-semibold leading-snug text-zinc-100">
+                        {current?.title ?? t("music.pickTrack")}
+                      </div>
+                      <div className="mt-1 truncate text-xs text-zinc-500">
+                        {current?.artist ?? t("music.unknownArtist")}
+                      </div>
+                      {current?.album ? (
+                        <div className="mt-1 truncate text-[11px] text-zinc-600">{current.album}</div>
+                      ) : null}
                     </div>
                   </div>
-                )}
+
+                  {/* 右栏：歌词（与左栏顶对齐，竖线分隔） */}
+                  <div
+                    className={clsx(
+                      "flex w-full min-w-0 flex-col border-t border-white/[0.07] pt-4",
+                      "min-h-[min(32vh,260px)] md:h-full md:min-h-0 md:border-l md:border-t-0 md:pl-6 md:pt-0"
+                    )}
+                  >
+                    <TrackLyricsScroll
+                      track={current}
+                      currentTimeSec={playPos}
+                      className="min-h-0 min-w-0 w-full flex-1 md:min-h-0"
+                    />
+                  </div>
+                </div>
 
                 {listErr && <p className="mb-2 text-xs text-red-400/90">{listErr}</p>}
                 {listLoading && <p className="text-xs text-zinc-500">{t("common.loading")}</p>}
-                <div className="overflow-hidden rounded-2xl border border-netease-line">
-                  <table className="w-full text-left text-xs">
-                    <thead className="bg-[#1e1e1e] text-zinc-500">
-                      <tr>
-                        <th className="w-10 px-2 py-2 font-normal">{t("music.tableIndex")}</th>
-                        <th className="px-2 py-2 font-normal">{t("music.tableTitle")}</th>
-                        <th className="px-2 py-2 font-normal">{t("music.tableArtist")}</th>
-                        <th className="hidden sm:table-cell px-2 py-2 font-normal">{t("music.tableAlbum")}</th>
-                        <th className="w-16 px-2 py-2 text-right font-normal tabular-nums">{t("music.tablePlays")}</th>
-                        <th className="w-8 px-1 py-2" />
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filtered.length === 0 && !listLoading && (
-                        <tr>
-                          <td colSpan={6} className="px-4 py-8 text-center text-zinc-500">
-                            {t("music.emptyTracks")}
-                          </td>
-                        </tr>
-                      )}
-                      {filtered.map((tr, i) => (
-                        <tr
-                          key={tr.id}
-                          onDoubleClick={() => selectTrack(tr, true)}
-                          onClick={() => setCurrentId(tr.id)}
-                          className={clsx(
-                            "cursor-default border-t border-netease-line/50 transition",
-                            currentId === tr.id ? "bg-red-900/20" : "hover:bg-white/5"
-                          )}
-                        >
-                          <td className="px-2 py-2 text-zinc-500">{i + 1}</td>
-                          <td className="max-w-[1px] truncate px-2 py-2 text-zinc-200">
-                            {tr.title}
-                            {tr.metadataFromFile && (
-                              <span className="ml-1 rounded-full bg-zinc-700/60 px-1.5 py-px text-[10px] text-zinc-400">{t("music.autoTag")}</span>
-                            )}
-                            {tr.note && <span className="ml-1 text-zinc-500">· {tr.note}</span>}
-                          </td>
-                          <td className="max-w-[1px] truncate px-2 py-2 text-zinc-400">{tr.artist}</td>
-                          <td className="hidden max-w-[1px] truncate px-2 py-2 text-zinc-500 sm:table-cell">
-                            {tr.album}
-                          </td>
-                          <td className="px-2 py-2 text-right tabular-nums text-zinc-500">{tr.playCount ?? 0}</td>
-                          <td className="px-1 py-2 text-zinc-500">
-                            <button
-                              type="button"
-                              className="rounded-full p-1 hover:bg-white/10"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                selectTrack(tr, true);
-                              }}
-                            >
-                              {currentId === tr.id && playing ? (
-                                <Pause className="h-3.5 w-3.5" />
-                              ) : (
-                                <Play className="h-3.5 w-3.5" />
-                              )}
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                <MusicTrackTable
+                  tracks={filtered}
+                  listLoading={listLoading}
+                  showRemoveTrack={showRemoveTrack}
+                  currentId={currentId}
+                  playing={playing}
+                  activeNav={activeNav}
+                  onSelectTrack={selectTrack}
+                  onSetCurrentId={setCurrentId}
+                  onToggleHeart={onToggleHeart}
+                  onRequestRemoveTrack={requestRemoveTrack}
+                />
                 <p className="mt-3 text-center text-[11px] text-zinc-600">{t("music.rowHint")}</p>
               </>
             )}
@@ -714,13 +858,145 @@ export function MusicPage() {
         volume={volume}
         onVolumeChange={setVolume}
         barLyricLine={playerBarLyricLine}
+        currentTrackId={currentId}
+        playMode={playMode}
+        onCyclePlayMode={() => {
+          setPlayMode((prev) => (prev === "list" ? "single" : prev === "single" ? "shuffle" : "list"));
+        }}
+        onOpenHistoryPanel={openHistoryPanel}
       />
+
+      {historyPanelOpen ? (
+        <div className="fixed inset-0 z-[70] bg-black/35 backdrop-blur-[1px]" onClick={() => setHistoryPanelOpen(false)}>
+          <aside
+            className="absolute right-0 top-0 h-full w-[min(88vw,360px)] border-l border-white/10 bg-zinc-950/95 p-4 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-zinc-100">{t("music.playHistory")}</h3>
+              <button
+                type="button"
+                className="rounded-full px-2 py-1 text-xs text-zinc-400 hover:bg-white/10 hover:text-zinc-200"
+                onClick={() => setHistoryPanelOpen(false)}
+              >
+                {t("common.close", { defaultValue: "关闭" })}
+              </button>
+            </div>
+            {historyErr ? <p className="mb-2 text-xs text-red-400/90">{historyErr}</p> : null}
+            {historyLoading ? <p className="text-xs text-zinc-500">{t("common.loading")}</p> : null}
+            {!historyLoading && historyTracks.length === 0 ? (
+              <p className="text-xs text-zinc-500">{t("music.historyEmpty", { defaultValue: "暂无播放历史" })}</p>
+            ) : null}
+            <div className="custom-scrollbar h-[calc(100%-2.25rem)] overflow-y-auto pr-1">
+              <div className="space-y-1">
+                {historyTracks.map((tr) => (
+                  <button
+                    key={tr.id}
+                    type="button"
+                    className="flex w-full items-center gap-2 rounded-xl px-2 py-2 text-left hover:bg-white/10"
+                    onClick={() => {
+                      selectTrack(tr, true);
+                      setHistoryPanelOpen(false);
+                    }}
+                  >
+                    <div className="h-10 w-10 shrink-0 overflow-hidden rounded-lg bg-zinc-800">
+                      {coverDisplayUrl(tr) ? (
+                        <img src={coverDisplayUrl(tr)!} alt={tr.title} className="h-full w-full object-cover" />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center text-zinc-600">
+                          <Music2 className="h-4 w-4" />
+                        </div>
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-xs text-zinc-100">{tr.title}</div>
+                      <div className="truncate text-[11px] text-zinc-500">{tr.artist}</div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </aside>
+        </div>
+      ) : null}
+
+      <ConfirmModal
+        open={removeTrackDialog != null}
+        onClose={() => setRemoveTrackDialog(null)}
+        title={
+          removeTrackDialog?.kind === "liked"
+            ? t("music.removeDialogLikedTitle")
+            : t("music.removeDialogPlaylistTitle")
+        }
+        confirmLabel={t("common.confirm")}
+        cancelLabel={t("common.cancel")}
+        danger
+        onConfirm={async () => {
+          const ctx = removeTrackDialog;
+          if (!ctx) return;
+          const { kind, track } = ctx;
+          try {
+            if (kind === "liked") {
+              await removeHeartTrack(track.id);
+            } else {
+              await deleteTrackFromPlaylist(track.id);
+            }
+          } catch (e) {
+            alert(mapApiError(t, e));
+            throw e;
+          }
+          setTracks((prev) => prev.filter((x) => x.id !== track.id));
+          if (kind === "playlist") {
+            setPlaylists((pls) =>
+              pls.map((p) =>
+                p.id === track.playlistId ? { ...p, trackCount: Math.max(0, p.trackCount - 1) } : p
+              )
+            );
+          }
+          if (currentId === track.id) {
+            setCurrentId(null);
+            setCurrentTrack(null);
+          }
+        }}
+      >
+        {removeTrackDialog ? (
+          <>
+            <p className="mb-2 line-clamp-2 font-medium text-zinc-100">「{removeTrackDialog.track.title}」</p>
+            <p className="text-xs text-zinc-500">
+              {removeTrackDialog.kind === "liked"
+                ? t("music.confirmRemoveFromLiked")
+                : t("music.confirmRemoveFromPlaylist")}
+            </p>
+          </>
+        ) : null}
+      </ConfirmModal>
 
       <UploadTrackModal
         open={uploadOpen}
         onClose={() => setUploadOpen(false)}
-        onSuccess={() => void loadList()}
-        playlistId={currentPlaylistId ?? undefined}
+        onSuccess={() => {
+          void (async () => {
+            try {
+              const [pls, inv] = await Promise.all([fetchVisiblePlaylists(), fetchIncomingInvitations()]);
+              setPlaylists(pls);
+              setIncomingInv(inv);
+              if (activeNav === "liked") {
+                setTracks(await fetchHeartTracks());
+              } else if (activeNav === "history") {
+                setTracks(await fetchPlayHistoryTracks());
+              } else if (currentPlaylistId != null) {
+                setTracks(await fetchMusicTracks(currentPlaylistId));
+              }
+            } catch {
+              await loadList();
+            }
+          })();
+        }}
+        playlistId={
+          (activeNav === "liked"
+            ? (currentPlaylistId ?? playlists[0]?.id)
+            : currentPlaylistId) ?? undefined
+        }
       />
 
       <PlaylistSettingsModal

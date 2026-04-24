@@ -16,10 +16,14 @@ public interface MusicTrackRepository extends JpaRepository<MusicTrack, Long> {
 
     List<MusicTrack> findByPlaylistIdOrderByCreatedAtDesc(long playlistId);
 
+    List<MusicTrack> findByPlaylistId(long playlistId);
+
     long countByUserIdAndPlaylistId(long userId, long playlistId);
 
     long countByPlaylistId(long playlistId);
 
     @Query("SELECT COALESCE(SUM(m.playCount), 0) FROM MusicTrack m WHERE m.playlistId = :playlistId")
     long sumPlayCountByPlaylistId(@Param("playlistId") long playlistId);
+
+    long countByFileSha256(String fileSha256);
 }

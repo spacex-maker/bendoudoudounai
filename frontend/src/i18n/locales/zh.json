@@ -208,6 +208,9 @@
     "forNameCloud": "{{name}}的云音乐",
     "discover": "发现音乐",
     "privateFm": "私人 FM",
+    "likedPlaylist": "我喜欢的音乐",
+    "playHistory": "播放历史",
+    "historyEmpty": "暂无播放历史",
     "noPlaylists": "暂无歌单，可在下方新建",
     "invitesTitle": "待处理邀请",
     "inviteFrom": "来自 {{name}}",
@@ -278,13 +281,23 @@
     "wallClearFailed": "清除失败",
     "nameEmpty": "名称不能为空",
     "renameFailed": "保存失败",
-    "inviteFailed": "邀请失败"
+    "inviteFailed": "邀请失败",
+    "deleteSectionTitle": "删除歌单",
+    "deleteHint": "删除歌单不会删除歌曲本身，歌曲会自动迁移到默认歌单。",
+    "deleteAction": "删除歌单",
+    "deleting": "删除中…",
+    "deleteFailed": "删除失败",
+    "deleteConfirm": "确认删除歌单「{{name}}」？歌单内歌曲会保留并迁移到默认歌单。"
   },
   "player": {
     "idle": "未播放",
     "unknownArtist": "未知歌手",
     "ariaProgress": "播放进度",
-    "ariaVolume": "音量"
+    "ariaVolume": "音量",
+    "modeSingle": "单曲循环",
+    "modeList": "列表循环",
+    "modeShuffle": "随机播放",
+    "modeSwitch": "播放方式：{{mode}}（点击切换）"
   },
   "lyrics": {
     "selectTrack": "点击列表中的歌曲查看歌词",

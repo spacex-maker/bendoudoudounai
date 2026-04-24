@@ -16,5 +16,7 @@ public record MusicTrackResponse(
         boolean hasLyrics,
         String coverUrl,
         boolean hasCover,
-        long playCount
+        long playCount,
+        /** 当前登录用户是否已红心 */
+        boolean hearted
 ) {}

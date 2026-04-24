@@ -1,6 +1,6 @@
-import { useEffect, useRef, type RefObject } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
-import { Play, Pause, SkipBack, SkipForward, Volume2, Music2 } from "lucide-react";
+import { Play, Pause, SkipBack, SkipForward, Volume2, Music2, Repeat, Repeat1, Shuffle, History } from "lucide-react";
 import clsx from "clsx";
 import { useAudioAnalyserGlow } from "../music/useAudioAnalyserGlow";
 
@@ -9,6 +9,23 @@ function formatTime(t: number) {
   const m = Math.floor(t / 60);
   const s = Math.floor(t % 60);
   return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
+/** 与当前播放到的时间重叠的已缓冲区末端（秒），用于网易云式「浅灰已加载」条 */
+function bufferedEndSec(el: HTMLAudioElement): number {
+  const b = el.buffered;
+  if (!b || b.length === 0) return 0;
+  const t = el.currentTime;
+  for (let i = 0; i < b.length; i++) {
+    if (b.start(i) <= t + 0.25 && t <= b.end(i) + 0.01) {
+      return b.end(i);
+    }
+  }
+  let max = 0;
+  for (let i = 0; i < b.length; i++) {
+    max = Math.max(max, b.end(i));
+  }
+  return max;
 }
 
 export type MusicPlayerBarProps = {
@@ -33,6 +50,11 @@ export type MusicPlayerBarProps = {
   onVolumeChange: (volume: number) => void;
   /** 紧挨进度条滑轨下方一行当前歌词；为 null 时不占高度（显隐替换） */
   barLyricLine?: string | null;
+  /** 切歌时重建缓冲进度监听，传当前曲 id 即可 */
+  currentTrackId?: number | null;
+  playMode: "single" | "list" | "shuffle";
+  onCyclePlayMode: () => void;
+  onOpenHistoryPanel: () => void;
 };
 
 export function MusicPlayerBar({
@@ -54,9 +76,14 @@ export function MusicPlayerBar({
   volume,
   onVolumeChange,
   barLyricLine = null,
+  currentTrackId = null,
+  playMode,
+  onCyclePlayMode,
+  onOpenHistoryPanel,
 }: MusicPlayerBarProps) {
   const { t } = useTranslation();
   const footerRef = useRef<HTMLElement | null>(null);
+  const [bufferedEnd, setBufferedEnd] = useState(0);
   useAudioAnalyserGlow(audioRef, footerRef, {
     playing,
     hasTrack,
@@ -74,9 +101,49 @@ export function MusicPlayerBar({
     };
   }, [scrubbing, onScrubbingChange]);
 
+  useEffect(() => {
+    if (!hasTrack) {
+      setBufferedEnd(0);
+      return;
+    }
+    const a = audioRef.current;
+    if (!a) {
+      setBufferedEnd(0);
+      return;
+    }
+    const tick = () => {
+      if (!audioRef.current) return;
+      setBufferedEnd(bufferedEndSec(audioRef.current));
+    };
+    tick();
+    const onAny = () => tick();
+    a.addEventListener("progress", onAny);
+    a.addEventListener("loadedmetadata", onAny);
+    a.addEventListener("durationchange", onAny);
+    a.addEventListener("canplay", onAny);
+    a.addEventListener("canplaythrough", onAny);
+    a.addEventListener("timeupdate", onAny);
+    return () => {
+      a.removeEventListener("progress", onAny);
+      a.removeEventListener("loadedmetadata", onAny);
+      a.removeEventListener("durationchange", onAny);
+      a.removeEventListener("canplay", onAny);
+      a.removeEventListener("canplaythrough", onAny);
+      a.removeEventListener("timeupdate", onAny);
+    };
+  }, [hasTrack, audioRef, currentTrackId]);
+
+
   // 计算进度百分比，用于定制化进度条的视觉表现
   const progressPercent = barMax > 0 ? (playPos / barMax) * 100 : 0;
   const progressMax = barMax > 0 ? barMax : 0;
+  const a = audioRef.current;
+  const scaleDuration =
+    a && Number.isFinite(a.duration) && a.duration > 0 ? a.duration : barMax;
+  const bufferedPercent =
+    hasTrack && scaleDuration > 0
+      ? Math.min(100, (Math.min(bufferedEnd, scaleDuration) / scaleDuration) * 100)
+      : 0;
 
   const applySeek = (raw: number) => {
     const t = Number(raw);
@@ -85,6 +152,15 @@ export function MusicPlayerBar({
     a.currentTime = t;
     onPlayPosChange(t);
   };
+
+  const modeTitle =
+    playMode === "single"
+      ? t("player.modeSingle")
+      : playMode === "shuffle"
+        ? t("player.modeShuffle")
+        : t("player.modeList");
+  const modeAriaLabel = t("player.modeSwitch", { mode: modeTitle });
+  const ModeIcon = playMode === "single" ? Repeat1 : playMode === "shuffle" ? Shuffle : Repeat;
 
   return (
     <div className="pointer-events-none fixed bottom-4 left-0 right-0 z-50 flex justify-center px-4 sm:bottom-6 sm:px-6">
@@ -132,17 +208,44 @@ export function MusicPlayerBar({
             <div className="flex items-center gap-1 sm:hidden">
               <button
                 type="button"
+                className="h-10 w-10 shrink-0 flex items-center justify-center rounded-full text-zinc-300 transition hover:bg-white/10"
+                onClick={onCyclePlayMode}
+                title={modeTitle}
+                aria-label={modeAriaLabel}
+              >
+                <ModeIcon className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
                 className="h-10 w-10 shrink-0 flex items-center justify-center rounded-full bg-white text-black shadow-lg transition active:scale-95 disabled:opacity-30 disabled:active:scale-100"
                 onClick={onTogglePlay}
                 disabled={!hasTrack}
               >
                 {playing ? <Pause className="h-5 w-5 fill-current" /> : <Play className="h-5 w-5 fill-current ml-0.5" />}
               </button>
+              <button
+                type="button"
+                className="h-10 w-10 shrink-0 flex items-center justify-center rounded-full text-zinc-300 transition hover:bg-white/10"
+                onClick={onOpenHistoryPanel}
+                title={t("music.playHistory")}
+                aria-label={t("music.playHistory")}
+              >
+                <History className="h-4 w-4" />
+              </button>
             </div>
           </div>
 
           {/* 桌面端居中：播放控制区 */}
           <div className="hidden sm:flex items-center justify-center gap-2 shrink-0">
+            <button
+              type="button"
+              className="group rounded-full p-2.5 text-zinc-400 transition hover:bg-white/10 hover:text-zinc-100 active:scale-90"
+              onClick={onCyclePlayMode}
+              title={modeTitle}
+              aria-label={modeAriaLabel}
+            >
+              <ModeIcon className="h-5 w-5 transition group-hover:scale-110" />
+            </button>
             <button
               type="button"
               className="group rounded-full p-2.5 text-zinc-400 transition hover:bg-white/10 hover:text-zinc-100 active:scale-90 disabled:opacity-30 disabled:hover:bg-transparent"
@@ -202,10 +305,20 @@ export function MusicPlayerBar({
                   onChange={(e) => applySeek(e.target.valueAsNumber)}
                   onInput={(e) => applySeek((e.target as HTMLInputElement).valueAsNumber)}
                 />
-                <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-zinc-700/50 transition-all group-hover:h-2">
+                <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-zinc-800/80 transition-all group-hover:h-2">
+                  {/* 已缓冲 / 可播范围（参考网易云底轨浅灰条） */}
                   <div
-                    className="absolute left-0 top-0 h-full rounded-full bg-gradient-to-r from-red-500 to-rose-400 transition-all duration-150 ease-out"
+                    className="absolute left-0 top-0 z-0 h-full rounded-full bg-zinc-500/50 transition-[width] duration-200 ease-out"
+                    style={{
+                      width: `${Number.isFinite(bufferedPercent) ? bufferedPercent : 0}%`,
+                    }}
+                    aria-hidden
+                  />
+                  {/* 已播放 */}
+                  <div
+                    className="absolute left-0 top-0 z-[1] h-full rounded-full bg-gradient-to-r from-red-500 to-rose-400 transition-all duration-150 ease-out"
                     style={{ width: `${progressPercent}%` }}
+                    aria-hidden
                   />
                 </div>
                 <div
@@ -251,6 +364,15 @@ export function MusicPlayerBar({
                 />
               </div>
             </div>
+            <button
+              type="button"
+              className="ml-1 rounded-full p-2 text-zinc-400 transition hover:bg-white/10 hover:text-zinc-100"
+              onClick={onOpenHistoryPanel}
+              title={t("music.playHistory")}
+              aria-label={t("music.playHistory")}
+            >
+              <History className="h-4 w-4" />
+            </button>
           </div>
           </div>
         </div>

@@ -1,4 +1,5 @@
 import axios from "axios";
+import COS from "cos-js-sdk-v5";
 
 const TOKEN_KEY = "bendoudou_token";
 
@@ -18,6 +19,8 @@ export const I18N_LOAD_FAILED = "__I18N_LOAD_FAILED__";
 
 /** 产线 API 域名（浏览器走 443/80，无端口；服务端反代到后端由运维配置） */
 const PROD_API_ORIGIN = "https://api.bendoudoudounai.com";
+/** 本地开发后端（不走 Vite 代理，直接请求） */
+const DEV_API_ORIGIN = "http://127.0.0.1:8882";
 
 /**
  * 后端 API 根地址。
@@ -32,7 +35,7 @@ export function getBackendBase(): string {
   if (import.meta.env.PROD) {
     return PROD_API_ORIGIN;
   }
-  return "";
+  return DEV_API_ORIGIN;
 }
 
 export const api = axios.create({
@@ -193,6 +196,19 @@ export interface MusicPreviewResponse {
   fileHadEmbeddedOrParsed: boolean;
 }
 
+export interface CosUploadTicketDto {
+  tmpSecretId: string;
+  tmpSecretKey: string;
+  sessionToken: string;
+  startTime: number;
+  expiredTime: number;
+  bucket: string;
+  region: string;
+  host: string;
+  audioObjectKey: string;
+  lyricsObjectKey: string | null;
+}
+
 export interface MusicTrackDto {
   id: number;
   playlistId: number;
@@ -216,6 +232,8 @@ export interface MusicTrackDto {
   hasCover: boolean;
   /** 累计播放次数（全站该曲目） */
   playCount?: number;
+  /** 当前用户是否已红心 */
+  hearted?: boolean;
 }
 
 export interface PlaylistItemDto {
@@ -556,6 +574,25 @@ export async function updatePlaylistName(playlistId: number, name: string): Prom
   return authJson(res);
 }
 
+export async function deletePlaylist(playlistId: number): Promise<void> {
+  const res = await fetch(apiPath(`/api/music/playlists/${playlistId}`), {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${getStoredToken()}` },
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    let msg = res.statusText;
+    try {
+      const j = JSON.parse(text) as { message?: string; detail?: string };
+      const serverMsg = j.message ?? j.detail;
+      if (serverMsg) msg = serverMsg;
+    } catch {
+      if (text) msg = text;
+    }
+    throw new Error(msg);
+  }
+}
+
 export async function fetchPlaylistMembers(playlistId: number): Promise<PlaylistMemberDto[]> {
   const res = await fetch(apiPath(`/api/music/playlists/${playlistId}/members`), {
     headers: { Authorization: `Bearer ${getStoredToken()}` },
@@ -591,6 +628,55 @@ export async function fetchMusicTracks(playlistId: number): Promise<MusicTrackDt
     headers: { Authorization: `Bearer ${getStoredToken()}` },
   });
   return authJson(res);
+}
+
+export async function fetchHeartTracks(): Promise<MusicTrackDto[]> {
+  const res = await fetch(apiPath("/api/music/hearts/tracks"), {
+    headers: { Authorization: `Bearer ${getStoredToken()}` },
+  });
+  return authJson(res);
+}
+
+export async function fetchPlayHistoryTracks(): Promise<MusicTrackDto[]> {
+  const res = await fetch(apiPath("/api/music/history/tracks"), {
+    headers: { Authorization: `Bearer ${getStoredToken()}` },
+  });
+  return authJson(res);
+}
+
+export async function addHeartTrack(trackId: number): Promise<MusicTrackDto> {
+  const res = await fetch(apiPath(`/api/music/tracks/${trackId}/heart`), {
+    method: "POST",
+    headers: { Authorization: `Bearer ${getStoredToken()}` },
+  });
+  return authJson(res);
+}
+
+export async function removeHeartTrack(trackId: number): Promise<MusicTrackDto> {
+  const res = await fetch(apiPath(`/api/music/tracks/${trackId}/heart`), {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${getStoredToken()}` },
+  });
+  return authJson(res);
+}
+
+export async function deleteTrackFromPlaylist(trackId: number): Promise<void> {
+  const res = await fetch(apiPath(`/api/music/tracks/${trackId}`), {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${getStoredToken()}` },
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    let msg = res.statusText;
+    try {
+      const j = JSON.parse(text) as { message?: string; detail?: string };
+      const serverMsg = j.message ?? j.detail;
+      if (serverMsg) msg = serverMsg;
+    } catch {
+      if (text) msg = text;
+    }
+    throw new Error(msg);
+  }
 }
 
 export async function fetchIncomingInvitations(): Promise<InvitationItemDto[]> {
@@ -657,6 +743,115 @@ export async function previewMusicFile(file: File): Promise<MusicPreviewResponse
     method: "POST",
     body: form,
     headers: { Authorization: `Bearer ${getStoredToken()}` },
+  });
+  return authJson(res);
+}
+
+export async function createCosUploadTicket(input: {
+  audioSha256: string;
+  audioExt: string;
+  lyricsExt?: string | null;
+}): Promise<CosUploadTicketDto> {
+  const res = await fetch(apiPath("/api/music/tracks/upload-ticket"), {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${getStoredToken()}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      audioSha256: input.audioSha256,
+      audioExt: input.audioExt,
+      lyricsExt: input.lyricsExt ?? null,
+    }),
+  });
+  return authJson(res);
+}
+
+export function uploadObjectToCos(
+  ticket: CosUploadTicketDto,
+  objectKey: string,
+  file: File,
+  onProgress?: (percent: number | null) => void
+): Promise<void> {
+  const useSts = Boolean(ticket.sessionToken && ticket.sessionToken.trim());
+  const cos = useSts
+    ? new COS({
+        getAuthorization: (_, callback) => {
+          callback({
+            TmpSecretId: ticket.tmpSecretId,
+            TmpSecretKey: ticket.tmpSecretKey,
+            SecurityToken: ticket.sessionToken,
+            StartTime: ticket.startTime,
+            ExpiredTime: ticket.expiredTime,
+          });
+        },
+      })
+    : new COS({
+        SecretId: ticket.tmpSecretId,
+        SecretKey: ticket.tmpSecretKey,
+      });
+  return new Promise((resolve, reject) => {
+    cos.putObject(
+      {
+        Bucket: ticket.bucket,
+        Region: ticket.region,
+        Key: objectKey,
+        Body: file,
+        onProgress: (p: { percent?: number }) => {
+          if (!onProgress) return;
+          const v = typeof p.percent === "number" ? Math.round(p.percent * 100) : null;
+          onProgress(v);
+        },
+      },
+      (err) => {
+        if (err) {
+          reject(new Error(err.message || "COS 上传失败"));
+          return;
+        }
+        resolve();
+      }
+    );
+  });
+}
+
+export async function createTrackFromCos(input: {
+  playlistId?: number;
+  audioSha256: string;
+  audioExt: string;
+  title?: string;
+  artist?: string;
+  album?: string;
+  note?: string;
+  durationSeconds?: number;
+  originalFilename?: string;
+  metadataFromFile?: boolean;
+  fileSize: number;
+  mimeType?: string;
+  audioObjectKey: string;
+  lyricsObjectKey?: string | null;
+}): Promise<MusicTrackDto> {
+  const res = await fetch(apiPath("/api/music/tracks/from-cos"), {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${getStoredToken()}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      playlistId: input.playlistId,
+      audioSha256: input.audioSha256,
+      audioExt: input.audioExt,
+      title: input.title,
+      artist: input.artist,
+      album: input.album,
+      note: input.note,
+      durationSeconds: input.durationSeconds ?? 0,
+      originalFilename: input.originalFilename ?? null,
+      metadataFromFile: input.metadataFromFile === true,
+      fileSize: input.fileSize,
+      mimeType: input.mimeType ?? null,
+      audioObjectKey: input.audioObjectKey,
+      lyricsObjectKey: input.lyricsObjectKey ?? null,
+    }),
   });
   return authJson(res);
 }

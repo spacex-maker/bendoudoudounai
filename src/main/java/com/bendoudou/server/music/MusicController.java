@@ -1,6 +1,9 @@
 package com.bendoudou.server.music;
 
 import com.bendoudou.server.music.dto.CreatePlaylistRequest;
+import com.bendoudou.server.music.dto.CreateCosUploadTicketRequest;
+import com.bendoudou.server.music.dto.CreateTrackFromCosRequest;
+import com.bendoudou.server.music.dto.CosUploadTicketResponse;
 import com.bendoudou.server.music.dto.InvitationItemResponse;
 import com.bendoudou.server.music.dto.InviteToPlaylistRequest;
 import com.bendoudou.server.music.dto.MusicPreviewResponse;
@@ -18,6 +21,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.util.StringUtils;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -65,6 +69,11 @@ public class MusicController {
             Authentication authentication
     ) {
         return musicService.updatePlaylistName(parseUserId(authentication), id, request);
+    }
+
+    @DeleteMapping("/playlists/{id}")
+    public void deletePlaylist(@PathVariable long id, Authentication authentication) {
+        musicService.deletePlaylist(parseUserId(authentication), id);
     }
 
     @GetMapping("/playlists/{id}/members")
@@ -171,12 +180,53 @@ public class MusicController {
         );
     }
 
+    @PostMapping("/tracks/upload-ticket")
+    public CosUploadTicketResponse createUploadTicket(
+            @Valid @RequestBody CreateCosUploadTicketRequest request,
+            Authentication authentication
+    ) {
+        return musicService.createCosUploadTicket(parseUserId(authentication), request);
+    }
+
+    @PostMapping("/tracks/from-cos")
+    public MusicTrackResponse createTrackFromCos(
+            @Valid @RequestBody CreateTrackFromCosRequest request,
+            Authentication authentication
+    ) {
+        return musicService.createTrackFromCos(parseUserId(authentication), request);
+    }
+
     @GetMapping("/tracks")
     public List<MusicTrackResponse> list(
             @RequestParam("playlistId") long playlistId,
             Authentication authentication
     ) {
         return musicService.listTracksForPlaylist(parseUserId(authentication), playlistId);
+    }
+
+    @GetMapping("/hearts/tracks")
+    public List<MusicTrackResponse> listHeartTracks(Authentication authentication) {
+        return musicService.listHeartTracks(parseUserId(authentication));
+    }
+
+    @GetMapping("/history/tracks")
+    public List<MusicTrackResponse> listPlayHistoryTracks(Authentication authentication) {
+        return musicService.listPlayHistoryTracks(parseUserId(authentication));
+    }
+
+    @PostMapping("/tracks/{id}/heart")
+    public MusicTrackResponse addHeart(@PathVariable long id, Authentication authentication) {
+        return musicService.addHeart(parseUserId(authentication), id);
+    }
+
+    @DeleteMapping("/tracks/{id}/heart")
+    public MusicTrackResponse removeHeart(@PathVariable long id, Authentication authentication) {
+        return musicService.removeHeart(parseUserId(authentication), id);
+    }
+
+    @DeleteMapping("/tracks/{id}")
+    public void deleteTrack(@PathVariable long id, Authentication authentication) {
+        musicService.deleteTrackFromPlaylist(parseUserId(authentication), id);
     }
 
     @PutMapping("/tracks/{id}")

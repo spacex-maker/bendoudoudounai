@@ -11,6 +11,7 @@
   "dependencies": {
     "axios": "^1.7.9",
     "clsx": "^2.1.1",
+    "cos-js-sdk-v5": "^1.10.1",
     "i18next": "^26.0.7",
     "lucide-react": "^0.446.0",
     "react": "^18.3.1",

@@ -3,7 +3,12 @@ import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import clsx from "clsx";
 import { X, Upload, Sparkles, Loader2 } from "lucide-react";
-import { previewMusicFile, uploadMusicTrack } from "../api/client";
+import {
+  createCosUploadTicket,
+  createTrackFromCos,
+  previewMusicFile,
+  uploadObjectToCos,
+} from "../api/client";
 import { mapApiError } from "../i18n/mapApiError";
 
 const AUDIO_NAME = /\.(mp3|m4a|flac|wav|ogg|aac|rc)$/i;
@@ -15,6 +20,19 @@ function isAudioFile(f: File): boolean {
 
 function isLyricsFileName(f: File): boolean {
   return LYRICS_NAME.test(f.name);
+}
+
+function extOfFileName(name: string): string | null {
+  const i = name.lastIndexOf(".");
+  if (i < 0 || i >= name.length - 1) return null;
+  return name.substring(i + 1).toLowerCase();
+}
+
+async function sha256Hex(file: File): Promise<string> {
+  const buf = await file.arrayBuffer();
+  const digest = await crypto.subtle.digest("SHA-256", buf);
+  const bytes = Array.from(new Uint8Array(digest));
+  return bytes.map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 function splitAudioAndLyricsFromDataTransfer(dt: DataTransfer | null): { audio: File | null; lyrics: File | null } {
@@ -49,6 +67,7 @@ export function UploadTrackModal({ open, onClose, onSuccess, playlistId }: Props
   const [title, setTitle] = useState("");
   const [artist, setArtist] = useState("");
   const [album, setAlbum] = useState("");
+  const [durationSeconds, setDurationSeconds] = useState(0);
   const [note, setNote] = useState("");
   const [scanning, setScanning] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -67,6 +86,7 @@ export function UploadTrackModal({ open, onClose, onSuccess, playlistId }: Props
     setTitle("");
     setArtist("");
     setAlbum("");
+    setDurationSeconds(0);
     setNote("");
     setErr(null);
     setRecognized(false);
@@ -85,6 +105,7 @@ export function UploadTrackModal({ open, onClose, onSuccess, playlistId }: Props
       setTitle(p.title);
       setArtist(p.artist);
       setAlbum(p.album);
+      setDurationSeconds(p.durationSeconds);
       setRecognized(p.fileHadEmbeddedOrParsed);
     } catch (e) {
       setErr(mapApiError(t, e));
@@ -198,14 +219,46 @@ export function UploadTrackModal({ open, onClose, onSuccess, playlistId }: Props
     setErr(null);
     setUploadProgress(0);
     try {
-      await uploadMusicTrack(file, { playlistId, title, artist, album, note, lyricsFile }, {
-        onProgress: (p) => {
-          if (p === null) {
-            setUploadProgress("indeterminate");
-          } else {
-            setUploadProgress(p);
-          }
-        },
+      const audioExt = extOfFileName(file.name);
+      if (!audioExt) {
+        throw new Error(t("uploadTrack.pickAudio"));
+      }
+      const lyricsExt = lyricsFile ? extOfFileName(lyricsFile.name) : null;
+      const audioSha = await sha256Hex(file);
+      const ticket = await createCosUploadTicket({
+        audioSha256: audioSha,
+        audioExt,
+        lyricsExt,
+      });
+      await uploadObjectToCos(ticket, ticket.audioObjectKey, file, (p) => {
+        if (p == null) {
+          setUploadProgress("indeterminate");
+        } else {
+          setUploadProgress(Math.max(1, Math.min(98, Math.round(p * 0.9))));
+        }
+      });
+      if (lyricsFile && ticket.lyricsObjectKey) {
+        await uploadObjectToCos(ticket, ticket.lyricsObjectKey, lyricsFile, (p) => {
+          if (p == null) return;
+          setUploadProgress(Math.max(90, Math.min(99, 90 + Math.round(p * 0.1))));
+        });
+      }
+      setUploadProgress(100);
+      await createTrackFromCos({
+        playlistId,
+        audioSha256: audioSha,
+        audioExt,
+        title,
+        artist,
+        album,
+        note,
+        durationSeconds,
+        originalFilename: file.name,
+        metadataFromFile: recognized,
+        fileSize: file.size,
+        mimeType: file.type || undefined,
+        audioObjectKey: ticket.audioObjectKey,
+        lyricsObjectKey: ticket.lyricsObjectKey,
       });
       reset();
       onSuccess();

@@ -208,6 +208,9 @@
     "forNameCloud": "{{name}}のクラウド音楽",
     "discover": "音楽を発見",
     "privateFm": "マイFM",
+    "likedPlaylist": "お気に入りの音楽",
+    "playHistory": "再生履歴",
+    "historyEmpty": "再生履歴はまだありません",
     "noPlaylists": "プレイリストはまだありません。下から新規作成",
     "invitesTitle": "未処理の招待",
     "inviteFrom": "{{name}} から",
@@ -278,13 +281,23 @@
     "wallClearFailed": "削除に失敗しました",
     "nameEmpty": "名前を入力してください",
     "renameFailed": "保存に失敗しました",
-    "inviteFailed": "招待に失敗しました"
+    "inviteFailed": "招待に失敗しました",
+    "deleteSectionTitle": "プレイリスト削除",
+    "deleteHint": "プレイリストを削除しても曲自体は消えず、既定のプレイリストへ移動します。",
+    "deleteAction": "プレイリストを削除",
+    "deleting": "削除中…",
+    "deleteFailed": "削除に失敗しました",
+    "deleteConfirm": "「{{name}}」を削除しますか？曲は保持され、既定のプレイリストへ移動します。"
   },
   "player": {
     "idle": "未再生",
     "unknownArtist": "アーティスト不明",
     "ariaProgress": "再生位置",
-    "ariaVolume": "音量"
+    "ariaVolume": "音量",
+    "modeSingle": "1曲リピート",
+    "modeList": "リストリピート",
+    "modeShuffle": "シャッフル再生",
+    "modeSwitch": "再生モード：{{mode}}（クリックで切替）"
   },
   "lyrics": {
     "selectTrack": "リストの曲を選ぶと歌詞を表示",

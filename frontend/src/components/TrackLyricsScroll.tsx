@@ -20,7 +20,7 @@ function Placeholder({ className, children }: { className?: string; children: Re
   return (
     <div
       className={clsx(
-        "flex min-h-[8rem] items-center justify-center px-3 text-center text-xs text-zinc-500",
+        "flex min-h-0 h-full w-full flex-1 items-center justify-center px-3 text-center text-xs text-zinc-500",
         className
       )}
     >
@@ -60,75 +60,66 @@ export function TrackLyricsScroll({ track, currentTimeSec, className, compactLea
     el?.scrollIntoView({ block: "center", behavior: "smooth" });
   }, [activeIndex, lines.length]);
 
-  if (track == null) {
-    return <Placeholder className={className}>{t("lyrics.selectTrack")}</Placeholder>;
-  }
-
-  if (!track.hasLyrics) {
-    return (
-      <Placeholder className={className}>
-        <span className="flex flex-col gap-1">
-          <span>{t("lyrics.noLyrics")}</span>
-          <span className="text-[11px] text-zinc-600">{t("lyrics.noLyricsHint")}</span>
-        </span>
-      </Placeholder>
-    );
-  }
-
-  if (loading) {
-    return <Placeholder className={className}>{t("lyrics.loading")}</Placeholder>;
-  }
-
-  if (loadError) {
-    return <Placeholder className={clsx(className, "text-red-400/90")}>{loadError}</Placeholder>;
-  }
-
-  if (lines.length === 0) {
-    return <Placeholder className={className}>{t("lyrics.empty")}</Placeholder>;
-  }
+  const hasRenderableLyrics = track != null && track.hasLyrics && !loading && !loadError && lines.length > 0;
 
   return (
     <div className={clsx("flex min-h-0 min-w-0 flex-1 flex-col", className)}>
-      <div
-        className={clsx(
-          "min-h-0 flex-1 overflow-y-auto overscroll-y-contain",
-          "py-2",
-          compactLeading ? "pl-0 pr-1 sm:pl-0 sm:pr-3" : "px-1 sm:px-3",
-          "[scrollbar-width:thin] [scrollbar-color:rgba(82,82,91,0.55)_transparent]"
-        )}
-        onWheel={pauseAutoScroll}
-        onTouchStart={pauseAutoScroll}
-        onMouseDown={pauseAutoScroll}
-      >
+      {hasRenderableLyrics ? (
         <div
           className={clsx(
-            "pb-16 pt-6",
-            compactLeading ? "ml-0 mr-auto max-w-lg" : "mx-auto max-w-lg"
+            "min-h-0 flex-1 overflow-y-auto overscroll-y-contain",
+            "py-2",
+            compactLeading ? "pl-0 pr-1 sm:pl-0 sm:pr-3" : "px-1 sm:px-3",
+            "[scrollbar-width:thin] [scrollbar-color:rgba(82,82,91,0.55)_transparent]"
           )}
+          onWheel={pauseAutoScroll}
+          onTouchStart={pauseAutoScroll}
+          onMouseDown={pauseAutoScroll}
         >
-          {lines.map((line, i) => {
-            const isActive = activeIndex >= 0 && i === activeIndex;
-            const isBeforeFirst = activeIndex < 0 && i === 0;
-            return (
-              <p
-                key={`${line.timeMs}-${i}-${line.text.slice(0, 24)}`}
-                ref={(el) => {
-                  lineRefs.current[i] = el;
-                }}
-                className={clsx(
-                  "px-2 py-2.5 text-center text-[13px] leading-7 transition-colors duration-200 sm:text-[14px] sm:leading-8",
-                  isActive && "text-[15px] font-medium text-white sm:text-base",
-                  isActive && "drop-shadow-[0_0_20px_rgba(255,255,255,0.08)]",
-                  isBeforeFirst && "text-zinc-400",
-                  !isActive && !isBeforeFirst && "text-zinc-600 hover:text-zinc-500"
-                )}
-              >
-                {line.text}
-              </p>
-            );
-          })}
+          <div
+            className={clsx(
+              "pb-16 pt-6",
+              compactLeading ? "ml-0 mr-auto max-w-lg" : "mx-auto max-w-lg"
+            )}
+          >
+            {lines.map((line, i) => {
+              const isActive = activeIndex >= 0 && i === activeIndex;
+              const isBeforeFirst = activeIndex < 0 && i === 0;
+              return (
+                <p
+                  key={`${line.timeMs}-${i}-${line.text.slice(0, 24)}`}
+                  ref={(el) => {
+                    lineRefs.current[i] = el;
+                  }}
+                  className={clsx(
+                    "px-2 py-2.5 text-center text-[13px] leading-7 transition-colors duration-200 sm:text-[14px] sm:leading-8",
+                    isActive && "text-[15px] font-medium text-white sm:text-base",
+                    isBeforeFirst && "text-zinc-400",
+                    !isActive && !isBeforeFirst && "text-zinc-600 hover:text-zinc-500"
+                  )}
+                >
+                  {line.text}
+                </p>
+              );
+            })}
+          </div>
         </div>
-      </div>
+      ) : track == null ? (
+        <Placeholder>{t("lyrics.selectTrack")}</Placeholder>
+      ) : !track.hasLyrics ? (
+        <Placeholder>
+          <span className="flex flex-col gap-1">
+            <span>{t("lyrics.noLyrics")}</span>
+            <span className="text-[11px] text-zinc-600">{t("lyrics.noLyricsHint")}</span>
+          </span>
+        </Placeholder>
+      ) : loading ? (
+        <Placeholder>{t("lyrics.loading")}</Placeholder>
+      ) : loadError ? (
+        <Placeholder className="text-red-400/90">{loadError}</Placeholder>
+      ) : (
+        <Placeholder>{t("lyrics.empty")}</Placeholder>
+      )}
     </div>
   );
 }

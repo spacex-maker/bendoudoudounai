@@ -8,19 +8,24 @@ type AudioGraph = {
 
 const graphByElement = new WeakMap<HTMLMediaElement, AudioGraph>();
 
-function ensureGraph(audio: HTMLMediaElement): AudioGraph {
+function ensureGraph(audio: HTMLMediaElement): AudioGraph | null {
   let g = graphByElement.get(audio);
   if (g) return g;
-  const ctx = new AudioContext();
-  const source = ctx.createMediaElementSource(audio);
-  const analyser = ctx.createAnalyser();
-  analyser.fftSize = 512;
-  analyser.smoothingTimeConstant = 0.65;
-  source.connect(analyser);
-  analyser.connect(ctx.destination);
-  g = { ctx, source, analyser };
-  graphByElement.set(audio, g);
-  return g;
+  try {
+    const ctx = new AudioContext();
+    const source = ctx.createMediaElementSource(audio);
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 512;
+    analyser.smoothingTimeConstant = 0.65;
+    // 安全旁路：主声音链路直接到 destination；analyser 仅做频谱采样，不参与声音输出。
+    source.connect(ctx.destination);
+    source.connect(analyser);
+    g = { ctx, source, analyser };
+    graphByElement.set(audio, g);
+    return g;
+  } catch {
+    return null;
+  }
 }
 
 function hsla(h: number, s: number, l: number, a: number): string {
@@ -29,6 +34,7 @@ function hsla(h: number, s: number, l: number, a: number): string {
 
 const IDLE_BOX_SHADOW =
   "0 16px 48px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.08) inset";
+const ENABLE_AUDIO_ANALYSER_GLOW = true;
 
 /**
  * 根据音频频谱驱动底部播放器 footer 的 box-shadow / filter（极光光晕）。
@@ -49,13 +55,14 @@ export function useAudioAnalyserGlow(
   const rafRef = useRef(0);
 
   useEffect(() => {
+    if (!ENABLE_AUDIO_ANALYSER_GLOW) return;
     const audio = audioRef.current;
     if (!audio || !hasTrack) return;
 
     const resumeCtx = () => {
       try {
         const g = ensureGraph(audio);
-        if (g.ctx.state === "suspended") {
+        if (g && g.ctx.state === "suspended") {
           void g.ctx.resume();
         }
       } catch {
@@ -63,17 +70,17 @@ export function useAudioAnalyserGlow(
       }
     };
 
+    // 某些浏览器下，MediaElement 接入 AudioContext 后若 context 仍 suspended，会出现“看起来在播但没声音”。
+    // 这里在用户手势（pointer/key）时主动 resume，避免仅靠异步 play 流程触发导致无法解锁音频。
+    const onUserGesture = () => resumeCtx();
     const onPlay = () => resumeCtx();
+    window.addEventListener("pointerdown", onUserGesture, { passive: true });
+    window.addEventListener("keydown", onUserGesture);
     audio.addEventListener("play", onPlay);
-    if (audio.src || audio.currentSrc) {
-      try {
-        resumeCtx();
-      } catch {
-        /* ignore */
-      }
-    }
 
     return () => {
+      window.removeEventListener("pointerdown", onUserGesture);
+      window.removeEventListener("keydown", onUserGesture);
       audio.removeEventListener("play", onPlay);
     };
   }, [audioRef, hasTrack]);
@@ -90,7 +97,7 @@ export function useAudioAnalyserGlow(
       }
     };
 
-    if (!audio || !footer || !hasTrack) {
+    if (!ENABLE_AUDIO_ANALYSER_GLOW || !audio || !footer || !hasTrack) {
       resetFooter();
       return;
     }
@@ -111,6 +118,10 @@ export function useAudioAnalyserGlow(
       if (playing) {
         try {
           const g = graphByElement.get(a) ?? ensureGraph(a);
+          if (!g) {
+            rafRef.current = requestAnimationFrame(tick);
+            return;
+          }
           if (g.ctx.state === "suspended") {
             void g.ctx.resume();
           }

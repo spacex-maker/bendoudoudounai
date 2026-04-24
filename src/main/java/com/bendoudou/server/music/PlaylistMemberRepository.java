@@ -16,4 +16,6 @@ public interface PlaylistMemberRepository extends JpaRepository<PlaylistMember, 
     Optional<PlaylistMember> findByPlaylistIdAndUserId(long playlistId, long userId);
 
     long countByPlaylistId(long playlistId);
+
+    void deleteByPlaylistId(long playlistId);
 }

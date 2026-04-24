@@ -2,6 +2,9 @@ package com.bendoudou.server.music;
 
 import com.bendoudou.server.music.AudioMetadataExtractor.ExtractionResult;
 import com.bendoudou.server.music.dto.CreatePlaylistRequest;
+import com.bendoudou.server.music.dto.CreateCosUploadTicketRequest;
+import com.bendoudou.server.music.dto.CreateTrackFromCosRequest;
+import com.bendoudou.server.music.dto.CosUploadTicketResponse;
 import com.bendoudou.server.music.dto.InvitationItemResponse;
 import com.bendoudou.server.music.dto.InviteToPlaylistRequest;
 import com.bendoudou.server.music.dto.MusicPreviewResponse;
@@ -28,13 +31,14 @@ import java.io.InputStream;
 import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
@@ -53,9 +57,12 @@ public class MusicService {
     private final MusicTrackRepository musicTrackRepository;
     private final PlaylistMemberRepository playlistMemberRepository;
     private final PlaylistInvitationRepository playlistInvitationRepository;
+    private final UserTrackHeartRepository userTrackHeartRepository;
+    private final UserTrackPlayHistoryRepository userTrackPlayHistoryRepository;
     private final UserRepository userRepository;
     private final AudioMetadataExtractor audioMetadataExtractor;
     private final CosStorageService cosStorageService;
+    private final CosStsService cosStsService;
     private final FileContentHasher fileContentHasher;
 
     public MusicService(
@@ -64,9 +71,12 @@ public class MusicService {
             MusicTrackRepository musicTrackRepository,
             PlaylistMemberRepository playlistMemberRepository,
             PlaylistInvitationRepository playlistInvitationRepository,
+            UserTrackHeartRepository userTrackHeartRepository,
+            UserTrackPlayHistoryRepository userTrackPlayHistoryRepository,
             UserRepository userRepository,
             AudioMetadataExtractor audioMetadataExtractor,
             CosStorageService cosStorageService,
+            CosStsService cosStsService,
             FileContentHasher fileContentHasher
     ) {
         this.uploadBase = Path.of(musicUploadDir).toAbsolutePath().normalize();
@@ -74,9 +84,12 @@ public class MusicService {
         this.musicTrackRepository = musicTrackRepository;
         this.playlistMemberRepository = playlistMemberRepository;
         this.playlistInvitationRepository = playlistInvitationRepository;
+        this.userTrackHeartRepository = userTrackHeartRepository;
+        this.userTrackPlayHistoryRepository = userTrackPlayHistoryRepository;
         this.userRepository = userRepository;
         this.audioMetadataExtractor = audioMetadataExtractor;
         this.cosStorageService = cosStorageService;
+        this.cosStsService = cosStsService;
         this.fileContentHasher = fileContentHasher;
     }
 
@@ -403,32 +416,20 @@ public class MusicService {
             boolean storageReused = applyStorageDeduplication(track, size, hasLyricsUpload);
 
             if (!storageReused) {
-                if (cosStorageService.isUsable()) {
-                    String key = cosStorageService.buildAudioObjectKey(sha, ext);
-                    String ct = CosStorageService.guessAudioContentType(ext, file.getContentType());
-                    try {
-                        cosStorageService.uploadObject(key, temp, size, ct);
-                    } catch (Exception e) {
-                        throw new ResponseStatusException(
-                                HttpStatus.INTERNAL_SERVER_ERROR, "对象存储上传失败: " + e.getMessage()
-                        );
-                    }
-                    track.setStoredRelpath(key);
-                    track.setAudioUrl(cosStorageService.publicObjectUrl(key));
-                } else {
-                    String rel = buildRelativePath(userId, ext);
-                    Path abs = uploadBase.resolve(rel).normalize();
-                    if (!abs.startsWith(uploadBase)) {
-                        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "非法路径");
-                    }
-                    try {
-                        Files.createDirectories(abs.getParent());
-                        Files.copy(temp, abs, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-                    } catch (IOException e) {
-                        throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "文件保存失败");
-                    }
-                    track.setStoredRelpath(rel.replace("\\", "/"));
+                if (!cosStorageService.isUsable()) {
+                    throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "COS 未配置完整，已禁用本地存储");
                 }
+                String key = cosStorageService.buildAudioObjectKey(sha, ext);
+                String ct = CosStorageService.guessAudioContentType(ext, file.getContentType());
+                try {
+                    cosStorageService.uploadObject(key, temp, size, ct);
+                } catch (Exception e) {
+                    throw new ResponseStatusException(
+                            HttpStatus.INTERNAL_SERVER_ERROR, "对象存储上传失败: " + e.getMessage()
+                    );
+                }
+                track.setStoredRelpath(key);
+                track.setAudioUrl(cosStorageService.publicObjectUrl(key));
             }
 
             processEmbeddedCover(temp, ext, track, storageReused);
@@ -437,7 +438,7 @@ public class MusicService {
 
             track = musicTrackRepository.save(track);
             backfillCoverToSiblingTracks(track);
-            return toResponse(track);
+            return toResponse(track, false);
         } catch (IOException e) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "无法处理上传文件");
         } finally {
@@ -463,8 +464,9 @@ public class MusicService {
             return false;
         }
         MusicTrack previous = opt.get();
-        if (StringUtils.hasText(previous.getAudioUrl()) && StringUtils.hasText(previous.getStoredRelpath())) {
-            track.setAudioUrl(previous.getAudioUrl());
+        String resolvedAudio = resolveCosPublicUrl(previous.getAudioUrl(), previous.getStoredRelpath());
+        if (StringUtils.hasText(resolvedAudio) && StringUtils.hasText(previous.getStoredRelpath())) {
+            track.setAudioUrl(resolvedAudio);
             track.setStoredRelpath(previous.getStoredRelpath());
             track.setCoverUrl(previous.getCoverUrl());
             track.setCoverStoredRelpath(previous.getCoverStoredRelpath());
@@ -473,28 +475,6 @@ public class MusicService {
                 track.setLyricsStoredRelpath(previous.getLyricsStoredRelpath());
             }
             return true;
-        }
-        if (StringUtils.hasText(previous.getStoredRelpath()) && !StringUtils.hasText(previous.getAudioUrl())) {
-            Path existing = uploadBase.resolve(previous.getStoredRelpath()).normalize();
-            if (existing.startsWith(uploadBase) && Files.isRegularFile(existing)) {
-                long actual;
-                try {
-                    actual = Files.size(existing);
-                } catch (IOException e) {
-                    return false;
-                }
-                if (actual != size) {
-                    return false;
-                }
-                track.setStoredRelpath(previous.getStoredRelpath());
-                track.setCoverUrl(previous.getCoverUrl());
-                track.setCoverStoredRelpath(previous.getCoverStoredRelpath());
-                if (!hasLyricsUpload) {
-                    track.setLyricsUrl(previous.getLyricsUrl());
-                    track.setLyricsStoredRelpath(previous.getLyricsStoredRelpath());
-                }
-                return true;
-            }
         }
         return false;
     }
@@ -528,17 +508,16 @@ public class MusicService {
             ctemp = Files.createTempFile("cover-", "." + imgExt);
             Files.write(ctemp, cover.data(), java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.TRUNCATE_EXISTING);
             long clen = Files.size(ctemp);
-            if (cosStorageService.isUsable()) {
-                String key = cosStorageService.buildCoverObjectKey(songSha, imgExt);
-                try {
-                    cosStorageService.uploadObject(key, ctemp, clen, cover.mimeType());
-                    track.setCoverUrl(cosStorageService.publicObjectUrl(key));
-                    track.setCoverStoredRelpath(null);
-                } catch (Exception e) {
-                    storeCoverOnLocalDisk(track, songSha, imgExt, ctemp);
-                }
-            } else {
-                storeCoverOnLocalDisk(track, songSha, imgExt, ctemp);
+            if (!cosStorageService.isUsable()) {
+                return;
+            }
+            String key = cosStorageService.buildCoverObjectKey(songSha, imgExt);
+            try {
+                cosStorageService.uploadObject(key, ctemp, clen, cover.mimeType());
+                track.setCoverUrl(cosStorageService.publicObjectUrl(key));
+                track.setCoverStoredRelpath(key);
+            } catch (Exception ignored) {
+                // 封面上传失败不阻断主流程
             }
         } catch (IOException e) {
             // 忽略封面
@@ -550,18 +529,6 @@ public class MusicService {
                 }
             }
         }
-    }
-
-    private void storeCoverOnLocalDisk(MusicTrack track, String songSha, String imgExt, Path imageFile) throws IOException {
-        String rel = "covers/" + songSha.substring(0, 2) + "/" + songSha + "." + imgExt;
-        Path abs = uploadBase.resolve(rel).normalize();
-        if (!abs.startsWith(uploadBase)) {
-            return;
-        }
-        Files.createDirectories(abs.getParent());
-        Files.copy(imageFile, abs, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-        track.setCoverUrl(null);
-        track.setCoverStoredRelpath(rel.replace("\\", "/"));
     }
 
     /**
@@ -629,33 +596,20 @@ public class MusicService {
                 Files.copy(in, ltemp, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
             }
             long lsize = Files.size(ltemp);
-            if (cosStorageService.isUsable()) {
-                String key = cosStorageService.buildLyricsObjectKey(songSha, lext);
-                String ct = CosStorageService.guessLyricsContentType(lext);
-                try {
-                    cosStorageService.uploadObject(key, ltemp, lsize, ct);
-                } catch (Exception e) {
-                    throw new ResponseStatusException(
-                            HttpStatus.INTERNAL_SERVER_ERROR, "歌词上传到对象存储失败: " + e.getMessage()
-                    );
-                }
-                track.setLyricsUrl(cosStorageService.publicObjectUrl(key));
-                track.setLyricsStoredRelpath(null);
-            } else {
-                String rel = "lyrics/" + songSha.substring(0, 2) + "/" + songSha + "." + lext;
-                Path abs = uploadBase.resolve(rel).normalize();
-                if (!abs.startsWith(uploadBase)) {
-                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "非法路径");
-                }
-                try {
-                    Files.createDirectories(abs.getParent());
-                    Files.copy(ltemp, abs, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-                } catch (IOException e) {
-                    throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "歌词文件保存失败");
-                }
-                track.setLyricsUrl(null);
-                track.setLyricsStoredRelpath(rel.replace("\\", "/"));
+            if (!cosStorageService.isUsable()) {
+                throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "COS 未配置完整，已禁用本地存储");
             }
+            String key = cosStorageService.buildLyricsObjectKey(songSha, lext);
+            String ct = CosStorageService.guessLyricsContentType(lext);
+            try {
+                cosStorageService.uploadObject(key, ltemp, lsize, ct);
+            } catch (Exception e) {
+                throw new ResponseStatusException(
+                        HttpStatus.INTERNAL_SERVER_ERROR, "歌词上传到对象存储失败: " + e.getMessage()
+                );
+            }
+            track.setLyricsUrl(cosStorageService.publicObjectUrl(key));
+            track.setLyricsStoredRelpath(key);
         } catch (IOException e) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "无法处理歌词文件");
         } finally {
@@ -682,9 +636,101 @@ public class MusicService {
     @Transactional(readOnly = true)
     public List<MusicTrackResponse> listTracksForPlaylist(long userId, long playlistId) {
         assertMember(playlistId, userId);
-        return musicTrackRepository.findByPlaylistIdOrderByCreatedAtDesc(playlistId).stream()
-                .map(this::toResponse)
+        List<MusicTrack> list = musicTrackRepository.findByPlaylistIdOrderByCreatedAtDesc(playlistId);
+        List<Long> ids = list.stream().map(MusicTrack::getId).collect(Collectors.toList());
+        Set<Long> hearted = heartedTrackIdsForUser(userId, ids);
+        return list.stream()
+                .map(t -> toResponse(t, hearted.contains(t.getId())))
                 .collect(Collectors.toList());
+    }
+
+    @Transactional
+    public List<MusicTrackResponse> listHeartTracks(long userId) {
+        List<UserTrackHeart> hearts = userTrackHeartRepository.findByUserIdOrderByCreatedAtDesc(userId);
+        List<MusicTrackResponse> out = new ArrayList<>();
+        for (UserTrackHeart h : hearts) {
+            Optional<MusicTrack> opt = musicTrackRepository.findById(h.getTrackId());
+            if (opt.isEmpty()) {
+                userTrackHeartRepository.deleteByUserIdAndTrackId(userId, h.getTrackId());
+                continue;
+            }
+            MusicTrack t = opt.get();
+            if (!playlistMemberRepository.existsByPlaylistIdAndUserId(t.getPlaylistId(), userId)) {
+                userTrackHeartRepository.deleteByUserIdAndTrackId(userId, h.getTrackId());
+                continue;
+            }
+            out.add(toResponse(t, true));
+        }
+        return out;
+    }
+
+    @Transactional
+    public List<MusicTrackResponse> listPlayHistoryTracks(long userId) {
+        List<UserTrackPlayHistory> rows = userTrackPlayHistoryRepository.findTop200ByUserIdOrderByPlayedAtDesc(userId);
+        LinkedHashSet<Long> recentTrackIds = new LinkedHashSet<>();
+        for (UserTrackPlayHistory row : rows) {
+            recentTrackIds.add(row.getTrackId());
+        }
+
+        List<MusicTrackResponse> out = new ArrayList<>();
+        for (Long trackId : recentTrackIds) {
+            Optional<MusicTrack> opt = musicTrackRepository.findById(trackId);
+            if (opt.isEmpty()) {
+                continue;
+            }
+            MusicTrack t = opt.get();
+            if (!playlistMemberRepository.existsByPlaylistIdAndUserId(t.getPlaylistId(), userId)) {
+                continue;
+            }
+            boolean hearted = userTrackHeartRepository.existsByUserIdAndTrackId(userId, t.getId());
+            out.add(toResponse(t, hearted));
+        }
+        return out;
+    }
+
+    @Transactional
+    public MusicTrackResponse addHeart(long userId, long trackId) {
+        MusicTrack t = musicTrackRepository.findById(trackId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "歌曲不存在"));
+        assertMember(t.getPlaylistId(), userId);
+        if (!userTrackHeartRepository.existsByUserIdAndTrackId(userId, trackId)) {
+            UserTrackHeart row = new UserTrackHeart();
+            row.setUserId(userId);
+            row.setTrackId(trackId);
+            userTrackHeartRepository.save(row);
+        }
+        return toResponse(t, true);
+    }
+
+    @Transactional
+    public MusicTrackResponse removeHeart(long userId, long trackId) {
+        MusicTrack t = musicTrackRepository.findById(trackId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "歌曲不存在"));
+        assertMember(t.getPlaylistId(), userId);
+        userTrackHeartRepository.deleteByUserIdAndTrackId(userId, trackId);
+        return toResponse(t, false);
+    }
+
+    @Transactional
+    public void deleteTrackFromPlaylist(long userId, long trackId) {
+        MusicTrack t = musicTrackRepository.findById(trackId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "歌曲不存在"));
+        Playlist pl = playlistRepository.findById(t.getPlaylistId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "歌单不存在"));
+        assertMember(t.getPlaylistId(), userId);
+        if (pl.getUserId() != userId) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "只有歌单创建者可以从歌单中移除歌曲");
+        }
+        long dupCount = 1;
+        if (StringUtils.hasText(t.getFileSha256())) {
+            dupCount = musicTrackRepository.countByFileSha256(t.getFileSha256());
+        }
+        userTrackHeartRepository.deleteByTrackId(trackId);
+        userTrackPlayHistoryRepository.deleteByTrackId(trackId);
+        musicTrackRepository.delete(t);
+        if (dupCount <= 1) {
+            tryDeleteOrphanStoredFiles(t);
+        }
     }
 
     @Transactional
@@ -694,7 +740,11 @@ public class MusicService {
         assertMember(t.getPlaylistId(), userId);
         t.setPlayCount(t.getPlayCount() + 1);
         musicTrackRepository.save(t);
-        return toResponse(t);
+        UserTrackPlayHistory row = new UserTrackPlayHistory();
+        row.setUserId(userId);
+        row.setTrackId(trackId);
+        userTrackPlayHistoryRepository.save(row);
+        return toResponse(t, userTrackHeartRepository.existsByUserIdAndTrackId(userId, trackId));
     }
 
     @Transactional(readOnly = true)
@@ -737,6 +787,37 @@ public class MusicService {
     }
 
     @Transactional
+    public void deletePlaylist(long userId, long playlistId) {
+        Playlist p = playlistRepository.findById(playlistId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "歌单不存在"));
+        if (p.getUserId() != userId) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "只有创建者可以删除歌单");
+        }
+        if (p.isDefaultPlaylist()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "默认歌单不可删除");
+        }
+        assertMember(playlistId, userId);
+
+        Playlist fallback = getOrCreateDefaultPlaylist(userId);
+        if (fallback.getId().equals(playlistId)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "默认歌单不可删除");
+        }
+
+        List<MusicTrack> tracks = musicTrackRepository.findByPlaylistId(playlistId);
+        if (!tracks.isEmpty()) {
+            for (MusicTrack track : tracks) {
+                track.setPlaylistId(fallback.getId());
+            }
+            musicTrackRepository.saveAll(tracks);
+        }
+
+        clearPlaylistWallpaper(p);
+        playlistInvitationRepository.deleteByPlaylistId(playlistId);
+        playlistMemberRepository.deleteByPlaylistId(playlistId);
+        playlistRepository.delete(p);
+    }
+
+    @Transactional
     public MusicTrackResponse updateTrack(long userId, long trackId, UpdateMusicTrackRequest req) {
         MusicTrack t = musicTrackRepository.findById(trackId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "歌曲不存在"));
@@ -755,7 +836,82 @@ public class MusicService {
         }
         t.setMetadataFromFile(false);
         musicTrackRepository.save(t);
-        return toResponse(t);
+        return toResponse(t, userTrackHeartRepository.existsByUserIdAndTrackId(userId, trackId));
+    }
+
+    @Transactional(readOnly = true)
+    public CosUploadTicketResponse createCosUploadTicket(long userId, CreateCosUploadTicketRequest req) {
+        String sha = req.audioSha256() == null ? "" : req.audioSha256().toLowerCase(Locale.ROOT).trim();
+        if (!sha.matches("^[a-f0-9]{64}$")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "audioSha256 格式错误");
+        }
+        String ext = req.audioExt() == null ? "" : req.audioExt().toLowerCase(Locale.ROOT).trim();
+        if (!ALLOWED_EXT.contains(ext)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "audioExt 不支持");
+        }
+        String lyricsExt = req.lyricsExt() == null ? "" : req.lyricsExt().toLowerCase(Locale.ROOT).trim();
+        if (StringUtils.hasText(lyricsExt) && !ALLOWED_LYRICS_EXT.contains(lyricsExt)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "lyricsExt 不支持");
+        }
+        if (!cosStsService.isUsable()) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "COS 配置不可用");
+        }
+        String audioObjectKey = cosStorageService.buildAudioObjectKey(sha, ext);
+        String lyricsObjectKey = StringUtils.hasText(lyricsExt)
+                ? cosStorageService.buildLyricsObjectKey(sha, lyricsExt)
+                : null;
+        return cosStsService.issueTicket(audioObjectKey, lyricsObjectKey);
+    }
+
+    @Transactional
+    public MusicTrackResponse createTrackFromCos(long userId, CreateTrackFromCosRequest req) {
+        Playlist pl;
+        if (req.playlistId() == null) {
+            pl = getOrCreateDefaultPlaylist(userId);
+        } else {
+            pl = playlistRepository.findById(req.playlistId())
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "歌单不存在"));
+            assertMember(pl.getId(), userId);
+        }
+        if (!cosStsService.isUsable()) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "COS 配置不可用");
+        }
+        String sha = req.audioSha256().toLowerCase(Locale.ROOT);
+        String ext = validateExt("x." + req.audioExt());
+        String expectedAudioKey = cosStorageService.buildAudioObjectKey(sha, ext);
+        if (!expectedAudioKey.equals(req.audioObjectKey())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "audioObjectKey 与摘要或扩展名不匹配");
+        }
+        if (StringUtils.hasText(req.lyricsObjectKey())) {
+            String expectedLyricsPrefix = cosStorageService.buildLyricsObjectKey(sha, "lrc")
+                    .replaceAll("\\.lrc$", ".");
+            if (!req.lyricsObjectKey().startsWith(expectedLyricsPrefix)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "lyricsObjectKey 与摘要不匹配");
+            }
+        }
+        MusicTrack track = new MusicTrack();
+        track.setUserId(userId);
+        track.setPlaylistId(pl.getId());
+        track.setTitle(firstNonBlank(req.title()) != null ? firstNonBlank(req.title()) : "未知标题");
+        track.setArtist(firstNonBlank(req.artist()) != null ? firstNonBlank(req.artist()) : "未知歌手");
+        track.setAlbum(firstNonBlank(req.album()) != null ? firstNonBlank(req.album()) : "未知专辑");
+        track.setNote(firstNonBlank(req.note()));
+        track.setDurationSeconds(Math.max(0, req.durationSeconds()));
+        track.setOriginalFilename(StringUtils.hasText(req.originalFilename()) ? req.originalFilename().trim() : "audio");
+        track.setFileSize(Math.max(0, req.fileSize()));
+        track.setMimeType(StringUtils.hasText(req.mimeType()) ? req.mimeType().trim() : guessMime(ext, null));
+        track.setMetadataFromFile(req.metadataFromFile());
+        track.setFileSha256(sha);
+        track.setStoredRelpath(req.audioObjectKey());
+        track.setAudioUrl(cosStorageService.publicObjectUrl(req.audioObjectKey()));
+        if (StringUtils.hasText(req.lyricsObjectKey())) {
+            track.setLyricsStoredRelpath(req.lyricsObjectKey());
+            track.setLyricsUrl(cosStorageService.publicObjectUrl(req.lyricsObjectKey()));
+        }
+        applyStorageDeduplication(track, track.getFileSize(), StringUtils.hasText(req.lyricsObjectKey()));
+        track = musicTrackRepository.save(track);
+        backfillCoverToSiblingTracks(track);
+        return toResponse(track, userTrackHeartRepository.existsByUserIdAndTrackId(userId, track.getId()));
     }
 
     @Transactional(readOnly = true)
@@ -763,10 +919,7 @@ public class MusicService {
         MusicTrack t = musicTrackRepository.findById(trackId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "歌曲不存在"));
         assertMember(t.getPlaylistId(), userId);
-        if (StringUtils.hasText(t.getLyricsUrl())) {
-            return t.getLyricsUrl();
-        }
-        return null;
+        return resolveCosPublicUrl(t.getLyricsUrl(), t.getLyricsStoredRelpath());
     }
 
     @Transactional(readOnly = true)
@@ -774,20 +927,7 @@ public class MusicService {
         MusicTrack t = musicTrackRepository.findById(trackId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "歌曲不存在"));
         assertMember(t.getPlaylistId(), userId);
-        if (StringUtils.hasText(t.getLyricsUrl())) {
-            throw new ResponseStatusException(
-                    HttpStatus.NOT_FOUND,
-                    "此歌词在对象存储，请使用歌单中的 lyricsUrl 公网直链"
-            );
-        }
-        if (!StringUtils.hasText(t.getLyricsStoredRelpath())) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "未上传歌词");
-        }
-        Path file = uploadBase.resolve(t.getLyricsStoredRelpath()).normalize();
-        if (!file.startsWith(uploadBase) || !Files.isRegularFile(file)) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "歌词文件已丢失");
-        }
-        return new FileSystemResource(file);
+        throw new ResponseStatusException(HttpStatus.GONE, "已禁用本地歌词读取，请使用 COS 公网链接");
     }
 
     @Transactional(readOnly = true)
@@ -795,10 +935,7 @@ public class MusicService {
         MusicTrack t = musicTrackRepository.findById(trackId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "歌曲不存在"));
         assertMember(t.getPlaylistId(), userId);
-        if (StringUtils.hasText(t.getAudioUrl())) {
-            return t.getAudioUrl();
-        }
-        return null;
+        return resolveCosPublicUrl(t.getAudioUrl(), t.getStoredRelpath());
     }
 
     @Transactional(readOnly = true)
@@ -806,20 +943,7 @@ public class MusicService {
         MusicTrack t = musicTrackRepository.findById(trackId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "歌曲不存在"));
         assertMember(t.getPlaylistId(), userId);
-        if (StringUtils.hasText(t.getAudioUrl())) {
-            throw new ResponseStatusException(
-                    HttpStatus.NOT_FOUND,
-                    "此曲目在对象存储，请使用歌单中的 audioUrl 公网直链"
-            );
-        }
-        if (!StringUtils.hasText(t.getStoredRelpath())) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "文件已丢失");
-        }
-        Path file = uploadBase.resolve(t.getStoredRelpath()).normalize();
-        if (!file.startsWith(uploadBase) || !Files.isRegularFile(file)) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "文件已丢失");
-        }
-        return new FileSystemResource(file);
+        throw new ResponseStatusException(HttpStatus.GONE, "已禁用本地音频读取，请使用 COS 公网链接");
     }
 
     @Transactional(readOnly = true)
@@ -875,10 +999,7 @@ public class MusicService {
         MusicTrack t = musicTrackRepository.findById(trackId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "歌曲不存在"));
         assertMember(t.getPlaylistId(), userId);
-        if (StringUtils.hasText(t.getCoverUrl())) {
-            return t.getCoverUrl();
-        }
-        return null;
+        return resolveCosPublicUrl(t.getCoverUrl(), t.getCoverStoredRelpath());
     }
 
     @Transactional(readOnly = true)
@@ -886,20 +1007,7 @@ public class MusicService {
         MusicTrack t = musicTrackRepository.findById(trackId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "歌曲不存在"));
         assertMember(t.getPlaylistId(), userId);
-        if (StringUtils.hasText(t.getCoverUrl())) {
-            throw new ResponseStatusException(
-                    HttpStatus.NOT_FOUND,
-                    "封面在对象存储，请使用 coverUrl 公网直链"
-            );
-        }
-        if (!StringUtils.hasText(t.getCoverStoredRelpath())) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "无封面");
-        }
-        Path file = uploadBase.resolve(t.getCoverStoredRelpath()).normalize();
-        if (!file.startsWith(uploadBase) || !Files.isRegularFile(file)) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "封面文件已丢失");
-        }
-        return new FileSystemResource(file);
+        throw new ResponseStatusException(HttpStatus.GONE, "已禁用本地封面读取，请使用 COS 公网链接");
     }
 
     @Transactional(readOnly = true)
@@ -1082,17 +1190,33 @@ public class MusicService {
         return u.getEmail();
     }
 
-    private MusicTrackResponse toResponse(MusicTrack t) {
-        boolean hasLyrics = StringUtils.hasText(t.getLyricsUrl()) || StringUtils.hasText(t.getLyricsStoredRelpath());
-        boolean hasCover = StringUtils.hasText(t.getCoverUrl()) || StringUtils.hasText(t.getCoverStoredRelpath());
-        String coverForClient = t.getCoverUrl();
-        if (!StringUtils.hasText(coverForClient) && StringUtils.hasText(t.getCoverStoredRelpath())) {
-            coverForClient = "/api/music/tracks/" + t.getId() + "/cover";
+    private Set<Long> heartedTrackIdsForUser(long userId, List<Long> trackIds) {
+        if (trackIds.isEmpty()) {
+            return Set.of();
         }
-        String lyricsForClient = t.getLyricsUrl();
-        if (!StringUtils.hasText(lyricsForClient) && StringUtils.hasText(t.getLyricsStoredRelpath())) {
-            lyricsForClient = "/api/music/tracks/" + t.getId() + "/lyrics";
+        return userTrackHeartRepository.findTrackIdsByUserIdAndTrackIdIn(userId, trackIds);
+    }
+
+    private void tryDeleteOrphanStoredFiles(MusicTrack t) {
+        // COS-only: 删除曲目时不再触碰本地文件系统
+    }
+
+    private String resolveCosPublicUrl(String directUrl, String storedRelpath) {
+        if (StringUtils.hasText(directUrl)) {
+            return directUrl;
         }
+        if (StringUtils.hasText(storedRelpath) && cosStorageService.isUsable()) {
+            return cosStorageService.publicObjectUrl(storedRelpath);
+        }
+        return null;
+    }
+
+    private MusicTrackResponse toResponse(MusicTrack t, boolean hearted) {
+        String audioForClient = resolveCosPublicUrl(t.getAudioUrl(), t.getStoredRelpath());
+        String lyricsForClient = resolveCosPublicUrl(t.getLyricsUrl(), t.getLyricsStoredRelpath());
+        String coverForClient = resolveCosPublicUrl(t.getCoverUrl(), t.getCoverStoredRelpath());
+        boolean hasLyrics = StringUtils.hasText(lyricsForClient);
+        boolean hasCover = StringUtils.hasText(coverForClient);
         return new MusicTrackResponse(
                 t.getId(),
                 t.getPlaylistId(),
@@ -1104,12 +1228,13 @@ public class MusicService {
                 t.getOriginalFilename(),
                 t.isMetadataFromFile(),
                 t.getCreatedAt().toEpochMilli(),
-                t.getAudioUrl(),
+                audioForClient,
                 lyricsForClient,
                 hasLyrics,
                 coverForClient,
                 hasCover,
-                t.getPlayCount()
+                t.getPlayCount(),
+                hearted
         );
     }
 
@@ -1122,10 +1247,6 @@ public class MusicService {
             );
         }
         return ext;
-    }
-
-    private String buildRelativePath(long userId, String ext) {
-        return userId + "/" + UUID.randomUUID() + "." + ext;
     }
 
     private String firstNonBlank(String s) {

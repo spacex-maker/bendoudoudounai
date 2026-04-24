@@ -154,7 +154,7 @@ export function NeteaseVinylDisc({
       >
         <div
           className={clsx(
-            "relative h-full w-full rounded-full shadow-[0_12px_40px_rgba(0,0,0,0.55),inset_0_1px_0_rgba(255,255,255,0.06)]",
+            "relative h-full w-full rounded-full",
             "animate-[spin_26s_linear_infinite]"
           )}
           style={{ animationPlayState: playing ? "running" : "paused" }}

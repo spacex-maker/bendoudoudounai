@@ -13,6 +13,7 @@ import {
   type PlaylistItemDto,
   type PlaylistMemberDto,
   type UserDirectoryItemDto,
+  deletePlaylist,
   fetchPlaylistMembers,
   fetchUserDirectoryForGuestbook,
   inviteToPlaylist,
@@ -53,6 +54,8 @@ export function PlaylistSettingsModal({ open, onClose, playlist, onSuccess }: Pr
   const [inviteBusy, setInviteBusy] = useState(false);
   const [userDirectory, setUserDirectory] = useState<UserDirectoryItemDto[]>([]);
   const [dirLoading, setDirLoading] = useState(false);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteErr, setDeleteErr] = useState<string | null>(null);
 
   const playlistId = playlist?.id ?? null;
 
@@ -69,6 +72,7 @@ export function PlaylistSettingsModal({ open, onClose, playlist, onSuccess }: Pr
     setWallHint(null);
     setInviteUserId("");
     setInviteErr(null);
+    setDeleteErr(null);
     setMembersErr(null);
     setMembersLoading(true);
     void fetchPlaylistMembers(playlistId)
@@ -187,6 +191,29 @@ export function PlaylistSettingsModal({ open, onClose, playlist, onSuccess }: Pr
     }
   };
 
+  const submitDeletePlaylist = useCallback(async () => {
+    if (playlistId == null || !playlist?.iAmOwner || deleteBusy) return;
+    const ok = window.confirm(
+      t("playlistModal.deleteConfirm", {
+        name: playlist.name,
+        defaultValue: `确认删除歌单「${playlist.name}」？歌单内歌曲会保留并迁移到默认歌单。`,
+      })
+    );
+    if (!ok) return;
+    setDeleteErr(null);
+    setDeleteBusy(true);
+    try {
+      await deletePlaylist(playlistId);
+      await refreshPlaylists();
+      onSuccess();
+      onClose();
+    } catch (ex) {
+      setDeleteErr(ex instanceof Error ? ex.message : t("playlistModal.deleteFailed"));
+    } finally {
+      setDeleteBusy(false);
+    }
+  }, [deleteBusy, onClose, onSuccess, playlist, playlistId, refreshPlaylists, t]);
+
   if (!open || playlist == null) return null;
 
   return (
@@ -214,7 +241,7 @@ export function PlaylistSettingsModal({ open, onClose, playlist, onSuccess }: Pr
           </button>
         </header>
 
-        <div className="custom-scrollbar overflow-y-auto px-8 pb-10 pt-2" style={{ maxHeight: 'calc(85vh - 100px)' }}>
+        <div className="custom-scrollbar overflow-y-auto px-8 pb-10 pt-2" style={{ maxHeight: "calc(85vh - 100px)" }}>
           <div className="space-y-8">
             
             {/* 1. 数据概览卡片区 */}
@@ -388,6 +415,22 @@ export function PlaylistSettingsModal({ open, onClose, playlist, onSuccess }: Pr
                 </form>
               )}
             </section>
+            {playlist.iAmOwner && (
+              <section className="rounded-[32px] bg-rose-500/[0.06] p-6 ring-1 ring-rose-400/20">
+                <h3 className="mb-3 text-sm font-semibold text-rose-200">{t("playlistModal.deleteSectionTitle")}</h3>
+                <p className="mb-4 text-xs text-rose-100/80">{t("playlistModal.deleteHint")}</p>
+                <button
+                  type="button"
+                  disabled={deleteBusy}
+                  onClick={() => void submitDeletePlaylist()}
+                  className="inline-flex items-center gap-2 rounded-full bg-rose-600 px-5 py-2.5 text-xs font-bold text-white transition hover:bg-rose-500 disabled:opacity-50"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  {deleteBusy ? t("playlistModal.deleting") : t("playlistModal.deleteAction")}
+                </button>
+                {deleteErr && <p className="mt-2 text-[11px] text-rose-300">{deleteErr}</p>}
+              </section>
+            )}
           </div>
         </div>
       </div>
