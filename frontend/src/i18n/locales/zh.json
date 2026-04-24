@@ -9,6 +9,7 @@
   "common": {
     "loading": "加载中…",
     "loadingEllipsis": "请稍等…",
+    "confirm": "确认",
     "cancel": "取消",
     "save": "保存",
     "send": "发送",
@@ -238,6 +239,10 @@
     "emptyTracks": "还没有歌，点左下角「上传新歌」加入第一首吧",
     "autoTag": "识别",
     "rowHint": "双击行播放；支持 MP3 内嵌信息自动填充。",
+    "removeDialogLikedTitle": "从喜欢列表移除",
+    "removeDialogPlaylistTitle": "从歌单移除歌曲",
+    "confirmRemoveFromLiked": "确认将这首歌从「我喜欢的音乐」中移除吗？",
+    "confirmRemoveFromPlaylist": "确认将这首歌从当前歌单中移除吗？",
     "fmStub": "私人 FM 可后续再扩展",
     "fmStubSub": "先把喜欢的歌都传到「{{name}}」吧",
     "pickTrack": "选一首歌",

@@ -9,6 +9,7 @@
   "common": {
     "loading": "読み込み中…",
     "loadingEllipsis": "お待ちください…",
+    "confirm": "確認",
     "cancel": "キャンセル",
     "save": "保存",
     "send": "送信",
@@ -238,6 +239,10 @@
     "emptyTracks": "まだ曲がありません。左下の「新しい曲をアップロード」から、最初の一曲を。",
     "autoTag": "取得",
     "rowHint": "行をダブルクリックで再生。MP3 埋め込みタグの自動補完に対応。",
+    "removeDialogLikedTitle": "お気に入りから削除",
+    "removeDialogPlaylistTitle": "プレイリストから曲を削除",
+    "confirmRemoveFromLiked": "この曲を「お気に入りの音楽」から削除しますか？",
+    "confirmRemoveFromPlaylist": "この曲を現在のプレイリストから削除しますか？",
     "fmStub": "マイFMはまたあとで拡張",
     "fmStubSub": "まず好きな曲を「{{name}}」に上げてみよう",
     "pickTrack": "曲を選ぶ",
