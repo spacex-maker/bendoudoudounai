@@ -14,6 +14,7 @@
     "cos-js-sdk-v5": "^1.10.1",
     "i18next": "^26.0.7",
     "lucide-react": "^0.446.0",
+    "music-metadata-browser": "^2.5.11",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-i18next": "^17.0.4",

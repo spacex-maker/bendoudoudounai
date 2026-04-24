@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import clsx from "clsx";
 import { X, Upload, Sparkles, Loader2 } from "lucide-react";
+import { parseBlob } from "music-metadata-browser";
 import {
   createCosUploadTicket,
   createTrackFromCos,
@@ -33,6 +34,40 @@ async function sha256Hex(file: File): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", buf);
   const bytes = Array.from(new Uint8Array(digest));
   return bytes.map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+type ExtractedCover = {
+  file: File;
+  ext: "jpg" | "jpeg" | "png" | "webp";
+};
+
+function coverExtFromMime(mime?: string | null): ExtractedCover["ext"] | null {
+  if (!mime) return null;
+  const m = mime.toLowerCase();
+  if (m.includes("jpeg") || m.includes("jpg")) return "jpg";
+  if (m.includes("png")) return "png";
+  if (m.includes("webp")) return "webp";
+  return null;
+}
+
+async function extractCoverFromAudio(file: File): Promise<ExtractedCover | null> {
+  try {
+    const metadata = await parseBlob(file, { skipCovers: false, duration: false });
+    const pic = metadata.common.picture?.[0];
+    if (!pic?.data || pic.data.length === 0) {
+      return null;
+    }
+    const ext = coverExtFromMime(pic.format);
+    if (!ext) return null;
+    const blob = new Blob([pic.data], { type: pic.format || "image/jpeg" });
+    const coverFile = new File([blob], `cover.${ext}`, {
+      type: blob.type,
+      lastModified: Date.now(),
+    });
+    return { file: coverFile, ext };
+  } catch {
+    return null;
+  }
 }
 
 function splitAudioAndLyricsFromDataTransfer(dt: DataTransfer | null): { audio: File | null; lyrics: File | null } {
@@ -224,11 +259,13 @@ export function UploadTrackModal({ open, onClose, onSuccess, playlistId }: Props
         throw new Error(t("uploadTrack.pickAudio"));
       }
       const lyricsExt = lyricsFile ? extOfFileName(lyricsFile.name) : null;
+      const cover = await extractCoverFromAudio(file);
       const audioSha = await sha256Hex(file);
       const ticket = await createCosUploadTicket({
         audioSha256: audioSha,
         audioExt,
         lyricsExt,
+        coverExt: cover?.ext ?? null,
       });
       await uploadObjectToCos(ticket, ticket.audioObjectKey, file, (p) => {
         if (p == null) {
@@ -242,6 +279,9 @@ export function UploadTrackModal({ open, onClose, onSuccess, playlistId }: Props
           if (p == null) return;
           setUploadProgress(Math.max(90, Math.min(99, 90 + Math.round(p * 0.1))));
         });
+      }
+      if (cover && ticket.coverObjectKey) {
+        await uploadObjectToCos(ticket, ticket.coverObjectKey, cover.file);
       }
       setUploadProgress(100);
       await createTrackFromCos({
@@ -259,6 +299,7 @@ export function UploadTrackModal({ open, onClose, onSuccess, playlistId }: Props
         mimeType: file.type || undefined,
         audioObjectKey: ticket.audioObjectKey,
         lyricsObjectKey: ticket.lyricsObjectKey,
+        coverObjectKey: ticket.coverObjectKey,
       });
       reset();
       onSuccess();

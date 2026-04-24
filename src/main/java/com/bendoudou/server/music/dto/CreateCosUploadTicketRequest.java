@@ -11,5 +11,7 @@ public record CreateCosUploadTicketRequest(
         @Pattern(regexp = "^(mp3|m4a|flac|wav|ogg|aac|rc)$", message = "audioExt")
         String audioExt,
         @Pattern(regexp = "^(lrc|txt|krc|srt)$", message = "lyricsExt")
-        String lyricsExt
+        String lyricsExt,
+        @Pattern(regexp = "^(jpg|jpeg|png|webp)$", message = "coverExt")
+        String coverExt
 ) {}

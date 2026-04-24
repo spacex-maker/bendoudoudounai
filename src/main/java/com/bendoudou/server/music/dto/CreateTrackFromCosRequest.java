@@ -18,5 +18,6 @@ public record CreateTrackFromCosRequest(
         long fileSize,
         @Size(max = 128) String mimeType,
         @NotBlank String audioObjectKey,
-        String lyricsObjectKey
+        String lyricsObjectKey,
+        String coverObjectKey
 ) {}

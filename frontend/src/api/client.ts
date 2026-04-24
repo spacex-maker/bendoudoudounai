@@ -207,6 +207,7 @@ export interface CosUploadTicketDto {
   host: string;
   audioObjectKey: string;
   lyricsObjectKey: string | null;
+  coverObjectKey: string | null;
 }
 
 export interface MusicTrackDto {
@@ -751,6 +752,7 @@ export async function createCosUploadTicket(input: {
   audioSha256: string;
   audioExt: string;
   lyricsExt?: string | null;
+  coverExt?: string | null;
 }): Promise<CosUploadTicketDto> {
   const res = await fetch(apiPath("/api/music/tracks/upload-ticket"), {
     method: "POST",
@@ -762,6 +764,7 @@ export async function createCosUploadTicket(input: {
       audioSha256: input.audioSha256,
       audioExt: input.audioExt,
       lyricsExt: input.lyricsExt ?? null,
+      coverExt: input.coverExt ?? null,
     }),
   });
   return authJson(res);
@@ -829,6 +832,7 @@ export async function createTrackFromCos(input: {
   mimeType?: string;
   audioObjectKey: string;
   lyricsObjectKey?: string | null;
+  coverObjectKey?: string | null;
 }): Promise<MusicTrackDto> {
   const res = await fetch(apiPath("/api/music/tracks/from-cos"), {
     method: "POST",
@@ -851,6 +855,7 @@ export async function createTrackFromCos(input: {
       mimeType: input.mimeType ?? null,
       audioObjectKey: input.audioObjectKey,
       lyricsObjectKey: input.lyricsObjectKey ?? null,
+      coverObjectKey: input.coverObjectKey ?? null,
     }),
   });
   return authJson(res);

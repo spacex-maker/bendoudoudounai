@@ -10,5 +10,6 @@ public record CosUploadTicketResponse(
         String region,
         String host,
         String audioObjectKey,
-        String lyricsObjectKey
+        String lyricsObjectKey,
+        String coverObjectKey
 ) {}

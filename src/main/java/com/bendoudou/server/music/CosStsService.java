@@ -37,7 +37,7 @@ public class CosStsService {
                 && StringUtils.hasText(props.getRegion());
     }
 
-    public CosUploadTicketResponse issueTicket(String audioObjectKey, String lyricsObjectKey) {
+    public CosUploadTicketResponse issueTicket(String audioObjectKey, String lyricsObjectKey, String coverObjectKey) {
         log.info("Issuing COS STS ticket: audioKey={}, lyricsKeyPresent={}",
                 audioObjectKey, StringUtils.hasText(lyricsObjectKey));
         if (!isUsable()) {
@@ -53,11 +53,14 @@ public class CosStsService {
             log.warn("Reject STS ticket request: audioObjectKey is blank");
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "audioObjectKey is required");
         }
-        List<String> allowPrefixes = new ArrayList<>();
-        allowPrefixes.add(audioObjectKey);
+            List<String> allowPrefixes = new ArrayList<>();
+            allowPrefixes.add(audioObjectKey);
         if (StringUtils.hasText(lyricsObjectKey)) {
             allowPrefixes.add(lyricsObjectKey);
         }
+            if (StringUtils.hasText(coverObjectKey)) {
+                allowPrefixes.add(coverObjectKey);
+            }
 
         TreeMap<String, Object> config = new TreeMap<>();
         try {
@@ -130,7 +133,8 @@ public class CosStsService {
                     props.getRegion(),
                     "https://" + props.getBucket() + ".cos." + props.getRegion() + ".myqcloud.com",
                     audioObjectKey,
-                    lyricsObjectKey
+                    lyricsObjectKey,
+                    coverObjectKey
             );
         } catch (Exception e) {
             String msg = e.getClass().getSimpleName() + ": " + (e.getMessage() == null ? "unknown" : e.getMessage());

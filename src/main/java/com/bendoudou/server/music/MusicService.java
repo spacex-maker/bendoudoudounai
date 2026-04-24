@@ -28,7 +28,9 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.HttpURLConnection;
 import java.net.URI;
+import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -853,6 +855,10 @@ public class MusicService {
         if (StringUtils.hasText(lyricsExt) && !ALLOWED_LYRICS_EXT.contains(lyricsExt)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "lyricsExt 不支持");
         }
+        String coverExt = req.coverExt() == null ? "" : req.coverExt().toLowerCase(Locale.ROOT).trim();
+        if (StringUtils.hasText(coverExt) && !Set.of("jpg", "jpeg", "png", "webp").contains(coverExt)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "coverExt 不支持");
+        }
         if (!cosStsService.isUsable()) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "COS 配置不可用");
         }
@@ -860,7 +866,10 @@ public class MusicService {
         String lyricsObjectKey = StringUtils.hasText(lyricsExt)
                 ? cosStorageService.buildLyricsObjectKey(sha, lyricsExt)
                 : null;
-        return cosStsService.issueTicket(audioObjectKey, lyricsObjectKey);
+        String coverObjectKey = StringUtils.hasText(coverExt)
+                ? cosStorageService.buildCoverObjectKey(sha, coverExt)
+                : null;
+        return cosStsService.issueTicket(audioObjectKey, lyricsObjectKey, coverObjectKey);
     }
 
     @Transactional
@@ -889,6 +898,13 @@ public class MusicService {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "lyricsObjectKey 与摘要不匹配");
             }
         }
+        if (StringUtils.hasText(req.coverObjectKey())) {
+            String expectedCoverPrefix = cosStorageService.buildCoverObjectKey(sha, "jpg")
+                    .replaceAll("\\.jpg$", ".");
+            if (!req.coverObjectKey().startsWith(expectedCoverPrefix)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "coverObjectKey 与摘要不匹配");
+            }
+        }
         MusicTrack track = new MusicTrack();
         track.setUserId(userId);
         track.setPlaylistId(pl.getId());
@@ -908,10 +924,59 @@ public class MusicService {
             track.setLyricsStoredRelpath(req.lyricsObjectKey());
             track.setLyricsUrl(cosStorageService.publicObjectUrl(req.lyricsObjectKey()));
         }
-        applyStorageDeduplication(track, track.getFileSize(), StringUtils.hasText(req.lyricsObjectKey()));
+        if (StringUtils.hasText(req.coverObjectKey())) {
+            track.setCoverStoredRelpath(req.coverObjectKey());
+            track.setCoverUrl(cosStorageService.publicObjectUrl(req.coverObjectKey()));
+        }
+        boolean storageReused = applyStorageDeduplication(track, track.getFileSize(), StringUtils.hasText(req.lyricsObjectKey()));
+        if (!StringUtils.hasText(track.getCoverUrl()) && !StringUtils.hasText(track.getCoverStoredRelpath())) {
+            processEmbeddedCoverFromCos(track, ext, storageReused);
+        }
         track = musicTrackRepository.save(track);
         backfillCoverToSiblingTracks(track);
         return toResponse(track, userTrackHeartRepository.existsByUserIdAndTrackId(userId, track.getId()));
+    }
+
+    /**
+     * 前端直传 COS 后，服务端补做一次 MP3 内嵌封面抽取，保持与 multipart 上传体验一致。
+     */
+    private void processEmbeddedCoverFromCos(MusicTrack track, String ext, boolean storageReused) {
+        if (!"mp3".equalsIgnoreCase(ext)) {
+            return;
+        }
+        if (!StringUtils.hasText(track.getAudioUrl())) {
+            return;
+        }
+        Path temp = null;
+        HttpURLConnection conn = null;
+        try {
+            temp = Files.createTempFile("music-cos-cover-", ".mp3");
+            URL url = URI.create(track.getAudioUrl()).toURL();
+            conn = (HttpURLConnection) url.openConnection();
+            conn.setConnectTimeout(5000);
+            conn.setReadTimeout(15000);
+            conn.setRequestMethod("GET");
+            int code = conn.getResponseCode();
+            if (code < 200 || code >= 300) {
+                return;
+            }
+            try (InputStream in = conn.getInputStream()) {
+                Files.copy(in, temp, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            }
+            processEmbeddedCover(temp, ext, track, storageReused);
+        } catch (Exception ignored) {
+            // 封面抽取失败不影响主流程
+        } finally {
+            if (conn != null) {
+                conn.disconnect();
+            }
+            if (temp != null) {
+                try {
+                    Files.deleteIfExists(temp);
+                } catch (IOException ignored) {
+                }
+            }
+        }
     }
 
     @Transactional(readOnly = true)
