@@ -7,6 +7,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.TreeMap;
@@ -60,12 +62,18 @@ public class CosStsService {
                     "name/cos:AbortMultipartUpload"
             });
             Object credential = CosStsClient.getCredential(config);
-            Object credentials = credential.getClass().getField("credentials").get(credential);
-            String tmpSecretId = String.valueOf(credentials.getClass().getField("tmpSecretId").get(credentials));
-            String tmpSecretKey = String.valueOf(credentials.getClass().getField("tmpSecretKey").get(credentials));
-            String sessionToken = String.valueOf(credentials.getClass().getField("sessionToken").get(credentials));
-            long startTime = ((Number) credential.getClass().getField("startTime").get(credential)).longValue();
-            long expiredTime = ((Number) credential.getClass().getField("expiredTime").get(credential)).longValue();
+            // 兼容不同 cos-sts-java 版本：有的结构是 credential.credentials.tmpSecretId，
+            // 也有版本直接把 tmpSecretId/tmpSecretKey/sessionToken 放在顶层。
+            Object credentials = readObject(credential, "credentials");
+            Object source = credentials != null ? credentials : credential;
+            String tmpSecretId = readString(source, "tmpSecretId");
+            String tmpSecretKey = readString(source, "tmpSecretKey");
+            String sessionToken = readString(source, "sessionToken");
+            long startTime = readLong(credential, "startTime");
+            long expiredTime = readLong(credential, "expiredTime");
+            if (!StringUtils.hasText(tmpSecretId) || !StringUtils.hasText(tmpSecretKey) || !StringUtils.hasText(sessionToken)) {
+                throw new IllegalStateException("STS 返回凭证字段为空");
+            }
             return new CosUploadTicketResponse(
                     tmpSecretId,
                     tmpSecretKey,
@@ -82,5 +90,38 @@ public class CosStsService {
             String msg = e.getClass().getSimpleName() + ": " + (e.getMessage() == null ? "unknown" : e.getMessage());
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "???? COS ???????? -> " + msg);
         }
+    }
+
+    private static Object readObject(Object bean, String name) {
+        try {
+            Field f = bean.getClass().getField(name);
+            return f.get(bean);
+        } catch (Exception ignored) {
+        }
+        try {
+            Method m = bean.getClass().getMethod("get" + Character.toUpperCase(name.charAt(0)) + name.substring(1));
+            return m.invoke(bean);
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
+    private static String readString(Object bean, String name) {
+        Object v = readObject(bean, name);
+        return v == null ? null : String.valueOf(v);
+    }
+
+    private static long readLong(Object bean, String name) {
+        Object v = readObject(bean, name);
+        if (v instanceof Number n) {
+            return n.longValue();
+        }
+        if (v instanceof String s) {
+            try {
+                return Long.parseLong(s);
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        return 0L;
     }
 }
