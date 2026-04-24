@@ -33,9 +33,11 @@ public class CosStorageService {
     }
 
     public boolean isUsable() {
+        String secretId = CosSecretResolver.resolveSecretId(props);
+        String secretKey = CosSecretResolver.resolveSecretKey(props);
         return props.isEnabled()
-                && StringUtils.hasText(props.getSecretId())
-                && StringUtils.hasText(props.getSecretKey())
+                && StringUtils.hasText(secretId)
+                && StringUtils.hasText(secretKey)
                 && StringUtils.hasText(props.getBucket())
                 && StringUtils.hasText(props.getRegion());
     }
@@ -126,10 +128,12 @@ public class CosStorageService {
             throw new IllegalStateException("COS 未正确配置，无法上传");
         }
         String ct = StringUtils.hasText(contentType) ? contentType : "application/octet-stream";
+        String secretId = CosSecretResolver.resolveSecretId(props);
+        String secretKey = CosSecretResolver.resolveSecretKey(props);
         try {
             CosV5UploadHelper.putObject(
-                    props.getSecretId(),
-                    props.getSecretKey(),
+                    secretId,
+                    secretKey,
                     props.getRegion(),
                     props.getBucket(),
                     objectKey,
