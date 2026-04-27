@@ -1,6 +1,7 @@
 package com.bendoudou.server.user;
 
 import com.bendoudou.server.auth.dto.AuthResponse;
+import com.bendoudou.server.auth.dto.MeResponse;
 import com.bendoudou.server.security.JwtTokenService;
 import com.bendoudou.server.user.dto.AdminUserCreateRequest;
 import com.bendoudou.server.user.dto.AdminUserListItem;
@@ -28,6 +29,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 public class UserService {
@@ -38,17 +40,20 @@ public class UserService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenService jwtTokenService;
+    private final AccountRoleService accountRoleService;
     private final Path uploadBase;
 
     public UserService(
             UserRepository userRepository,
             PasswordEncoder passwordEncoder,
             JwtTokenService jwtTokenService,
+            AccountRoleService accountRoleService,
             @Value("${bendoudou.music-upload-dir}") String musicUploadDir
     ) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtTokenService = jwtTokenService;
+        this.accountRoleService = accountRoleService;
         this.uploadBase = Path.of(musicUploadDir).toAbsolutePath().normalize();
     }
 
@@ -69,8 +74,24 @@ public class UserService {
                 String.valueOf(u.getId()),
                 Map.of("email", u.getEmail())
         );
-        UserRole r = u.getRole() != null ? u.getRole() : UserRole.USER;
-        return new AuthResponse(token, u.getEmail(), u.getDisplayName(), r.name());
+        var eff = accountRoleService.effectiveRolesForUserId(u.getId());
+        var primary = AccountRoleService.primaryRoleName(eff);
+        var roles = eff.stream().map(UserRole::name).sorted().collect(Collectors.toList());
+        return new AuthResponse(token, u.getEmail(), u.getDisplayName(), primary, roles);
+    }
+
+    public MeResponse toMeResponse(User u) {
+        var eff = accountRoleService.effectiveRolesForUserId(u.getId());
+        var roleNames = eff.stream().map(UserRole::name).sorted().collect(Collectors.toList());
+        var primary = AccountRoleService.primaryRoleName(eff);
+        return new MeResponse(
+                u.getId(),
+                u.getEmail(),
+                u.getDisplayName(),
+                StringUtils.hasText(u.getAvatarStoredRelpath()),
+                primary,
+                roleNames
+        );
     }
 
     public User requireUser(long id) {
@@ -110,9 +131,13 @@ public class UserService {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "无效的角色");
             }
         }
+        if (newRole == UserRole.DEVELOPER) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "主角色仅可为 USER 或 ADMIN；开发者在审核中授予");
+        }
         u.setRole(newRole);
         u.setAccountEnabled(true);
         u = userRepository.save(u);
+        accountRoleService.assignOnUserCreatedIfEmpty(u.getId(), newRole);
         return toAdminListItem(u);
     }
 
@@ -143,11 +168,17 @@ public class UserService {
             if (targetId == requesterId) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "不能修改自己的角色");
             }
+            UserRole newPrimary;
             try {
-                u.setRole(UserRole.valueOf(req.role().trim().toUpperCase()));
+                newPrimary = UserRole.valueOf(req.role().trim().toUpperCase());
             } catch (IllegalArgumentException e) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "无效的角色");
             }
+            if (newPrimary == UserRole.DEVELOPER) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "主角色仅可为 USER 或 ADMIN；开发者在审核中授予");
+            }
+            u.setRole(newPrimary);
+            accountRoleService.setPrimaryRolePreservingExtra(u.getId(), newPrimary);
         }
         if (req.displayName() != null) {
             String dn = req.displayName().trim();
@@ -177,20 +208,27 @@ public class UserService {
 
     private static final String DEFAULT_RESET_PASSWORD = "123456";
 
+    /** 非管理员则 403；供管理端接口在执行业务前校验。 */
+    public void requireAdmin(long userId) {
+        assertIsAdmin(userId);
+    }
+
     private void assertIsAdmin(long userId) {
-        User u = requireUser(userId);
-        if ((u.getRole() != null ? u.getRole() : UserRole.USER) != UserRole.ADMIN) {
+        if (!accountRoleService.hasRole(userId, UserRole.ADMIN)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "需要管理员权限");
         }
     }
 
     private AdminUserListItem toAdminListItem(User u) {
-        UserRole r = u.getRole() != null ? u.getRole() : UserRole.USER;
+        var eff = accountRoleService.effectiveRolesForUserId(u.getId());
+        var names = eff.stream().map(UserRole::name).sorted().collect(Collectors.toList());
+        var primary = AccountRoleService.primaryRoleName(eff);
         return new AdminUserListItem(
                 u.getId(),
                 u.getEmail(),
                 u.getDisplayName(),
-                r.name(),
+                primary,
+                names,
                 StringUtils.hasText(u.getAvatarStoredRelpath()),
                 u.getCreatedAt().toEpochMilli(),
                 u.isAccountEnabled()

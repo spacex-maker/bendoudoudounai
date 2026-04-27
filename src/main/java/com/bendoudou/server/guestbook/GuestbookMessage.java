@@ -34,6 +34,10 @@ public class GuestbookMessage {
     @Column(name = "visible_to_user_id")
     private Long visibleToUserId;
 
+    /** 发帖用户（登录发帖时记录）；匿名发帖为 null。 */
+    @Column(name = "author_user_id")
+    private Long authorUserId;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt = Instant.now();
 
@@ -75,6 +79,14 @@ public class GuestbookMessage {
 
     public void setVisibleToUserId(Long visibleToUserId) {
         this.visibleToUserId = visibleToUserId;
+    }
+
+    public Long getAuthorUserId() {
+        return authorUserId;
+    }
+
+    public void setAuthorUserId(Long authorUserId) {
+        this.authorUserId = authorUserId;
     }
 
     public Instant getCreatedAt() {

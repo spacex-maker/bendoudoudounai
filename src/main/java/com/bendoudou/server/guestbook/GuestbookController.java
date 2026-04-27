@@ -30,6 +30,7 @@ public class GuestbookController {
     public Page<GuestbookMessageResponse> list(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "15") int size,
+            @RequestParam(defaultValue = "all") String scope,
             Authentication auth
     ) {
         int s = Math.min(Math.max(size, 1), 50);
@@ -43,7 +44,8 @@ public class GuestbookController {
                 /* ignore */
             }
         }
-        return guestbookService.listThreads(pageable, uid);
+        GuestbookService.ThreadScope threadScope = parseScope(scope);
+        return guestbookService.listThreads(pageable, uid, threadScope);
     }
 
     @PostMapping
@@ -61,5 +63,16 @@ public class GuestbookController {
             }
         }
         return guestbookService.create(request, ClientIp.of(http), uid);
+    }
+
+    private static GuestbookService.ThreadScope parseScope(String raw) {
+        if (raw == null) {
+            return GuestbookService.ThreadScope.ALL;
+        }
+        return switch (raw.trim().toLowerCase()) {
+            case "public" -> GuestbookService.ThreadScope.PUBLIC;
+            case "about_me", "aboutme", "mine" -> GuestbookService.ThreadScope.ABOUT_ME;
+            default -> GuestbookService.ThreadScope.ALL;
+        };
     }
 }

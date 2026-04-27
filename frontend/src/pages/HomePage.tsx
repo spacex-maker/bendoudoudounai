@@ -121,6 +121,27 @@ export function HomePage() {
           </div>
         </section>
 
+        <section
+          id="dev-diary-intro"
+          className="scroll-mt-24 sm:scroll-mt-28 relative z-10 border-t border-white/25 bg-rose-50/25 py-16 backdrop-blur-sm sm:py-20"
+        >
+          <div className="mx-auto max-w-2xl px-5 text-center sm:px-8">
+            <p className="mb-2 text-xs font-medium uppercase tracking-widest text-rose-500/80">
+              {t("home.devDiaryKicker")}
+            </p>
+            <h2 className="font-display text-2xl text-warm-600 sm:text-3xl">{t("home.devDiaryTitle")}</h2>
+            <p className="mt-4 text-pretty text-sm leading-relaxed text-stone-600/90 sm:text-base">
+              {t("home.devDiarySub")}
+            </p>
+            <Link
+              to="/dev-diary"
+              className="mt-8 inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-rose-500/90 to-amber-500/80 px-8 py-3.5 text-sm font-medium text-white shadow-lg transition hover:from-rose-500 hover:to-amber-600"
+            >
+              {t("home.devDiaryCta")}
+            </Link>
+          </div>
+        </section>
+
         <section id="steps" className="scroll-mt-24 sm:scroll-mt-28 relative z-10 py-16 sm:py-20">
           <div className="mx-auto max-w-3xl px-5 sm:px-8">
             <h2 className="text-center font-display text-2xl text-warm-600 sm:text-3xl">{t("home.sectionStepsTitle")}</h2>

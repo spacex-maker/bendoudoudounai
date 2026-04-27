@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { X } from "lucide-react";
 import clsx from "clsx";
-import { createAdminUser, type UserRole } from "../api/client";
+import { createAdminUser } from "../api/client";
 import { mapApiError } from "../i18n/mapApiError";
 import { isAxiosError } from "axios";
 
@@ -20,7 +20,7 @@ export function AdminUserCreateModal({ open, onClose, onCreated }: Props) {
   const [displayName, setDisplayName] = useState("");
   const [password, setPassword] = useState("");
   const [password2, setPassword2] = useState("");
-  const [role, setRole] = useState<UserRole>("USER");
+  const [role, setRole] = useState<"USER" | "ADMIN">("USER");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 

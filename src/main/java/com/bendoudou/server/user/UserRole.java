@@ -5,5 +5,7 @@ package com.bendoudou.server.user;
  */
 public enum UserRole {
     USER,
-    ADMIN
+    ADMIN,
+    /** 可撰写与管理「开发日记」等站点更新内容，可与 USER/ADMIN 并存 */
+    DEVELOPER
 }

@@ -1,15 +1,140 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Loader2, MessageCircle, MessageSquareReply, PenLine, Sparkles } from "lucide-react";
 import clsx from "clsx";
-import { fetchGuestbookThreads, type GuestbookMessageDto } from "../api/client";
+import {
+  fetchGuestbookThreads,
+  fetchUserDirectoryForGuestbook,
+  userDirectoryAvatarUrl,
+  type GuestbookScope,
+  type GuestbookMessageDto,
+  type UserDirectoryItemDto,
+} from "../api/client";
 import { mapApiError } from "../i18n/mapApiError";
 import { useDateLocale } from "../i18n/useDateLocale";
 import { SiteHeader } from "../components/SiteHeader";
 import { GuestbookPostModal } from "../components/GuestbookPostModal";
 import { GuestbookReplyModal } from "../components/GuestbookReplyModal";
+import { useAuthedUser } from "../auth/AuthContext";
 
 const PAGE_SIZE = 12;
+
+function MessageAvatar({
+  nickname,
+  authorUserId,
+  showName,
+  directoryById,
+  compact,
+}: {
+  nickname: string | null;
+  authorUserId: number | null | undefined;
+  showName: (n: string | null) => string;
+  directoryById: Map<number, UserDirectoryItemDto>;
+  /** 回复行略小，主帖为 false */
+  compact?: boolean;
+}) {
+  const dirUser = authorUserId != null ? directoryById.get(authorUserId) : undefined;
+  const avatarUrl = dirUser ? userDirectoryAvatarUrl(dirUser) : null;
+  const initial = (showName(nickname).charAt(0) || "·").toUpperCase();
+  const frame = compact
+    ? "h-10 w-10 shrink-0 rounded-xl text-sm"
+    : "h-12 w-12 shrink-0 rounded-2xl text-lg";
+  if (avatarUrl) {
+    return (
+      <img
+        src={avatarUrl}
+        alt=""
+        draggable={false}
+        className={clsx(frame, "border border-white/90 object-cover shadow-inner")}
+      />
+    );
+  }
+  return (
+    <div
+      className={clsx(
+        "flex items-center justify-center bg-gradient-to-br from-rose-200/80 to-amber-100/80 font-display text-warm-600 shadow-inner",
+        frame
+      )}
+      aria-hidden
+    >
+      {initial}
+    </div>
+  );
+}
+
+function PeerFace({
+  label,
+  dirUser,
+  fallbackName,
+}: {
+  label: string;
+  dirUser: UserDirectoryItemDto | undefined;
+  fallbackName: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const name = dirUser?.label?.trim() || fallbackName.trim() || "?";
+  const avatarUrl = dirUser ? userDirectoryAvatarUrl(dirUser) : null;
+  const initial = (name || "?").slice(0, 1).toUpperCase();
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent | TouchEvent) => {
+      const el = rootRef.current;
+      if (!el?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("touchstart", onDoc, { passive: true });
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("touchstart", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  return (
+    <div ref={rootRef} className="relative inline-flex shrink-0">
+      <button
+        type="button"
+        className="rounded-full outline-none ring-rose-400/0 transition-[box-shadow] focus-visible:ring-2 focus-visible:ring-rose-400/70"
+        aria-expanded={open}
+        aria-haspopup="dialog"
+        aria-label={`${label}：${name}`}
+        onClick={() => setOpen((v) => !v)}
+      >
+        {avatarUrl ? (
+          <img
+            src={avatarUrl}
+            alt=""
+            className="h-8 w-8 rounded-full border border-white/90 object-cover shadow-sm"
+            draggable={false}
+          />
+        ) : (
+          <div
+            className="flex h-8 w-8 items-center justify-center rounded-full border border-rose-200/70 bg-gradient-to-br from-rose-100 to-amber-50 text-[11px] font-semibold text-warm-700 shadow-inner"
+            aria-hidden
+          >
+            {initial}
+          </div>
+        )}
+      </button>
+      {open ? (
+        <div
+          className="absolute bottom-[calc(100%+8px)] left-1/2 z-30 w-max max-w-[min(14rem,calc(100vw-2rem))] -translate-x-1/2 rounded-lg border border-stone-700/40 bg-stone-900/95 px-2.5 py-2 text-left text-white shadow-lg shadow-stone-900/25 ring-1 ring-white/10"
+          role="dialog"
+          aria-label={`${label}：${name}`}
+        >
+          <p className="text-[10px] font-medium uppercase tracking-wide text-stone-400">{label}</p>
+          <p className="mt-0.5 text-xs font-medium leading-snug text-white">{name}</p>
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 function ThreadCard({
   t,
@@ -17,15 +142,24 @@ function ThreadCard({
   onRequestReply,
   formatTime,
   showName,
+  viewerUserId,
+  directoryById,
 }: {
   t: (k: string, opts?: Record<string, string | number>) => string;
   thread: GuestbookMessageDto;
   onRequestReply: (threadId: number, mainAuthorLabel: string) => void;
   formatTime: (ms: number) => string;
   showName: (n: string | null) => string;
+  viewerUserId: number | null;
+  directoryById: Map<number, UserDirectoryItemDto>;
 }) {
   const visId = th.visibleToUserId ?? null;
   const target = th.targetDisplayName ?? null;
+  const mine = viewerUserId != null && th.authorUserId === viewerUserId;
+  const showDirectPair =
+    visId != null &&
+    viewerUserId != null &&
+    (th.authorUserId === viewerUserId || visId === viewerUserId);
   return (
     <li>
       <article
@@ -40,21 +174,23 @@ function ThreadCard({
         />
         <div className="relative border-b border-rose-100/50 px-4 py-4 sm:px-6 sm:py-5">
           <div className="flex flex-wrap items-start gap-3 sm:gap-4">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-rose-200/80 to-amber-100/80 font-display text-lg text-warm-600 shadow-inner">
-              {(showName(th.nickname).charAt(0) || "·").toUpperCase()}
-            </div>
+            <MessageAvatar
+              nickname={th.nickname}
+              authorUserId={th.authorUserId}
+              showName={showName}
+              directoryById={directoryById}
+            />
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="font-medium text-warm-700">{showName(th.nickname)}</span>
-                <time
-                  className="text-[11px] tabular-nums text-stone-400"
-                  dateTime={new Date(th.createdAtMillis).toISOString()}
-                >
-                  {formatTime(th.createdAtMillis)}
-                </time>
                 <span className="rounded-full bg-rose-500/10 px-2 py-0.5 text-[10px] font-medium text-rose-700">
                   {t("guestbook.mainThread")}
                 </span>
+                {mine ? (
+                  <span className="rounded-full bg-emerald-500/12 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
+                    {t("guestbook.myBadge")}
+                  </span>
+                ) : null}
                 {visId == null ? (
                   <span className="rounded-full bg-stone-500/10 px-2 py-0.5 text-[10px] text-stone-500">{t("guestbook.publicBadge")}</span>
                 ) : target ? (
@@ -69,28 +205,75 @@ function ThreadCard({
         </div>
         {th.replies && th.replies.length > 0 ? (
           <ul className="relative divide-y divide-rose-100/40 border-b border-rose-100/30 bg-rose-50/25">
-            {th.replies.map((r) => (
-              <li key={r.id} className="px-4 py-3 pl-6 sm:px-6 sm:pl-10">
-                <div className="flex items-baseline justify-between gap-2 border-l-2 border-rose-200/50 pl-3">
-                  <div>
-                    <span className="text-sm font-medium text-warm-700">{showName(r.nickname)}</span>
-                    <time className="ml-2 text-[10px] text-stone-400 tabular-nums">{formatTime(r.createdAtMillis)}</time>
+            {th.replies.map((r) => {
+              const replyMine = viewerUserId != null && r.authorUserId === viewerUserId;
+              return (
+                <li key={r.id} className="px-4 py-3 pl-4 sm:px-6 sm:pl-8">
+                  <div className="flex gap-3 sm:gap-4">
+                    <MessageAvatar
+                      nickname={r.nickname}
+                      authorUserId={r.authorUserId}
+                      showName={showName}
+                      directoryById={directoryById}
+                      compact
+                    />
+                    <div className="min-w-0 flex-1 border-l-2 border-rose-200/50 pl-3">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="text-sm font-medium text-warm-700">{showName(r.nickname)}</span>
+                        {replyMine ? (
+                          <span className="rounded-full bg-emerald-500/12 px-1.5 py-0.5 text-[9px] font-medium text-emerald-700">
+                            {t("guestbook.myBadge")}
+                          </span>
+                        ) : null}
+                      </div>
+                      <p className="mt-1.5 whitespace-pre-wrap text-[13px] leading-relaxed text-stone-700/95">{r.content}</p>
+                      <time
+                        className="mt-2 block text-left text-[10px] tabular-nums text-stone-400"
+                        dateTime={new Date(r.createdAtMillis).toISOString()}
+                      >
+                        {formatTime(r.createdAtMillis)}
+                      </time>
+                    </div>
                   </div>
-                </div>
-                <p className="mt-1.5 whitespace-pre-wrap pl-3 text-[13px] leading-relaxed text-stone-700/95">{r.content}</p>
-              </li>
-            ))}
+                </li>
+              );
+            })}
           </ul>
         ) : null}
-        <div className="flex justify-end bg-gradient-to-b from-rose-50/30 to-white/20 px-4 py-3 sm:px-6 sm:py-4">
-          <button
-            type="button"
-            onClick={() => onRequestReply(th.id, showName(th.nickname))}
-            className="inline-flex items-center gap-2 rounded-full border border-rose-300/50 bg-white/70 px-4 py-2 text-sm font-medium text-rose-700 shadow-sm transition hover:border-rose-400/60 hover:bg-white/90"
-          >
-            <MessageSquareReply className="h-4 w-4" />
-            {t("guestbook.reply")}
-          </button>
+        <div className="flex flex-col gap-3 bg-gradient-to-b from-rose-50/30 to-white/20 px-4 py-3 sm:flex-row sm:items-end sm:justify-between sm:gap-4 sm:px-6 sm:py-4">
+          <div className="flex min-w-0 flex-1 flex-col items-start gap-2 self-stretch sm:pb-0.5">
+            {showDirectPair ? (
+              <div className="flex min-w-0 items-center gap-2">
+                <span className="sr-only">{t("guestbook.directPairHint")}</span>
+                <PeerFace
+                  label={t("guestbook.peerLabelAuthor")}
+                  dirUser={th.authorUserId != null ? directoryById.get(th.authorUserId) : undefined}
+                  fallbackName={showName(th.nickname)}
+                />
+                <PeerFace
+                  label={t("guestbook.peerLabelRecipient")}
+                  dirUser={directoryById.get(visId)}
+                  fallbackName={target ?? ""}
+                />
+              </div>
+            ) : null}
+            <time
+              className="text-[11px] tabular-nums text-stone-400"
+              dateTime={new Date(th.createdAtMillis).toISOString()}
+            >
+              {formatTime(th.createdAtMillis)}
+            </time>
+          </div>
+          <div className="flex w-full shrink-0 justify-end sm:w-auto">
+            <button
+              type="button"
+              onClick={() => onRequestReply(th.id, showName(th.nickname))}
+              className="inline-flex items-center gap-2 rounded-full border border-rose-300/50 bg-white/70 px-4 py-2 text-sm font-medium text-rose-700 shadow-sm transition hover:border-rose-400/60 hover:bg-white/90"
+            >
+              <MessageSquareReply className="h-4 w-4" />
+              {t("guestbook.reply")}
+            </button>
+          </div>
         </div>
       </article>
     </li>
@@ -100,14 +283,29 @@ function ThreadCard({
 export function MessageBoardPage() {
   const { t } = useTranslation();
   const dateLoc = useDateLocale();
+  const me = useAuthedUser();
+  const [userDir, setUserDir] = useState<UserDirectoryItemDto[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [replyTo, setReplyTo] = useState<{ id: number; label: string } | null>(null);
   const [rows, setRows] = useState<GuestbookMessageDto[]>([]);
+  const [scope, setScope] = useState<"public" | "about_me">("public");
   const [page, setPage] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
   const [loading, setLoading] = useState(true);
   const [loadMoreBusy, setLoadMoreBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  const directoryById = useMemo(() => new Map(userDir.map((u) => [u.id, u])), [userDir]);
+
+  useEffect(() => {
+    if (me == null) {
+      setUserDir([]);
+      return;
+    }
+    void fetchUserDirectoryForGuestbook()
+      .then(setUserDir)
+      .catch(() => setUserDir([]));
+  }, [me]);
 
   const showName = useCallback(
     (n: string | null) => (n?.trim() ? n.trim() : t("common.anonymous")),
@@ -119,6 +317,8 @@ export function MessageBoardPage() {
     [dateLoc]
   );
 
+  const apiScope: GuestbookScope = scope;
+
   const load = useCallback(
     async (p: number, append: boolean) => {
       if (append) setLoadMoreBusy(true);
@@ -127,7 +327,7 @@ export function MessageBoardPage() {
         setErr(null);
       }
       try {
-        const res = await fetchGuestbookThreads(p, PAGE_SIZE);
+        const res = await fetchGuestbookThreads(p, PAGE_SIZE, apiScope);
         setPage(res.number);
         setTotalPages(res.totalPages);
         if (append) setRows((prev) => [...prev, ...res.content]);
@@ -139,12 +339,18 @@ export function MessageBoardPage() {
         setLoadMoreBusy(false);
       }
     },
-    [t]
+    [apiScope, t]
   );
 
   useEffect(() => {
     void load(0, false);
   }, [load]);
+  useEffect(() => {
+    if (me == null && scope === "about_me") {
+      setScope("public");
+    }
+  }, [me, scope]);
+
 
   const refreshFirstPage = useCallback(() => {
     void load(0, false);
@@ -180,6 +386,33 @@ export function MessageBoardPage() {
               <PenLine className="h-4 w-4 transition group-hover:rotate-12" />
               {t("guestbook.newPost")}
             </button>
+          </div>
+          <div className="mt-5 flex justify-center">
+            <div className="inline-flex rounded-full border border-rose-200/70 bg-white/60 p-1 shadow-sm backdrop-blur-sm">
+              <button
+                type="button"
+                onClick={() => setScope("public")}
+                className={clsx(
+                  "rounded-full px-4 py-1.5 text-sm font-medium transition",
+                  scope === "public" ? "bg-rose-500 text-white shadow-sm" : "text-warm-700 hover:bg-white/70"
+                )}
+              >
+                {t("guestbook.filterPublic")}
+              </button>
+              <button
+                type="button"
+                onClick={() => setScope("about_me")}
+                disabled={me == null}
+                className={clsx(
+                  "rounded-full px-4 py-1.5 text-sm font-medium transition",
+                  scope === "about_me" ? "bg-rose-500 text-white shadow-sm" : "text-warm-700 hover:bg-white/70",
+                  me == null && "cursor-not-allowed opacity-50"
+                )}
+                title={me == null ? t("guestbook.loginForDirect") : undefined}
+              >
+                {t("guestbook.filterAboutMe")}
+              </button>
+            </div>
           </div>
         </div>
 
@@ -221,6 +454,8 @@ export function MessageBoardPage() {
                 onRequestReply={(id, label) => setReplyTo({ id, label })}
                 formatTime={formatTime}
                 showName={showName}
+                viewerUserId={me?.id ?? null}
+                directoryById={directoryById}
               />
             ))}
           </ul>

@@ -45,26 +45,27 @@
 @layer components {
   .custom-scrollbar {
     scrollbar-width: thin;
-    scrollbar-color: rgba(244, 114, 182, 0.5) rgba(255, 255, 255, 0.04);
+    scrollbar-color: rgba(161, 161, 170, 0.65) rgba(255, 255, 255, 0.03);
   }
 
   .custom-scrollbar::-webkit-scrollbar {
-    width: 10px;
+    width: 8px;
+    height: 8px;
   }
 
   .custom-scrollbar::-webkit-scrollbar-track {
-    background: rgba(255, 255, 255, 0.04);
+    background: rgba(255, 255, 255, 0.03);
     border-radius: 9999px;
   }
 
   .custom-scrollbar::-webkit-scrollbar-thumb {
-    background: linear-gradient(180deg, rgba(251, 113, 133, 0.9), rgba(244, 114, 182, 0.78));
+    background: linear-gradient(180deg, rgba(212, 212, 216, 0.75), rgba(113, 113, 122, 0.72));
     border-radius: 9999px;
-    border: 2px solid rgba(24, 24, 27, 0.85);
+    border: 1px solid rgba(24, 24, 27, 0.82);
   }
 
   .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-    background: linear-gradient(180deg, rgba(251, 113, 133, 1), rgba(244, 114, 182, 0.95));
+    background: linear-gradient(180deg, rgba(228, 228, 231, 0.9), rgba(161, 161, 170, 0.88));
   }
 
   .music-progress-range,

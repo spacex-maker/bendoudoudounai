@@ -29,7 +29,8 @@ server:
 security:
   jwt:
     secret: ${BENDOUDOU_JWT_SECRET:BendoudouOurLittleSiteJwtSecretKey2026MustBe32B+}
-    access-token-validity-seconds: 2592000
+    # 90d：需长于前端「30 天无操作才登出」的滑动策略，避免活跃用户仍因 JWT 到期被踢
+    access-token-validity-seconds: 7776000
 
 bendoudou:
   # 本地上传目录，相对 JAR 运行目录

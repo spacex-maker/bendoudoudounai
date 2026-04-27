@@ -22,6 +22,12 @@ import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 public class GuestbookService {
+    public enum ThreadScope {
+        ALL,
+        PUBLIC,
+        ABOUT_ME
+    }
+
 
     private static final int RATE_WINDOW_MS = 30_000;
     private static final String RATE_MSG = "提交太频繁，请稍后再试";
@@ -39,17 +45,59 @@ public class GuestbookService {
     }
 
     /**
-     * 分页主楼。未登录只可见全员帖；已登录还可见「定向给自己」的帖。附带一层回复。
+     * 分页主楼。未登录只可见全员帖；已登录还可见「定向给自己」与「自己发出」的帖。附带一层回复。
      */
-    public Page<GuestbookMessageResponse> listThreads(Pageable pageable, Long viewerUserIdOrNull) {
-        Page<GuestbookMessage> rootPage = viewerUserIdOrNull == null
-                ? repository.findPublicRootThreads(pageable)
-                : repository.findRootThreadsForUser(viewerUserIdOrNull, pageable);
+    public Page<GuestbookMessageResponse> listThreads(Pageable pageable, Long viewerUserIdOrNull, ThreadScope scope) {
+        Page<GuestbookMessage> rootPage;
+        if (scope == ThreadScope.PUBLIC) {
+            rootPage = repository.findPublicRootThreads(pageable);
+        } else if (scope == ThreadScope.ABOUT_ME) {
+            if (viewerUserIdOrNull == null) {
+                rootPage = Page.empty(pageable);
+            } else {
+                rootPage = repository.findRelatedRootThreadsForUser(viewerUserIdOrNull, pageable);
+            }
+        } else {
+            rootPage = viewerUserIdOrNull == null
+                    ? repository.findPublicRootThreads(pageable)
+                    : repository.findRootThreadsForUser(viewerUserIdOrNull, pageable);
+        }
         List<GuestbookMessage> roots = rootPage.getContent();
         if (roots.isEmpty()) {
             return rootPage.map(
                     e -> toRootResponse(e, List.of(), Map.of())
             );
+        }
+        List<Long> rootIds = roots.stream().map(GuestbookMessage::getId).toList();
+        List<GuestbookMessage> replyRows = repository.findByParentIdInOrderByCreatedAtAsc(rootIds);
+        Map<Long, List<GuestbookMessage>> byParent = new LinkedHashMap<>();
+        for (Long id : rootIds) {
+            byParent.put(id, new ArrayList<>());
+        }
+        for (GuestbookMessage r : replyRows) {
+            if (r.getParentId() != null && byParent.containsKey(r.getParentId())) {
+                byParent.get(r.getParentId()).add(r);
+            }
+        }
+        Set<Long> needUserIds = new HashSet<>();
+        for (GuestbookMessage g : roots) {
+            addVisibleId(needUserIds, g);
+        }
+        for (GuestbookMessage r : replyRows) {
+            addVisibleId(needUserIds, r);
+        }
+        Map<Long, String> labelById = buildTargetLabels(needUserIds);
+        return rootPage.map(e -> toRootResponse(e, byParent.getOrDefault(e.getId(), List.of()), labelById));
+    }
+
+    /**
+     * 管理端：列出全站主楼及回复（无视可见性筛选）。调用方需已校验管理员身份。
+     */
+    public Page<GuestbookMessageResponse> listAllThreadsForAdmin(Pageable pageable) {
+        Page<GuestbookMessage> rootPage = repository.findAllRootThreads(pageable);
+        List<GuestbookMessage> roots = rootPage.getContent();
+        if (roots.isEmpty()) {
+            return rootPage.map(e -> toRootResponse(e, List.of(), Map.of()));
         }
         List<Long> rootIds = roots.stream().map(GuestbookMessage::getId).toList();
         List<GuestbookMessage> replyRows = repository.findByParentIdInOrderByCreatedAtAsc(rootIds);
@@ -143,6 +191,7 @@ public class GuestbookService {
         m.setNickname(StringUtils.hasText(nn) ? nn : null);
         m.setContent(req.content().trim());
         m.setVisibleToUserId(vis);
+        m.setAuthorUserId(authedUserIdOrNull);
         m = repository.save(m);
         lastSubmitMsByIp.put(clientIp, now);
 
@@ -153,6 +202,7 @@ public class GuestbookService {
                 m.getContent(),
                 m.getParentId(),
                 m.getCreatedAt().toEpochMilli(),
+                m.getAuthorUserId(),
                 m.getVisibleToUserId(),
                 targetLabel
         );
@@ -177,6 +227,7 @@ public class GuestbookService {
                 root.getContent(),
                 root.getParentId(),
                 root.getCreatedAt().toEpochMilli(),
+                root.getAuthorUserId(),
                 root.getVisibleToUserId(),
                 targetLabel(root.getVisibleToUserId(), labelById),
                 rep
@@ -190,6 +241,7 @@ public class GuestbookService {
                 e.getContent(),
                 e.getParentId(),
                 e.getCreatedAt().toEpochMilli(),
+                e.getAuthorUserId(),
                 e.getVisibleToUserId(),
                 targetLabel(e.getVisibleToUserId(), labelById)
         );

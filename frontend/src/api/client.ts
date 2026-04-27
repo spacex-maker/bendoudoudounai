@@ -2,6 +2,38 @@ import axios from "axios";
 import COS from "cos-js-sdk-v5";
 
 const TOKEN_KEY = "bendoudou_token";
+/** 与「30 天无操作退出」搭配：有 token 时记录最后一次活动时间（时间戳 ms） */
+const AUTH_LAST_ACTIVE_KEY = "bendoudou_auth_last_active_at";
+/** 连续超过该时长无操作则清除本地 token（需与后端 access-token 有效期配合，JWT 过短会先于该策略失效） */
+const INACTIVITY_LOGOUT_MS = 30 * 24 * 60 * 60 * 1000;
+
+function readLastActiveAt(): number | null {
+  const raw = localStorage.getItem(AUTH_LAST_ACTIVE_KEY);
+  if (raw == null) return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** 有访问令牌时更新「最后活动时间」，用于 30 天无操作才登出 */
+export function touchAuthActivity() {
+  if (!getStoredToken()) return;
+  localStorage.setItem(AUTH_LAST_ACTIVE_KEY, String(Date.now()));
+}
+
+function clearLastActiveAt() {
+  localStorage.removeItem(AUTH_LAST_ACTIVE_KEY);
+}
+
+/**
+ * 仅本地策略：有 token 且已记录过活动时间，且超过 30 天未操作 → 应视为已登出。
+ * 无记录时（老版本升级）不拦截，等首次 /api 成功后再写入活动时间。
+ */
+export function shouldLogoutDueToInactivity(): boolean {
+  if (!getStoredToken()) return false;
+  const last = readLastActiveAt();
+  if (last == null) return false;
+  return Date.now() - last > INACTIVITY_LOGOUT_MS;
+}
 
 /** 用于区分 HTTP 状态（如 429 限流、401 登录过期），便于前端做多语言提示 */
 export class ApiHttpError extends Error {
@@ -68,14 +100,24 @@ if (initial) {
   setAuthToken(initial);
 }
 
-export type UserRole = "USER" | "ADMIN";
+api.interceptors.response.use(
+  (res) => {
+    if (getStoredToken()) touchAuthActivity();
+    return res;
+  },
+  (err) => Promise.reject(err)
+);
+
+export type UserRole = "USER" | "ADMIN" | "DEVELOPER";
 
 export interface AuthResponse {
   token: string;
   email: string;
   displayName: string | null;
-  /** USER：普通用户；ADMIN：管理员 */
-  role: UserRole;
+  /** 主展示角色（与 roles 中最高序一致，兼容旧逻辑） */
+  role: string;
+  /** 全部已授予角色 */
+  roles?: string[];
 }
 
 export interface MeResponse {
@@ -84,12 +126,33 @@ export interface MeResponse {
   displayName: string | null;
   /** 服务端是否已保存头像；为 true 时用 userAvatarDisplayUrl 拼带 token 的图片地址 */
   hasAvatar?: boolean;
-  /** USER | ADMIN；旧数据缺省时前端按 USER 处理 */
-  role?: UserRole;
+  role?: string;
+  /** 多角色；缺省时用 role 兜底 */
+  roles?: string[];
 }
 
-export function userIsAdmin(user: Pick<MeResponse, "role"> | null | undefined): boolean {
-  return user?.role === "ADMIN";
+function roleListOf(user: Pick<MeResponse, "role" | "roles"> | null | undefined): string[] {
+  if (!user) return [];
+  if (user.roles && user.roles.length > 0) return user.roles;
+  if (user.role) return [user.role];
+  return ["USER"];
+}
+
+export function userIsAdmin(user: Pick<MeResponse, "role" | "roles"> | null | undefined): boolean {
+  return roleListOf(user).includes("ADMIN");
+}
+
+export function userIsDeveloper(user: Pick<MeResponse, "role" | "roles"> | null | undefined): boolean {
+  return roleListOf(user).includes("DEVELOPER");
+}
+
+/**
+ * 是否可撰写/改删本站的开发日记（与「管理员」身份独立，仅含 DEVELOPER 时 true）。
+ */
+export function userCanManageDevDiary(
+  user: Pick<MeResponse, "role" | "roles"> | null | undefined
+): boolean {
+  return userIsDeveloper(user);
 }
 
 export async function login(email: string, password: string): Promise<AuthResponse> {
@@ -99,14 +162,17 @@ export async function login(email: string, password: string): Promise<AuthRespon
 
 export async function fetchMe(): Promise<MeResponse> {
   const { data } = await api.get<MeResponse>("/api/users/me");
-  return { ...data, role: data.role ?? "USER" };
+  const role = data.role ?? "USER";
+  const roles = data.roles && data.roles.length > 0 ? data.roles : [role];
+  return { ...data, role, roles };
 }
 
 export interface AdminUserRowDto {
   id: number;
   email: string;
   displayName: string | null;
-  role: UserRole;
+  role: string;
+  roles?: string[];
   hasAvatar: boolean;
   createdAtMillis: number;
   enabled: boolean;
@@ -114,12 +180,17 @@ export interface AdminUserRowDto {
 
 export async function fetchAdminUsers(): Promise<AdminUserRowDto[]> {
   const { data } = await api.get<AdminUserRowDto[]>("/api/admin/users");
-  return data.map((row) => ({ ...row, role: row.role ?? "USER", enabled: row.enabled !== false }));
+  return data.map((row) => {
+    const r = row.role ?? "USER";
+    const roles = row.roles && row.roles.length > 0 ? row.roles : [r];
+    return { ...row, role: r, roles, enabled: row.enabled !== false };
+  });
 }
 
 export type AdminUserPatchBody = {
   displayName?: string | null;
-  role?: UserRole;
+  /** 主身份仅 USER 或 ADMIN */
+  role?: "USER" | "ADMIN";
   enabled?: boolean;
   /** 为其他用户设置新密码时传入；6 位以上 */
   newPassword?: string;
@@ -127,7 +198,9 @@ export type AdminUserPatchBody = {
 
 export async function patchAdminUser(id: number, body: AdminUserPatchBody): Promise<AdminUserRowDto> {
   const { data } = await api.patch<AdminUserRowDto>(`/api/admin/users/${id}`, body);
-  return { ...data, role: data.role ?? "USER", enabled: data.enabled !== false };
+  const r = data.role ?? "USER";
+  const roles = data.roles && data.roles.length > 0 ? data.roles : [r];
+  return { ...data, role: r, roles, enabled: data.enabled !== false };
 }
 
 export async function resetAdminUserPassword(id: number): Promise<void> {
@@ -138,7 +211,7 @@ export async function createAdminUser(input: {
   email: string;
   password: string;
   displayName?: string | null;
-  role?: UserRole;
+  role?: "USER" | "ADMIN";
 }): Promise<AdminUserRowDto> {
   const { data } = await api.post<AdminUserRowDto>("/api/admin/users", {
     email: input.email.trim(),
@@ -146,7 +219,179 @@ export async function createAdminUser(input: {
     displayName: input.displayName?.trim() ? input.displayName.trim() : null,
     role: input.role ?? "USER",
   });
-  return { ...data, role: data.role ?? "USER", enabled: data.enabled !== false };
+  const r = data.role ?? "USER";
+  const roles = data.roles && data.roles.length > 0 ? data.roles : [r];
+  return { ...data, role: r, roles, enabled: data.enabled !== false };
+}
+
+// —— 开发日记（GET 可匿名，写操作需登录且为开发者/管理员）——
+
+export interface DevDiaryListItemDto {
+  id: number;
+  title: string;
+  authorUserId: number;
+  authorLabel: string;
+  createdAtMillis: number;
+}
+
+export interface DevDiaryPageDto {
+  content: DevDiaryListItemDto[];
+  totalElements: number;
+  totalPages: number;
+  number: number;
+  size: number;
+}
+
+export interface DevDiaryEntryDetailDto {
+  id: number;
+  title: string;
+  bodyMd: string | null;
+  authorUserId: number;
+  authorLabel: string;
+  createdAtMillis: number;
+  updatedAtMillis: number;
+}
+
+export async function fetchDevDiaryPage(page = 0, size = 20): Promise<DevDiaryPageDto> {
+  const q = new URLSearchParams({ page: String(page), size: String(size) });
+  const res = await fetch(apiPath(`/api/diary/entries?${q}`));
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || res.statusText);
+  }
+  return res.json() as Promise<DevDiaryPageDto>;
+}
+
+export async function fetchDevDiaryEntry(id: number): Promise<DevDiaryEntryDetailDto> {
+  const res = await fetch(apiPath(`/api/diary/entries/${id}`));
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || res.statusText);
+  }
+  return res.json() as Promise<DevDiaryEntryDetailDto>;
+}
+
+export async function postDevDiaryEntry(input: { title: string; bodyMd: string }): Promise<DevDiaryEntryDetailDto> {
+  const res = await fetch(apiPath("/api/diary/entries"), {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${getStoredToken()}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(input),
+  });
+  return authJson(res);
+}
+
+export async function patchDevDiaryEntry(
+  id: number,
+  input: { title?: string; bodyMd?: string }
+): Promise<DevDiaryEntryDetailDto> {
+  const res = await fetch(apiPath(`/api/diary/entries/${id}`), {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${getStoredToken()}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(input),
+  });
+  return authJson(res);
+}
+
+export async function deleteDevDiaryEntry(id: number): Promise<void> {
+  const res = await fetch(apiPath(`/api/diary/entries/${id}`), {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${getStoredToken()}` },
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    let msg = res.statusText;
+    try {
+      const j = JSON.parse(text) as { message?: string; detail?: string };
+      if (j.message) msg = j.message;
+    } catch {
+      if (text) msg = text;
+    }
+    throw new Error(msg);
+  }
+}
+
+// —— 开发者角色申请 ——
+export interface DeveloperApplicationDto {
+  id: number;
+  userId: number;
+  userLabel: string;
+  userEmail: string;
+  message: string | null;
+  status: string;
+  createdAtMillis: number;
+  resolvedAtMillis: number | null;
+  resolutionNote: string | null;
+}
+
+export async function applyForDeveloperRole(message?: string): Promise<void> {
+  const res = await fetch(apiPath("/api/role-applications/developer"), {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${getStoredToken()}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ message: message?.trim() || null }),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    let msg = res.statusText;
+    try {
+      const j = JSON.parse(text) as { message?: string; detail?: string };
+      if (j.message) msg = j.message;
+    } catch {
+      if (text) msg = text;
+    }
+    throw new Error(msg);
+  }
+}
+
+export async function fetchMyDeveloperApplications(): Promise<DeveloperApplicationDto[]> {
+  const res = await fetch(apiPath("/api/role-applications/developer/mine"), {
+    headers: { Authorization: `Bearer ${getStoredToken()}` },
+  });
+  return authJson(res);
+}
+
+export async function fetchAdminDeveloperApplications(
+  status?: "PENDING" | "APPROVED" | "REJECTED"
+): Promise<DeveloperApplicationDto[]> {
+  const q = status ? `?status=${status}` : "";
+  const res = await fetch(apiPath(`/api/admin/role-applications${q}`), {
+    headers: { Authorization: `Bearer ${getStoredToken()}` },
+  });
+  return authJson(res);
+}
+
+export async function approveDeveloperApplication(id: number): Promise<void> {
+  const res = await fetch(apiPath(`/api/admin/role-applications/${id}/approve`), {
+    method: "POST",
+    headers: { Authorization: `Bearer ${getStoredToken()}` },
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || res.statusText);
+  }
+}
+
+export async function rejectDeveloperApplication(id: number, note?: string): Promise<void> {
+  const res = await fetch(apiPath(`/api/admin/role-applications/${id}/reject`), {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${getStoredToken()}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ note: note?.trim() || null }),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || res.statusText);
+  }
 }
 
 export async function changeMyPassword(oldPassword: string, newPassword: string): Promise<void> {
@@ -178,11 +423,13 @@ export async function uploadUserAvatar(file: File): Promise<MeResponse> {
 export function persistSession(token: string) {
   setStoredToken(token);
   setAuthToken(token);
+  touchAuthActivity();
 }
 
 export function clearSession() {
   setStoredToken(null);
   setAuthToken(null);
+  clearLastActiveAt();
 }
 
 // —— 音乐（multipart 用 fetch，避免 axios 默认 JSON Content-Type）——
@@ -237,6 +484,30 @@ export interface MusicTrackDto {
   hearted?: boolean;
 }
 
+export interface MusicTrackCommentDto {
+  id: number;
+  trackId: number;
+  parentId: number | null;
+  authorUserId: number;
+  authorLabel: string;
+  authorHasAvatar: boolean;
+  content: string;
+  likeCount: number;
+  replyCount: number;
+  likedByMe: boolean;
+  createdAtMillis: number;
+  updatedAtMillis: number;
+  replies: MusicTrackCommentDto[];
+}
+
+export interface MusicTrackCommentPageDto {
+  content: MusicTrackCommentDto[];
+  totalElements: number;
+  totalPages: number;
+  number: number;
+  size: number;
+}
+
 export interface PlaylistItemDto {
   id: number;
   name: string;
@@ -253,6 +524,8 @@ export interface PlaylistItemDto {
   totalPlayCount?: number;
   memberCount?: number;
   createdAtMillis?: number;
+  /** 当日新建，或当前用户当日新加入（与后端 Asia/Shanghai 日切一致） */
+  newForToday?: boolean;
 }
 
 export interface PlaylistMemberDto {
@@ -332,7 +605,9 @@ async function authJson<T>(res: Response): Promise<T> {
     }
     throw new Error(msg);
   }
-  return res.json() as Promise<T>;
+  const data = (await res.json()) as T;
+  if (getStoredToken()) touchAuthActivity();
+  return data;
 }
 
 const PLAYLIST_STORAGE_KEY = "bendoudou_playlist_id";
@@ -350,6 +625,18 @@ export interface WishlistPageDto {
   totalPages: number;
   number: number;
   size: number;
+}
+
+/** 管理端：心愿列表（分页），需管理员 JWT */
+export async function fetchAdminWishlistEntries(page = 0, size = 30): Promise<WishlistPageDto> {
+  const q = new URLSearchParams({ page: String(page), size: String(size) });
+  const { data } = await api.get<WishlistPageDto>(`/api/admin/wishlist?${q}`);
+  return data;
+}
+
+/** 管理端：删除一条心愿 */
+export async function deleteAdminWishlistEntry(id: number): Promise<void> {
+  await api.delete(`/api/admin/wishlist/${id}`);
 }
 
 /** 公开：心愿列表（分页） */
@@ -409,6 +696,8 @@ export interface GuestbookMessageDto {
   content: string;
   parentId: number | null;
   createdAtMillis: number;
+  /** 留言作者用户 id；匿名或未登录发帖可能为 null */
+  authorUserId?: number | null;
   /** 定向可见：仅该用户 id；与 targetDisplayName 同时有值 */
   visibleToUserId: number | null;
   /** 服务端解析的展示名，公开帖为 null */
@@ -457,12 +746,27 @@ async function publicJsonOrThrow(res: Response): Promise<void> {
   throw new Error(msg);
 }
 
-/** 留言板主楼列表；已登录时带 JWT 可看到「定向给自己」的帖 */
-export async function fetchGuestbookThreads(page = 0, size = 15): Promise<GuestbookPageDto> {
+/** 管理端：全站留言主楼列表（含定向帖），需管理员 JWT */
+export async function fetchAdminGuestbookThreads(page = 0, size = 15): Promise<GuestbookPageDto> {
   const q = new URLSearchParams({ page: String(page), size: String(size) });
+  const { data } = await api.get<GuestbookPageDto>(`/api/admin/guestbook?${q}`);
+  return data;
+}
+
+/** 留言板主楼列表；已登录时带 JWT 可看到「定向给自己」的帖 */
+export type GuestbookScope = "all" | "public" | "about_me";
+
+/** 留言板主楼列表；已登录时带 JWT 可看到「定向给自己」的帖 */
+export async function fetchGuestbookThreads(page = 0, size = 15, scope: GuestbookScope = "all"): Promise<GuestbookPageDto> {
+  const q = new URLSearchParams({ page: String(page), size: String(size), scope });
   const tok = getStoredToken();
   const res = await fetch(apiPath(`/api/guestbook?${q}`), {
-    headers: tok ? { Authorization: `Bearer ${tok}` } : {},
+    cache: "no-store",
+    headers: {
+      ...(tok ? { Authorization: `Bearer ${tok}` } : {}),
+      "Cache-Control": "no-cache",
+      Pragma: "no-cache",
+    },
   });
   if (!res.ok) {
     await publicJsonOrThrow(res);
@@ -601,6 +905,33 @@ export async function fetchPlaylistMembers(playlistId: number): Promise<Playlist
   return authJson(res);
 }
 
+/** 该歌单下待处理的协作者邀请（与成员列表一起在详情中展示） */
+export async function fetchPlaylistPendingInvitations(playlistId: number): Promise<InvitationItemDto[]> {
+  const res = await fetch(apiPath(`/api/music/playlists/${playlistId}/invitations/pending`), {
+    headers: { Authorization: `Bearer ${getStoredToken()}` },
+  });
+  return authJson(res);
+}
+
+export async function removePlaylistMember(playlistId: number, userId: number): Promise<void> {
+  const res = await fetch(apiPath(`/api/music/playlists/${playlistId}/members/${userId}`), {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${getStoredToken()}` },
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    let msg = res.statusText;
+    try {
+      const j = JSON.parse(text) as { message?: string; detail?: string };
+      const serverMsg = j.message ?? j.detail;
+      if (serverMsg) msg = serverMsg;
+    } catch {
+      if (text) msg = text;
+    }
+    throw new Error(msg);
+  }
+}
+
 export async function recordTrackPlay(trackId: number): Promise<MusicTrackDto> {
   const res = await fetch(apiPath(`/api/music/tracks/${trackId}/record-play`), {
     method: "POST",
@@ -640,6 +971,53 @@ export async function fetchHeartTracks(): Promise<MusicTrackDto[]> {
 
 export async function fetchPlayHistoryTracks(): Promise<MusicTrackDto[]> {
   const res = await fetch(apiPath("/api/music/history/tracks"), {
+    headers: { Authorization: `Bearer ${getStoredToken()}` },
+  });
+  return authJson(res);
+}
+
+export async function fetchTrackComments(
+  trackId: number,
+  page = 0,
+  size = 20
+): Promise<MusicTrackCommentPageDto> {
+  const q = new URLSearchParams({ page: String(page), size: String(size) });
+  const res = await fetch(apiPath(`/api/music/tracks/${trackId}/comments?${q.toString()}`), {
+    headers: { Authorization: `Bearer ${getStoredToken()}` },
+  });
+  return authJson(res);
+}
+
+export async function postTrackComment(input: {
+  trackId: number;
+  content: string;
+  parentId?: number | null;
+}): Promise<MusicTrackCommentDto> {
+  const res = await fetch(apiPath(`/api/music/tracks/${input.trackId}/comments`), {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${getStoredToken()}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      content: input.content.trim(),
+      parentId: input.parentId ?? null,
+    }),
+  });
+  return authJson(res);
+}
+
+export async function likeTrackComment(commentId: number): Promise<MusicTrackCommentDto> {
+  const res = await fetch(apiPath(`/api/music/comments/${commentId}/like`), {
+    method: "POST",
+    headers: { Authorization: `Bearer ${getStoredToken()}` },
+  });
+  return authJson(res);
+}
+
+export async function unlikeTrackComment(commentId: number): Promise<MusicTrackCommentDto> {
+  const res = await fetch(apiPath(`/api/music/comments/${commentId}/like`), {
+    method: "DELETE",
     headers: { Authorization: `Bearer ${getStoredToken()}` },
   });
   return authJson(res);

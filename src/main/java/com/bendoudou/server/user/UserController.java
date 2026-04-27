@@ -1,6 +1,7 @@
 package com.bendoudou.server.user;
 
 import com.bendoudou.server.auth.dto.MeResponse;
+import com.bendoudou.server.user.User;
 import com.bendoudou.server.user.dto.ChangePasswordRequest;
 import com.bendoudou.server.user.dto.UserDirectoryItem;
 import jakarta.validation.Valid;
@@ -9,7 +10,6 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
-import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -46,7 +46,7 @@ public class UserController {
         }
         long id = Long.parseLong(auth.getName());
         User u = userService.requireUser(id);
-        return toMe(u);
+        return userService.toMeResponse(u);
     }
 
     @GetMapping("/me/avatar")
@@ -82,7 +82,7 @@ public class UserController {
         long id = parseUserId(auth);
         userService.uploadAvatar(id, file);
         User u = userService.requireUser(id);
-        return toMe(u);
+        return userService.toMeResponse(u);
     }
 
     @PostMapping("/me/password")
@@ -103,14 +103,4 @@ public class UserController {
         return Long.parseLong(auth.getName());
     }
 
-    private static MeResponse toMe(User u) {
-        UserRole role = u.getRole() != null ? u.getRole() : UserRole.USER;
-        return new MeResponse(
-                u.getId(),
-                u.getEmail(),
-                u.getDisplayName(),
-                StringUtils.hasText(u.getAvatarStoredRelpath()),
-                role.name()
-        );
-    }
 }

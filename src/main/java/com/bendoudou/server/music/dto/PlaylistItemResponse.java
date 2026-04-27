@@ -17,5 +17,7 @@ public record PlaylistItemResponse(
         /** 歌单内所有曲目 playCount 之和 */
         long totalPlayCount,
         long memberCount,
-        long createdAtMillis
+        long createdAtMillis,
+        /** 歌单为当日创建，或当前用户为当日新加入该歌单（以 Asia/Shanghai 日切计） */
+        boolean newForToday
 ) {}

@@ -7,14 +7,19 @@ import com.bendoudou.server.music.dto.CosUploadTicketResponse;
 import com.bendoudou.server.music.dto.InvitationItemResponse;
 import com.bendoudou.server.music.dto.InviteToPlaylistRequest;
 import com.bendoudou.server.music.dto.MusicPreviewResponse;
+import com.bendoudou.server.music.dto.MusicTrackCommentResponse;
 import com.bendoudou.server.music.dto.MusicTrackResponse;
 import com.bendoudou.server.music.dto.PlaylistItemResponse;
 import com.bendoudou.server.music.dto.PlaylistMemberItemResponse;
+import com.bendoudou.server.music.dto.PostTrackCommentRequest;
 import com.bendoudou.server.music.dto.UpdateMusicTrackRequest;
 import com.bendoudou.server.music.dto.UpdatePlaylistNameRequest;
 import com.bendoudou.server.music.dto.UpdatePlaylistWallpaperRequest;
 import jakarta.validation.Valid;
 import org.springframework.core.io.Resource;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -82,6 +87,23 @@ public class MusicController {
             Authentication authentication
     ) {
         return musicService.listPlaylistMembers(parseUserId(authentication), id);
+    }
+
+    @GetMapping("/playlists/{id}/invitations/pending")
+    public List<InvitationItemResponse> playlistPendingInvitations(
+            @PathVariable long id,
+            Authentication authentication
+    ) {
+        return musicService.listPendingInvitationsForPlaylist(parseUserId(authentication), id);
+    }
+
+    @DeleteMapping("/playlists/{playlistId}/members/{userId}")
+    public void removePlaylistMember(
+            @PathVariable long playlistId,
+            @PathVariable long userId,
+            Authentication authentication
+    ) {
+        musicService.removeMemberFromPlaylist(parseUserId(authentication), playlistId, userId);
     }
 
     @PutMapping("/playlists/{id}/wallpaper")
@@ -244,6 +266,44 @@ public class MusicController {
             Authentication authentication
     ) {
         return musicService.recordTrackPlay(parseUserId(authentication), id);
+    }
+
+    @GetMapping("/tracks/{id}/comments")
+    public Page<MusicTrackCommentResponse> listComments(
+            @PathVariable long id,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            Authentication authentication
+    ) {
+        int p = Math.max(0, page);
+        int s = Math.min(Math.max(size, 1), 50);
+        Pageable pageable = PageRequest.of(p, s);
+        return musicService.listTrackComments(parseUserId(authentication), id, pageable);
+    }
+
+    @PostMapping("/tracks/{id}/comments")
+    public MusicTrackCommentResponse postComment(
+            @PathVariable long id,
+            @Valid @RequestBody PostTrackCommentRequest request,
+            Authentication authentication
+    ) {
+        return musicService.postTrackComment(parseUserId(authentication), id, request);
+    }
+
+    @PostMapping("/comments/{id}/like")
+    public MusicTrackCommentResponse likeComment(
+            @PathVariable long id,
+            Authentication authentication
+    ) {
+        return musicService.likeTrackComment(parseUserId(authentication), id);
+    }
+
+    @DeleteMapping("/comments/{id}/like")
+    public MusicTrackCommentResponse unlikeComment(
+            @PathVariable long id,
+            Authentication authentication
+    ) {
+        return musicService.unlikeTrackComment(parseUserId(authentication), id);
     }
 
     @GetMapping("/tracks/{id}/cover")

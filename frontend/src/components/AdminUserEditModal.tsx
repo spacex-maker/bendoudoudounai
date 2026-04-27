@@ -8,9 +8,9 @@ import {
   patchAdminUser,
   resetAdminUserPassword,
   type AdminUserRowDto,
-  type UserRole,
 } from "../api/client";
 import { mapApiError } from "../i18n/mapApiError";
+import { AdminRoleGuide } from "./AdminRoleGuide";
 
 type Props = {
   open: boolean;
@@ -24,7 +24,7 @@ export function AdminUserEditModal({ open, user, isSelf, onClose, onSaved }: Pro
   const { t } = useTranslation();
   const formId = useId();
   const [displayName, setDisplayName] = useState("");
-  const [role, setRole] = useState<UserRole>("USER");
+  const [role, setRole] = useState<"USER" | "ADMIN">("USER");
   const [enabled, setEnabled] = useState(true);
   const [pwdOld, setPwdOld] = useState("");
   const [pwdNew, setPwdNew] = useState("");
@@ -36,7 +36,7 @@ export function AdminUserEditModal({ open, user, isSelf, onClose, onSaved }: Pro
   useEffect(() => {
     if (!open) return;
     setDisplayName(user.displayName?.trim() ?? "");
-    setRole(user.role);
+    setRole(user.role === "ADMIN" ? "ADMIN" : "USER");
     setEnabled(user.enabled);
     setPwdOld("");
     setPwdNew("");
@@ -90,7 +90,7 @@ export function AdminUserEditModal({ open, user, isSelf, onClose, onSaved }: Pro
       }
       const body: {
         displayName?: string | null;
-        role?: UserRole;
+        role?: "USER" | "ADMIN";
         enabled?: boolean;
       } = {
         displayName: displayName.trim() || null,
@@ -221,18 +221,7 @@ export function AdminUserEditModal({ open, user, isSelf, onClose, onSaved }: Pro
                     </button>
                   ))}
                 </div>
-                <div className="mt-2 space-y-1 rounded-lg border border-zinc-800/80 bg-zinc-950/40 px-2.5 py-2 text-[10px] leading-relaxed text-zinc-500">
-                  <p>
-                    <span className="font-medium text-zinc-400">{t("admin.roleUser")}</span>
-                    <span className="text-zinc-600"> — </span>
-                    {t("admin.roleHelpUser")}
-                  </p>
-                  <p>
-                    <span className="font-medium text-zinc-400">{t("admin.roleAdmin")}</span>
-                    <span className="text-zinc-600"> — </span>
-                    {t("admin.roleHelpAdmin")}
-                  </p>
-                </div>
+                <AdminRoleGuide compact className="mt-2" />
               </div>
               <label className="flex items-center gap-2 text-sm text-zinc-300">
                 <input

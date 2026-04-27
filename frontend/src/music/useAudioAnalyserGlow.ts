@@ -35,6 +35,7 @@ function hsla(h: number, s: number, l: number, a: number): string {
 const IDLE_BOX_SHADOW =
   "0 16px 48px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.08) inset";
 const ENABLE_AUDIO_ANALYSER_GLOW = true;
+const GLOW_BOOST = 1.35;
 
 /**
  * 根据音频频谱驱动底部播放器 footer 的 box-shadow / filter（极光光晕）。
@@ -150,7 +151,7 @@ export function useAudioAnalyserGlow(
           const mid = mSum / (mEnd - bEnd);
           const high = hSum / Math.max(1, n - mEnd);
 
-          const targetI = overall * (0.5 + 0.5 * vol);
+          const targetI = overall * (0.56 + 0.58 * vol) * GLOW_BOOST;
           sm.intensity = sm.intensity * 0.72 + targetI * 0.28;
           sm.bass = sm.bass * 0.75 + bass * 0.25;
           sm.mid = sm.mid * 0.75 + mid * 0.25;
@@ -172,7 +173,7 @@ export function useAudioAnalyserGlow(
       }
 
       const tilt = Math.min(1, sm.bass * 0.45 + sm.mid * 0.35 + sm.high * 0.2);
-      const int = Math.max(0, Math.min(1, sm.intensity * (0.82 + tilt * 0.18)));
+      const int = Math.max(0, Math.min(1.2, sm.intensity * (0.92 + tilt * 0.24)));
 
       if (int < 0.018) {
         foot.style.boxShadow = IDLE_BOX_SHADOW;
@@ -180,21 +181,21 @@ export function useAudioAnalyserGlow(
         return;
       }
 
-      const spread = 26 + int * 105;
-      const spread2 = spread * 1.5;
-      const a1 = int * 0.4;
-      const a2 = int * 0.3;
-      const a3 = int * 0.2;
+      const spread = 30 + int * 132;
+      const spread2 = spread * 1.72;
+      const a1 = int * 0.5;
+      const a2 = int * 0.38;
+      const a3 = int * 0.28;
       const h1 = sm.hue;
       const h2 = (sm.hue + 48) % 360;
       const h3 = (sm.hue - 42 + 360) % 360;
 
       foot.style.boxShadow = [
-        `0 16px 48px rgba(0,0,0,0.55)`,
+        `0 16px 48px rgba(0,0,0,0.58)`,
         `0 0 0 1px rgba(255,255,255,0.08) inset`,
         `0 0 ${spread}px ${Math.round(spread * 0.35)}px ${hsla(h1, 88, 58, a1)}`,
         `0 0 ${spread2}px ${Math.round(spread2 * 0.28)}px ${hsla(h2, 82, 52, a2)}`,
-        `0 -${Math.round(spread * 0.22)}px ${Math.round(spread * 1.15)}px ${Math.round(spread * 0.38)}px ${hsla(h3, 90, 55, a3)}`,
+        `0 -${Math.round(spread * 0.2)}px ${Math.round(spread * 1.25)}px ${Math.round(spread * 0.42)}px ${hsla(h3, 90, 55, a3)}`,
       ].join(", ");
 
       rafRef.current = requestAnimationFrame(tick);

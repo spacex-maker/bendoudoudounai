@@ -13,6 +13,7 @@ export function AdminConsoleDock() {
   const { pathname } = useLocation();
   const { state } = useAuth();
   if (pathname === "/music") return null;
+  if (pathname.startsWith("/admin")) return null;
   if (state.status !== "authed" || !userIsAdmin(state.user)) return null;
 
   return (

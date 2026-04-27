@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useId, useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { ImageIcon, Link2, Trash2, X, Users, Music, PlayCircle, Calendar, ShieldCheck, MailPlus } from "lucide-react";
+import { ImageIcon, Link2, Trash2, UserMinus, X, Users, Music, PlayCircle, Calendar, ShieldCheck, MailPlus } from "lucide-react";
 import clsx from "clsx";
 import { useAuthedUser } from "../auth/AuthContext";
 import { useDateLocale } from "../i18n/useDateLocale";
 import { GuestbookUserPicker } from "./GuestbookUserPicker";
+import { ConfirmModal } from "./ConfirmModal";
+import { mapApiError } from "../i18n/mapApiError";
 import {
   isAllowedRemoteWallpaperUrl,
   usePageAppearance,
@@ -15,8 +17,11 @@ import {
   type UserDirectoryItemDto,
   deletePlaylist,
   fetchPlaylistMembers,
+  fetchPlaylistPendingInvitations,
   fetchUserDirectoryForGuestbook,
+  type InvitationItemDto,
   inviteToPlaylist,
+  removePlaylistMember,
   updatePlaylistName,
   updatePlaylistWallpaperUrl,
   uploadPlaylistWallpaper,
@@ -38,6 +43,7 @@ export function PlaylistSettingsModal({ open, onClose, playlist, onSuccess }: Pr
   const { wallpaperDisplayUrl, refreshPlaylists } = usePageAppearance();
 
   const [members, setMembers] = useState<PlaylistMemberDto[]>([]);
+  const [pendingInvites, setPendingInvites] = useState<InvitationItemDto[]>([]);
   const [membersErr, setMembersErr] = useState<string | null>(null);
   const [membersLoading, setMembersLoading] = useState(false);
 
@@ -56,13 +62,17 @@ export function PlaylistSettingsModal({ open, onClose, playlist, onSuccess }: Pr
   const [dirLoading, setDirLoading] = useState(false);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteErr, setDeleteErr] = useState<string | null>(null);
+  const [memberToRemove, setMemberToRemove] = useState<PlaylistMemberDto | null>(null);
 
   const playlistId = playlist?.id ?? null;
 
   const inviteCandidates = useMemo(() => {
     const memberIds = new Set(members.map((m) => m.userId));
-    return userDirectory.filter((u) => u.id !== me?.id && !memberIds.has(u.id));
-  }, [userDirectory, members, me?.id]);
+    const pendingIds = new Set(pendingInvites.map((i) => i.inviteeId));
+    return userDirectory.filter(
+      (u) => u.id !== me?.id && !memberIds.has(u.id) && !pendingIds.has(u.id)
+    );
+  }, [userDirectory, members, pendingInvites, me?.id]);
 
   useEffect(() => {
     if (!open || playlistId == null) return;
@@ -75,8 +85,11 @@ export function PlaylistSettingsModal({ open, onClose, playlist, onSuccess }: Pr
     setDeleteErr(null);
     setMembersErr(null);
     setMembersLoading(true);
-    void fetchPlaylistMembers(playlistId)
-      .then(setMembers)
+    void Promise.all([fetchPlaylistMembers(playlistId), fetchPlaylistPendingInvitations(playlistId)])
+      .then(([m, p]) => {
+        setMembers(m);
+        setPendingInvites(p);
+      })
       .catch((e) => setMembersErr(e instanceof Error ? e.message : t("errors.loadFailed")))
       .finally(() => setMembersLoading(false));
   }, [open, playlistId, playlist?.name, t]);
@@ -98,7 +111,12 @@ export function PlaylistSettingsModal({ open, onClose, playlist, onSuccess }: Pr
     if (playlistId == null) return;
     setMembersLoading(true);
     try {
-      setMembers(await fetchPlaylistMembers(playlistId));
+      const [m, p] = await Promise.all([
+        fetchPlaylistMembers(playlistId),
+        fetchPlaylistPendingInvitations(playlistId),
+      ]);
+      setMembers(m);
+      setPendingInvites(p);
     } catch (e) {
       setMembersErr(e instanceof Error ? e.message : t("errors.loadFailed"));
     } finally {
@@ -217,6 +235,7 @@ export function PlaylistSettingsModal({ open, onClose, playlist, onSuccess }: Pr
   if (!open || playlist == null) return null;
 
   return (
+    <>
     <div
       className="fixed inset-0 z-[60] flex items-center justify-center bg-zinc-950/60 p-4 backdrop-blur-md transition-all"
       onClick={(e) => e.target === e.currentTarget && onClose()}
@@ -365,20 +384,67 @@ export function PlaylistSettingsModal({ open, onClose, playlist, onSuccess }: Pr
 
               <div className="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
                 {members.map((m) => (
-                  <div key={m.userId} className="flex items-center gap-3 rounded-full bg-black/20 p-1 pr-4 ring-1 ring-white/5">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-zinc-700 to-zinc-900 text-[10px] font-bold text-white">
+                  <div
+                    key={m.userId}
+                    className="flex min-w-0 items-center gap-2 rounded-full bg-black/20 p-1 pl-1 pr-2 ring-1 ring-white/5 sm:gap-3 sm:pr-3"
+                  >
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-zinc-700 to-zinc-900 text-[10px] font-bold text-white">
                       {m.label.substring(0, 1).toUpperCase()}
                     </div>
-                    <span className="flex-1 truncate text-xs text-zinc-300">{m.label}</span>
-                    <span className={clsx(
-                      "text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full",
-                      m.role === 'OWNER' ? "bg-rose-500/20 text-rose-400" : "bg-zinc-800 text-zinc-500"
-                    )}>
+                    <span className="min-w-0 flex-1 truncate text-xs text-zinc-300">{m.label}</span>
+                    {playlist.iAmOwner && m.role !== "OWNER" && (
+                      <button
+                        type="button"
+                        onClick={() => setMemberToRemove(m)}
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-zinc-500 transition hover:bg-rose-500/20 hover:text-rose-300"
+                        aria-label={t("playlistModal.removeMemberTitle")}
+                        title={t("playlistModal.removeMemberTitle")}
+                      >
+                        <UserMinus className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                    <span
+                      className={clsx(
+                        "shrink-0 text-[9px] font-bold uppercase tracking-wider rounded-full px-2 py-0.5",
+                        m.role === "OWNER" ? "bg-rose-500/20 text-rose-400" : "bg-zinc-800 text-zinc-500"
+                      )}
+                    >
                       {m.role === "OWNER" ? t("playlistModal.roleOwner") : t("playlistModal.roleMember")}
                     </span>
                   </div>
                 ))}
               </div>
+
+              {pendingInvites.length > 0 ? (
+                <div className="mb-4">
+                  <p className="mb-2 pl-1 text-[10px] font-medium uppercase tracking-wider text-amber-200/80">
+                    {t("playlistModal.pendingInvitesTitle")}
+                  </p>
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    {pendingInvites.map((inv) => (
+                      <div
+                        key={inv.id}
+                        className="flex flex-col gap-1 rounded-2xl bg-amber-950/20 p-2 pl-3 ring-1 ring-amber-500/20 sm:flex-row sm:items-center"
+                      >
+                        <div className="flex min-w-0 flex-1 items-center gap-3">
+                          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-amber-800/60 to-zinc-900 text-[10px] font-bold text-amber-100">
+                            {inv.inviteeLabel.substring(0, 1).toUpperCase()}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate text-xs text-zinc-200">{inv.inviteeLabel}</div>
+                            <div className="truncate text-[10px] text-zinc-500">
+                              {t("playlistModal.inviteBy", { name: inv.inviterLabel })}
+                            </div>
+                          </div>
+                        </div>
+                        <span className="shrink-0 self-end rounded-full bg-amber-500/15 px-2.5 py-0.5 text-[9px] font-bold text-amber-200 sm:self-center">
+                          {t("playlistModal.inviteStatusPending")}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
 
               {playlist.iAmOwner && (
                 <form onSubmit={submitInvite} className="mt-6 border-t border-white/5 pt-6">
@@ -435,6 +501,33 @@ export function PlaylistSettingsModal({ open, onClose, playlist, onSuccess }: Pr
         </div>
       </div>
     </div>
+    <ConfirmModal
+      open={memberToRemove != null}
+      onClose={() => setMemberToRemove(null)}
+      title={t("playlistModal.removeMemberTitle")}
+      confirmLabel={t("playlistModal.removeMemberAction")}
+      cancelLabel={t("common.cancel")}
+      danger
+      onConfirm={async () => {
+        if (playlistId == null || memberToRemove == null) return;
+        try {
+          await removePlaylistMember(playlistId, memberToRemove.userId);
+          setMemberToRemove(null);
+          await refreshPlaylists();
+          onSuccess();
+          await reloadMembers();
+        } catch (e) {
+          alert(mapApiError(t, e));
+        }
+      }}
+    >
+      <p className="text-sm text-zinc-300">
+        {memberToRemove
+          ? t("playlistModal.removeMemberBody", { name: memberToRemove.label })
+          : null}
+      </p>
+    </ConfirmModal>
+    </>
   );
 }
 

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { Home, ListMusic, Search, Heart, Radio, Music2, ChevronRight, Settings2, LayoutDashboard, History } from "lucide-react";
+import { Home, ListMusic, Search, Heart, Radio, Music2, ChevronRight, Settings2, LayoutDashboard, History, Menu, X } from "lucide-react";
 import clsx from "clsx";
 import { mapApiError } from "../i18n/mapApiError";
 import { LanguageSwitch } from "../components/LanguageSwitch";
@@ -17,6 +17,7 @@ import { UserAvatar } from "../components/UserAvatar";
 import { UserProfileModal } from "../components/UserProfileModal";
 import { ConfirmModal } from "../components/ConfirmModal";
 import { MusicTrackTable } from "../components/MusicTrackTable";
+import { MusicTrackComments } from "../components/MusicTrackComments";
 import { FOR_NAME } from "../siteMeta";
 import { getActiveLyricText } from "../music/lyricsUtils";
 import { useSyncedLyrics } from "../music/useSyncedLyrics";
@@ -79,6 +80,8 @@ export function MusicPage() {
   const [audioObjectUrl, setAudioObjectUrl] = useState<string | null>(null);
   const [scrubbing, setScrubbing] = useState(false);
   const [historyPanelOpen, setHistoryPanelOpen] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [mobileView, setMobileView] = useState<"list" | "player">("list");
   const [historyTracks, setHistoryTracks] = useState<MusicTrackDto[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyErr, setHistoryErr] = useState<string | null>(null);
@@ -211,8 +214,10 @@ export function MusicPage() {
 
   const onPickLiked = useCallback(async () => {
     setActiveNav("liked");
+    setMobileView("list");
     setListLoading(true);
     setListErr(null);
+    setTracks([]);
     try {
       const list = await fetchHeartTracks();
       setTracks(list);
@@ -225,8 +230,10 @@ export function MusicPage() {
 
   const onPickHistory = useCallback(async () => {
     setActiveNav("history");
+    setMobileView("list");
     setListLoading(true);
     setListErr(null);
+    setTracks([]);
     try {
       const list = await fetchPlayHistoryTracks();
       setTracks(list);
@@ -252,6 +259,14 @@ export function MusicPage() {
       }
     })();
   }, [t]);
+
+  useEffect(() => {
+    setMobileNavOpen(false);
+  }, [activeNav, currentPlaylistId]);
+
+  useEffect(() => {
+    setMobileView("list");
+  }, [activeNav, currentPlaylistId, search]);
 
   const onToggleHeart = useCallback(
     async (tr: MusicTrackDto) => {
@@ -288,9 +303,11 @@ export function MusicPage() {
 
   const onPickPlaylist = useCallback(async (id: number) => {
     setCurrentPlaylistId(id);
+    setMobileView("list");
     setStoredPlaylistId(id);
     setListLoading(true);
     setListErr(null);
+    setTracks([]);
     try {
       const trackList = await fetchMusicTracks(id);
       setTracks(trackList);
@@ -412,6 +429,7 @@ export function MusicPage() {
     const isSameTrack = currentId === t.id;
     setCurrentTrack(t);
     setCurrentId(t.id);
+    setMobileView("player");
     setPlayPos(0);
     setPlayDur(0);
     if (autoplay) {
@@ -427,6 +445,15 @@ export function MusicPage() {
       });
     }
   }, [currentId]);
+
+  const setCurrentTrackIdFromList = useCallback((id: number) => {
+    setCurrentId(id);
+    const matched = filtered.find((x) => x.id === id);
+    if (matched) {
+      setCurrentTrack((prev) => (prev?.id === matched.id ? { ...prev, ...matched } : matched));
+    }
+    setMobileView("player");
+  }, [filtered]);
 
   const seekPrev = useCallback(() => {
     if (!current || filtered.length === 0) return;
@@ -472,6 +499,8 @@ export function MusicPage() {
   const barMax =
     playDur > 0 && Number.isFinite(playDur) ? playDur : listDuration > 0 ? listDuration : 0;
   const vinylProgress = barMax > 0 ? Math.min(1, Math.max(0, playPos / barMax)) : 0;
+  const showPlayerModule = activeNav !== "fm" && mobileView === "player";
+  const showListModule = activeNav !== "fm" && mobileView === "list";
 
   return (
     <div
@@ -524,15 +553,18 @@ export function MusicPage() {
       />
 
       <div className="flex min-h-0 flex-1">
-        <aside className="flex w-[200px] shrink-0 flex-col border-r border-netease-line bg-[#1f1f1f]">
+        <aside className="hidden w-[200px] shrink-0 flex-col border-r border-netease-line bg-[#1f1f1f] md:flex">
           <div className="flex h-12 items-center gap-2 border-b border-netease-line px-4 text-sm text-zinc-400">
             <Heart className="h-4 w-4 text-red-500/90" fill="currentColor" />
             <span className="min-w-0 flex-1 truncate">{t("music.forNameCloud", { name: FOR_NAME })}</span>
           </div>
-          <nav className="min-h-0 flex-1 space-y-0.5 overflow-y-auto p-2 pb-2 text-[13px]">
+          <nav className="custom-scrollbar min-h-0 flex-1 space-y-0.5 overflow-y-auto p-2 pb-2 text-[13px]">
             <button
               type="button"
-              onClick={() => setActiveNav("discover")}
+              onClick={() => {
+                setActiveNav("discover");
+                setMobileView("list");
+              }}
               className={clsx(
                 "flex w-full items-center gap-2 rounded-full px-3 py-2 text-left transition",
                 activeNav === "discover" ? "bg-white/10 text-white" : "text-zinc-400 hover:bg-white/5"
@@ -543,7 +575,10 @@ export function MusicPage() {
             </button>
             <button
               type="button"
-              onClick={() => setActiveNav("fm")}
+              onClick={() => {
+                setActiveNav("fm");
+                setMobileView("list");
+              }}
               className={clsx(
                 "flex w-full items-center gap-2 rounded-full px-3 py-2 text-left transition",
                 activeNav === "fm" ? "bg-white/10 text-white" : "text-zinc-400 hover:bg-white/5"
@@ -603,6 +638,14 @@ export function MusicPage() {
               >
                 <ListMusic className="h-4 w-4 shrink-0 opacity-80" />
                 <span className="min-w-0 flex-1 truncate text-[12px]">{p.name}</span>
+                {p.newForToday ? (
+                  <span
+                    className="shrink-0 rounded px-1.5 py-px text-[9px] font-bold tabular-nums text-amber-200 ring-1 ring-amber-400/35 bg-amber-500/15"
+                    title={t("music.newPlaylistTooltip")}
+                  >
+                    {t("music.newPlaylistBadge", { defaultValue: "新" })}
+                  </span>
+                ) : null}
                 <span className="shrink-0 tabular-nums text-[11px] text-zinc-500">{p.trackCount}</span>
               </button>
             ))}
@@ -710,7 +753,15 @@ export function MusicPage() {
         </aside>
 
         <div className="flex min-w-0 flex-1 flex-col">
-          <header className="flex h-12 shrink-0 items-center gap-3 border-b border-netease-line bg-netease-panel px-4">
+          <header className="flex h-12 shrink-0 items-center gap-2 border-b border-netease-line bg-netease-panel px-3 sm:gap-3 sm:px-4">
+            <button
+              type="button"
+              onClick={() => setMobileNavOpen(true)}
+              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-netease-line bg-[#2a2a2a] text-zinc-300 md:hidden"
+              aria-label={t("nav.menuAria")}
+            >
+              <Menu className="h-4 w-4" />
+            </button>
             <div className="relative min-w-0 max-w-md flex-1">
               <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500" />
               <input
@@ -740,7 +791,77 @@ export function MusicPage() {
             </div>
           </header>
 
-          <div className="min-h-0 flex-1 overflow-y-auto p-4 pb-40">
+          {mobileNavOpen ? (
+            <div className="fixed inset-0 z-[75] md:hidden">
+              <button
+                type="button"
+                aria-hidden
+                tabIndex={-1}
+                onClick={() => setMobileNavOpen(false)}
+                className="absolute inset-0 bg-black/45 backdrop-blur-[2px]"
+              />
+              <aside className="custom-scrollbar absolute left-0 top-0 h-full w-[min(88vw,22rem)] overflow-y-auto border-r border-netease-line bg-[#1f1f1f] p-3">
+                <div className="mb-2 flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-sm text-zinc-300">
+                    <Heart className="h-4 w-4 text-red-500/90" fill="currentColor" />
+                    <span className="truncate">{t("music.forNameCloud", { name: FOR_NAME })}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setMobileNavOpen(false)}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-netease-line bg-[#2a2a2a] text-zinc-300"
+                    aria-label={t("common.close", { defaultValue: "关闭" })}
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+                <div className="space-y-1 text-[13px]">
+                  <button type="button" onClick={() => { setActiveNav("discover"); setMobileView("list"); }} className={clsx("flex w-full items-center gap-2 rounded-full px-3 py-2 text-left", activeNav === "discover" ? "bg-white/10 text-white" : "text-zinc-400")}>
+                    <Home className="h-4 w-4 shrink-0" />{t("music.discover")}
+                  </button>
+                  <button type="button" onClick={() => { setActiveNav("fm"); setMobileView("list"); }} className={clsx("flex w-full items-center gap-2 rounded-full px-3 py-2 text-left", activeNav === "fm" ? "bg-white/10 text-white" : "text-zinc-400")}>
+                    <Radio className="h-4 w-4 shrink-0" />{t("music.privateFm")}
+                  </button>
+                  <button type="button" onClick={() => void onPickLiked()} className={clsx("flex w-full items-center gap-2 rounded-full px-3 py-2 text-left", activeNav === "liked" ? "bg-white/10 text-white" : "text-zinc-400")}>
+                    <Heart className={clsx("h-4 w-4 shrink-0", activeNav === "liked" ? "fill-red-500 text-red-500" : "text-red-400/80")} />
+                    {t("music.likedPlaylist", { defaultValue: "我喜欢的音乐" })}
+                  </button>
+                  <button type="button" onClick={() => void onPickHistory()} className={clsx("flex w-full items-center gap-2 rounded-full px-3 py-2 text-left", activeNav === "history" ? "bg-white/10 text-white" : "text-zinc-400")}>
+                    <History className="h-4 w-4 shrink-0" />{t("music.playHistory", { defaultValue: "播放历史" })}
+                  </button>
+                </div>
+                <div className="my-3 border-t border-netease-line/70" />
+                <h2 className="mb-2 px-1 text-[11px] font-semibold tracking-wide text-zinc-500">{t("music.myPlaylist")}</h2>
+                <div className="space-y-1">
+                  {playlists.map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => {
+                        setActiveNav("discover");
+                        void onPickPlaylist(p.id);
+                      }}
+                      className={clsx("flex w-full items-center gap-2 rounded-full px-3 py-2 text-left transition", currentPlaylistId === p.id && activeNav === "discover" ? "bg-white/10 text-white" : "text-zinc-400")}
+                    >
+                      <ListMusic className="h-4 w-4 shrink-0 opacity-80" />
+                      <span className="min-w-0 flex-1 truncate text-[12px]">{p.name}</span>
+                      <span className="shrink-0 tabular-nums text-[11px] text-zinc-500">{p.trackCount}</span>
+                    </button>
+                  ))}
+                </div>
+                <div className="mt-3 space-y-2 border-t border-netease-line pt-3">
+                  <button type="button" onClick={() => setCreatePlaylistOpen(true)} className="flex w-full items-center justify-center gap-1.5 rounded-full bg-zinc-800 py-2.5 text-[13px] text-zinc-200">
+                    <ListMusic className="h-3.5 w-3.5 opacity-90" />{t("music.newPlaylist")}
+                  </button>
+                  <button type="button" onClick={() => setUploadOpen(true)} className="flex w-full items-center justify-center gap-1.5 rounded-full border border-dashed border-red-900/40 bg-[#252525] py-2.5 text-[13px] text-red-200/90">
+                    <Music2 className="h-3.5 w-3.5" />{t("music.uploadNew")}
+                  </button>
+                </div>
+              </aside>
+            </div>
+          ) : null}
+
+          <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto p-3 pb-40 sm:p-4">
             {activeNav !== "fm" && (
               <>
                 {activeNav === "discover" && currentPlaylistId == null && (
@@ -753,17 +874,23 @@ export function MusicPage() {
                     <p className="text-xs text-zinc-600">{t("music.discoverWipSub")}</p>
                   </div>
                 )}
-                <h2 className="mb-2 text-sm font-medium text-zinc-300">{playlistName}</h2>
-
-                <div
+                <section
                   className={clsx(
-                    "mb-4 grid w-full h-[min(54vh,600px)] grid-cols-1 grid-rows-[auto_1fr] gap-4 overflow-hidden rounded-2xl p-4",
-                    "md:h-[min(44vh,420px)] md:grid-cols-[360px_minmax(0,1fr)] md:grid-rows-1 md:items-stretch md:gap-0"
+                    "mx-auto mt-4 mb-4 grid w-full max-w-6xl grid-cols-1 grid-rows-[auto_1fr] gap-4 overflow-hidden p-2",
+                    "h-[min(74dvh,820px)] md:mt-8",
+                    "md:h-[min(56vh,560px)] md:grid-cols-[380px_minmax(0,1fr)] md:grid-rows-1 md:items-stretch md:gap-0 md:p-6",
+                    showPlayerModule ? "grid" : "hidden"
                   )}
+                  aria-label="Player Module"
                 >
                   {/* 左栏：黑胶 + 歌曲信息；桌面端在格内垂直居中 */}
-                  <div className="flex flex-col items-center gap-4 md:h-full md:justify-center md:pr-4">
-                    <div className="w-full max-w-[min(90vw,380px)] shrink-0 md:w-[336px] md:max-w-[336px]">
+                  <div className="flex flex-col items-center justify-center gap-3 md:h-full md:gap-5 md:pr-6">
+                    <div
+                      className={clsx(
+                        "w-full shrink-0 md:w-[336px] md:max-w-[336px]",
+                        mobileView === "player" ? "max-w-[min(64vw,300px)]" : "max-w-[min(90vw,380px)]"
+                      )}
+                    >
                       {current ? (
                         <NeteaseVinylDisc
                           trackId={current.id}
@@ -780,7 +907,12 @@ export function MusicPage() {
                         </div>
                       )}
                     </div>
-                    <div className="w-full max-w-[min(90vw,380px)] text-center md:w-[336px] md:max-w-[336px]">
+                    <div
+                      className={clsx(
+                        "w-full text-center md:w-[336px] md:max-w-[336px]",
+                        mobileView === "player" ? "max-w-[min(64vw,300px)]" : "max-w-[min(90vw,380px)]"
+                      )}
+                    >
                       <div className="line-clamp-2 text-sm font-semibold leading-snug text-zinc-100">
                         {current?.title ?? t("music.pickTrack")}
                       </div>
@@ -796,33 +928,38 @@ export function MusicPage() {
                   {/* 右栏：歌词（与左栏顶对齐，竖线分隔） */}
                   <div
                     className={clsx(
-                      "flex w-full min-w-0 flex-col border-t border-white/[0.07] pt-4",
-                      "min-h-[min(32vh,260px)] md:h-full md:min-h-0 md:border-l md:border-t-0 md:pl-6 md:pt-0"
+                      "flex w-full min-w-0 flex-col pt-4",
+                      "min-h-0 md:h-full md:min-h-0 md:pl-7 md:pt-1"
                     )}
                   >
                     <TrackLyricsScroll
                       track={current}
                       currentTimeSec={playPos}
-                      className="min-h-0 min-w-0 w-full flex-1 md:min-h-0"
+                      className="min-h-0 min-w-0 w-full flex-1"
                     />
                   </div>
-                </div>
+                </section>
 
-                {listErr && <p className="mb-2 text-xs text-red-400/90">{listErr}</p>}
-                {listLoading && <p className="text-xs text-zinc-500">{t("common.loading")}</p>}
-                <MusicTrackTable
-                  tracks={filtered}
-                  listLoading={listLoading}
-                  showRemoveTrack={showRemoveTrack}
-                  currentId={currentId}
-                  playing={playing}
-                  activeNav={activeNav}
-                  onSelectTrack={selectTrack}
-                  onSetCurrentId={setCurrentId}
-                  onToggleHeart={onToggleHeart}
-                  onRequestRemoveTrack={requestRemoveTrack}
-                />
-                <p className="mt-3 text-center text-[11px] text-zinc-600">{t("music.rowHint")}</p>
+                {showPlayerModule && currentId != null ? (
+                  <MusicTrackComments trackId={currentId} />
+                ) : null}
+
+                <section className={clsx(showListModule ? "block" : "hidden")} aria-label="List Module">
+                  {listErr && <p className="mb-2 text-xs text-red-400/90">{listErr}</p>}
+                  <MusicTrackTable
+                    tracks={filtered}
+                    listLoading={listLoading}
+                    showRemoveTrack={showRemoveTrack}
+                    currentId={currentId}
+                    playing={playing}
+                    activeNav={activeNav}
+                    onSelectTrack={selectTrack}
+                    onSetCurrentId={setCurrentTrackIdFromList}
+                    onToggleHeart={onToggleHeart}
+                    onRequestRemoveTrack={requestRemoveTrack}
+                  />
+                  <p className="mt-3 hidden text-center text-[11px] text-zinc-600 md:block">{t("music.rowHint")}</p>
+                </section>
               </>
             )}
 

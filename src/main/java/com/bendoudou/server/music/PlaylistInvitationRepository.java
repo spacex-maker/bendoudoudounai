@@ -16,5 +16,9 @@ public interface PlaylistInvitationRepository extends JpaRepository<PlaylistInvi
             long playlistId, long inviteeId, PlaylistInvitationStatus status
     );
 
+    List<PlaylistInvitation> findByPlaylistIdAndStatusOrderByCreatedAtDesc(
+            long playlistId, PlaylistInvitationStatus status
+    );
+
     void deleteByPlaylistId(long playlistId);
 }

@@ -13,8 +13,9 @@ import { useDateLocale } from "../i18n/useDateLocale";
 import { AdminUserEditModal } from "./AdminUserEditModal";
 import { AdminUserCreateModal } from "./AdminUserCreateModal";
 import clsx from "clsx";
+import { adminTableActionTd, adminTableActionTh } from "./adminStickyTable";
 
-function AdminUserRowIdentity({ u }: { u: AdminUserRowDto }) {
+export function AdminUserRowIdentity({ u }: { u: AdminUserRowDto }) {
   const src = userDirectoryAvatarUrl({ id: u.id, hasAvatar: u.hasAvatar });
   const name = u.displayName?.trim() || "—";
   const initial = (u.displayName?.trim() || u.email || "?").slice(0, 1).toUpperCase();
@@ -81,7 +82,11 @@ export function AdminUserListPanel() {
   const formatJoined = (ms: number) =>
     new Date(ms).toLocaleString(dateLoc, { dateStyle: "medium", timeStyle: "short" });
 
-  const roleLabel = (role: string) => (role === "ADMIN" ? t("admin.roleAdmin") : t("admin.roleUser"));
+  const roleLabel = (r: string) => {
+    if (r === "ADMIN") return t("admin.roleAdmin");
+    if (r === "DEVELOPER") return t("admin.roleDeveloper");
+    return t("admin.roleUser");
+  };
 
   const isSelf = (u: AdminUserRowDto) => me != null && u.id === me.id;
 
@@ -102,11 +107,7 @@ export function AdminUserListPanel() {
   return (
     <section className="flex h-full min-h-0 flex-col">
       <div className="mb-3 shrink-0 space-y-2 sm:mb-4">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-          <div className="min-w-0">
-            <h2 className="text-sm font-semibold text-zinc-100 sm:text-base">{t("admin.usersTitle")}</h2>
-            <p className="mt-0.5 text-xs text-zinc-500">{t("admin.usersSub")}</p>
-          </div>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
           <button
             type="button"
             onClick={() => setCreateOpen(true)}
@@ -140,7 +141,7 @@ export function AdminUserListPanel() {
                 <th className="whitespace-nowrap px-3 py-2.5 font-medium text-zinc-500 sm:px-4">{t("admin.colRole")}</th>
                 <th className="whitespace-nowrap px-3 py-2.5 font-medium text-zinc-500 sm:px-4">{t("admin.colStatus")}</th>
                 <th className="whitespace-nowrap px-3 py-2.5 font-medium text-zinc-500 sm:px-4">{t("admin.colJoined")}</th>
-                <th className="whitespace-nowrap px-3 py-2.5 font-medium text-zinc-500 sm:px-4">{t("admin.colActions")}</th>
+                <th className={clsx(adminTableActionTh, "font-medium text-zinc-500")}>{t("admin.colActions")}</th>
               </tr>
             </thead>
             <tbody>
@@ -148,24 +149,31 @@ export function AdminUserListPanel() {
                 const self = isSelf(u);
                 const en = u.enabled !== false;
                 return (
-                  <tr key={u.id} className="border-b border-zinc-800/60 transition hover:bg-zinc-800/40">
+                  <tr key={u.id} className="group border-b border-zinc-800/60 transition hover:bg-zinc-800/40">
                     <td className="px-3 py-2.5 font-mono text-[11px] text-zinc-500 tabular-nums sm:px-4 sm:text-xs">
                       {u.id}
                     </td>
                     <td className="px-3 py-2.5 sm:px-4">
                       <AdminUserRowIdentity u={u} />
                     </td>
-                    <td className="whitespace-nowrap px-3 py-2.5 sm:px-4">
-                      <span
-                        className={clsx(
-                          "rounded-full px-2 py-0.5",
-                          u.role === "ADMIN"
-                            ? "bg-violet-500/20 text-violet-300"
-                            : "bg-zinc-700/60 text-zinc-400"
-                        )}
-                      >
-                        {roleLabel(u.role)}
-                      </span>
+                    <td className="px-3 py-2.5 sm:px-4">
+                      <div className="flex max-w-[10rem] flex-wrap gap-0.5 sm:max-w-[14rem]">
+                        {(u.roles && u.roles.length > 0 ? u.roles : [u.role]).map((r) => (
+                          <span
+                            key={r}
+                            className={clsx(
+                              "whitespace-nowrap rounded-full px-1.5 py-0.5 text-[10px] sm:px-2 sm:py-0.5",
+                              r === "ADMIN"
+                                ? "bg-violet-500/20 text-violet-300"
+                                : r === "DEVELOPER"
+                                  ? "bg-amber-500/20 text-amber-200"
+                                  : "bg-zinc-700/60 text-zinc-400"
+                            )}
+                          >
+                            {roleLabel(r)}
+                          </span>
+                        ))}
+                      </div>
                     </td>
                     <td className="whitespace-nowrap px-3 py-2.5 sm:px-4">
                       <span
@@ -180,7 +188,7 @@ export function AdminUserListPanel() {
                     <td className="whitespace-nowrap px-3 py-2.5 text-zinc-500 tabular-nums sm:px-4">
                       {formatJoined(u.createdAtMillis)}
                     </td>
-                    <td className="px-2 py-2.5 align-middle sm:px-3">
+                    <td className={adminTableActionTd}>
                       <div
                         className={clsx(
                           "group/act inline-flex h-8 max-w-[14rem] items-stretch overflow-hidden rounded-md border text-[11px] sm:max-w-none sm:text-xs",

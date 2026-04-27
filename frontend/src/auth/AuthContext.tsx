@@ -13,6 +13,7 @@ import {
   getStoredToken,
   persistSession,
   setAuthToken,
+  shouldLogoutDueToInactivity,
   type MeResponse,
 } from "../api/client";
 
@@ -37,6 +38,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const bootstrap = useCallback(async () => {
     const t = getStoredToken();
     if (!t) {
+      setState({ status: "anon" });
+      return;
+    }
+    if (shouldLogoutDueToInactivity()) {
+      clearSession();
       setState({ status: "anon" });
       return;
     }
@@ -68,6 +74,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const refreshMe = useCallback(async () => {
     const t = getStoredToken();
     if (!t) return;
+    if (shouldLogoutDueToInactivity()) {
+      clearSession();
+      setState({ status: "anon" });
+      return;
+    }
     setAuthToken(t);
     try {
       const user = await fetchMe();

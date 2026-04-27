@@ -6,6 +6,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -26,6 +27,14 @@ public class WishlistService {
 
     public Page<WishlistEntryResponse> list(Pageable pageable) {
         return repository.findAllByOrderByCreatedAtDesc(pageable).map(this::toResponse);
+    }
+
+    /** 管理端删除；调用方需已校验管理员身份。 */
+    @Transactional
+    public void deleteByAdmin(long entryId) {
+        WishlistEntry e = repository.findById(entryId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "心愿不存在"));
+        repository.delete(e);
     }
 
     public WishlistEntryResponse create(CreateWishlistEntryRequest req, String clientIp) {

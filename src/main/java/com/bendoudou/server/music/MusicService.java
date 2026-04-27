@@ -8,17 +8,22 @@ import com.bendoudou.server.music.dto.CosUploadTicketResponse;
 import com.bendoudou.server.music.dto.InvitationItemResponse;
 import com.bendoudou.server.music.dto.InviteToPlaylistRequest;
 import com.bendoudou.server.music.dto.MusicPreviewResponse;
+import com.bendoudou.server.music.dto.MusicTrackCommentResponse;
 import com.bendoudou.server.music.dto.MusicTrackResponse;
 import com.bendoudou.server.music.dto.PlaylistMemberItemResponse;
 import com.bendoudou.server.music.dto.PlaylistItemResponse;
+import com.bendoudou.server.music.dto.PostTrackCommentRequest;
 import com.bendoudou.server.music.dto.UpdateMusicTrackRequest;
 import com.bendoudou.server.music.dto.UpdatePlaylistNameRequest;
 import com.bendoudou.server.music.dto.UpdatePlaylistWallpaperRequest;
 import com.bendoudou.server.user.User;
 import com.bendoudou.server.user.UserRepository;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,6 +38,10 @@ import java.net.URI;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
@@ -45,6 +54,9 @@ import java.util.stream.Collectors;
 
 @Service
 public class MusicService {
+
+    /** 与数据库 / 业务日切一致，用于歌单「新」字判断 */
+    private static final ZoneId APP_ZONE = ZoneId.of("Asia/Shanghai");
 
     private static final Set<String> ALLOWED_EXT = Set.of("mp3", "m4a", "flac", "wav", "ogg", "aac", "rc");
     private static final Set<String> ALLOWED_LYRICS_EXT = Set.of("lrc", "txt", "krc", "srt");
@@ -61,6 +73,8 @@ public class MusicService {
     private final PlaylistInvitationRepository playlistInvitationRepository;
     private final UserTrackHeartRepository userTrackHeartRepository;
     private final UserTrackPlayHistoryRepository userTrackPlayHistoryRepository;
+    private final MusicTrackCommentRepository musicTrackCommentRepository;
+    private final MusicTrackCommentLikeRepository musicTrackCommentLikeRepository;
     private final UserRepository userRepository;
     private final AudioMetadataExtractor audioMetadataExtractor;
     private final CosStorageService cosStorageService;
@@ -75,6 +89,8 @@ public class MusicService {
             PlaylistInvitationRepository playlistInvitationRepository,
             UserTrackHeartRepository userTrackHeartRepository,
             UserTrackPlayHistoryRepository userTrackPlayHistoryRepository,
+            MusicTrackCommentRepository musicTrackCommentRepository,
+            MusicTrackCommentLikeRepository musicTrackCommentLikeRepository,
             UserRepository userRepository,
             AudioMetadataExtractor audioMetadataExtractor,
             CosStorageService cosStorageService,
@@ -88,6 +104,8 @@ public class MusicService {
         this.playlistInvitationRepository = playlistInvitationRepository;
         this.userTrackHeartRepository = userTrackHeartRepository;
         this.userTrackPlayHistoryRepository = userTrackPlayHistoryRepository;
+        this.musicTrackCommentRepository = musicTrackCommentRepository;
+        this.musicTrackCommentLikeRepository = musicTrackCommentLikeRepository;
         this.userRepository = userRepository;
         this.audioMetadataExtractor = audioMetadataExtractor;
         this.cosStorageService = cosStorageService;
@@ -727,6 +745,12 @@ public class MusicService {
         if (StringUtils.hasText(t.getFileSha256())) {
             dupCount = musicTrackRepository.countByFileSha256(t.getFileSha256());
         }
+        List<MusicTrackComment> comments = musicTrackCommentRepository.findByTrackId(trackId);
+        if (!comments.isEmpty()) {
+            List<Long> commentIds = comments.stream().map(MusicTrackComment::getId).toList();
+            musicTrackCommentLikeRepository.deleteByCommentIdIn(commentIds);
+            musicTrackCommentRepository.deleteByTrackId(trackId);
+        }
         userTrackHeartRepository.deleteByTrackId(trackId);
         userTrackPlayHistoryRepository.deleteByTrackId(trackId);
         musicTrackRepository.delete(t);
@@ -750,6 +774,128 @@ public class MusicService {
     }
 
     @Transactional(readOnly = true)
+    public Page<MusicTrackCommentResponse> listTrackComments(long userId, long trackId, Pageable pageable) {
+        MusicTrack track = musicTrackRepository.findById(trackId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "歌曲不存在"));
+        assertMember(track.getPlaylistId(), userId);
+        Page<MusicTrackComment> roots = musicTrackCommentRepository
+                .findByTrackIdAndParentIdIsNullOrderByCreatedAtDesc(trackId, pageable);
+        List<MusicTrackComment> rootRows = roots.getContent();
+        if (rootRows.isEmpty()) {
+            return roots.map(r -> toCommentResponse(r, null, false, List.of()));
+        }
+        List<Long> rootIds = rootRows.stream().map(MusicTrackComment::getId).toList();
+        List<MusicTrackComment> replies = musicTrackCommentRepository.findByParentIdInOrderByCreatedAtAsc(rootIds);
+
+        java.util.Map<Long, List<MusicTrackComment>> repliesByParent = new java.util.LinkedHashMap<>();
+        for (Long id : rootIds) repliesByParent.put(id, new ArrayList<>());
+        for (MusicTrackComment r : replies) {
+            if (r.getParentId() != null && repliesByParent.containsKey(r.getParentId())) {
+                repliesByParent.get(r.getParentId()).add(r);
+            }
+        }
+
+        Set<Long> needUserIds = new LinkedHashSet<>();
+        Set<Long> allCommentIds = new LinkedHashSet<>();
+        for (MusicTrackComment c : rootRows) {
+            needUserIds.add(c.getUserId());
+            allCommentIds.add(c.getId());
+        }
+        for (MusicTrackComment c : replies) {
+            needUserIds.add(c.getUserId());
+            allCommentIds.add(c.getId());
+        }
+
+        java.util.Map<Long, User> userById = userRepository.findAllById(needUserIds).stream()
+                .collect(Collectors.toMap(User::getId, u -> u));
+        Set<Long> likedByMe = allCommentIds.isEmpty()
+                ? Set.of()
+                : musicTrackCommentLikeRepository.findLikedCommentIds(userId, allCommentIds);
+
+        return roots.map(root -> {
+            List<MusicTrackCommentResponse> childRes = repliesByParent.getOrDefault(root.getId(), List.of()).stream()
+                    .map(r -> toCommentResponse(r, userById.get(r.getUserId()), likedByMe.contains(r.getId()), List.of()))
+                    .toList();
+            return toCommentResponse(root, userById.get(root.getUserId()), likedByMe.contains(root.getId()), childRes);
+        });
+    }
+
+    @Transactional
+    public MusicTrackCommentResponse postTrackComment(long userId, long trackId, PostTrackCommentRequest req) {
+        MusicTrack track = musicTrackRepository.findById(trackId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "歌曲不存在"));
+        assertMember(track.getPlaylistId(), userId);
+        String content = req.content() == null ? "" : req.content().trim();
+        if (!StringUtils.hasText(content)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "评论内容不能为空");
+        }
+        Long parentId = req.parentId();
+        if (parentId != null) {
+            MusicTrackComment parent = musicTrackCommentRepository.findById(parentId)
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "要回复的评论不存在"));
+            if (!Objects.equals(parent.getTrackId(), trackId)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "回复目标不属于该歌曲");
+            }
+            if (parent.getParentId() != null) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "仅支持回复一级评论");
+            }
+            parent.setReplyCount(parent.getReplyCount() + 1);
+            parent.setUpdatedAt(Instant.now());
+            musicTrackCommentRepository.save(parent);
+        }
+
+        MusicTrackComment c = new MusicTrackComment();
+        c.setTrackId(trackId);
+        c.setParentId(parentId);
+        c.setUserId(userId);
+        c.setContent(content);
+        c.setLikeCount(0);
+        c.setReplyCount(0);
+        c.setCreatedAt(Instant.now());
+        c.setUpdatedAt(Instant.now());
+        c = musicTrackCommentRepository.save(c);
+        User u = userRepository.findById(userId).orElse(null);
+        return toCommentResponse(c, u, false, List.of());
+    }
+
+    @Transactional
+    public MusicTrackCommentResponse likeTrackComment(long userId, long commentId) {
+        MusicTrackComment c = musicTrackCommentRepository.findById(commentId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "评论不存在"));
+        MusicTrack t = musicTrackRepository.findById(c.getTrackId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "歌曲不存在"));
+        assertMember(t.getPlaylistId(), userId);
+        if (!musicTrackCommentLikeRepository.existsByCommentIdAndUserId(commentId, userId)) {
+            MusicTrackCommentLike row = new MusicTrackCommentLike();
+            row.setCommentId(commentId);
+            row.setUserId(userId);
+            musicTrackCommentLikeRepository.save(row);
+            c.setLikeCount(c.getLikeCount() + 1);
+            c.setUpdatedAt(Instant.now());
+            c = musicTrackCommentRepository.save(c);
+        }
+        User u = userRepository.findById(c.getUserId()).orElse(null);
+        return toCommentResponse(c, u, true, List.of());
+    }
+
+    @Transactional
+    public MusicTrackCommentResponse unlikeTrackComment(long userId, long commentId) {
+        MusicTrackComment c = musicTrackCommentRepository.findById(commentId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "评论不存在"));
+        MusicTrack t = musicTrackRepository.findById(c.getTrackId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "歌曲不存在"));
+        assertMember(t.getPlaylistId(), userId);
+        if (musicTrackCommentLikeRepository.existsByCommentIdAndUserId(commentId, userId)) {
+            musicTrackCommentLikeRepository.deleteByCommentIdAndUserId(commentId, userId);
+            c.setLikeCount(Math.max(0, c.getLikeCount() - 1));
+            c.setUpdatedAt(Instant.now());
+            c = musicTrackCommentRepository.save(c);
+        }
+        User u = userRepository.findById(c.getUserId()).orElse(null);
+        return toCommentResponse(c, u, false, List.of());
+    }
+
+    @Transactional(readOnly = true)
     public List<PlaylistMemberItemResponse> listPlaylistMembers(long userId, long playlistId) {
         assertMember(playlistId, userId);
         List<PlaylistMember> rows = new java.util.ArrayList<>(
@@ -766,6 +912,40 @@ public class MusicService {
                     return new PlaylistMemberItemResponse(m.getUserId(), label, m.getRole().name());
                 })
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * 歌单内待处理的协作者邀请（当前用户为歌单成员时可见，用于详情页与成员列表一起展示状态）。
+     */
+    @Transactional(readOnly = true)
+    public List<InvitationItemResponse> listPendingInvitationsForPlaylist(long userId, long playlistId) {
+        assertMember(playlistId, userId);
+        return playlistInvitationRepository
+                .findByPlaylistIdAndStatusOrderByCreatedAtDesc(playlistId, PlaylistInvitationStatus.PENDING)
+                .stream()
+                .map(this::toInvitationItem)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * 仅歌单创建者可移出协作者，不可移出自己（创建者行）。
+     */
+    @Transactional
+    public void removeMemberFromPlaylist(long actorUserId, long playlistId, long targetUserId) {
+        Playlist p = playlistRepository.findById(playlistId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "歌单不存在"));
+        if (p.getUserId() != actorUserId) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "仅创建者可移出成员");
+        }
+        if (targetUserId == actorUserId) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "不能移出自己");
+        }
+        PlaylistMember row = playlistMemberRepository.findByPlaylistIdAndUserId(playlistId, targetUserId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "该用户不是歌单成员"));
+        if (row.getRole() == PlaylistMemberRole.OWNER) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "不能移出歌单创建者");
+        }
+        playlistMemberRepository.delete(row);
     }
 
     @Transactional
@@ -1099,6 +1279,31 @@ public class MusicService {
         }
     }
 
+    private MusicTrackCommentResponse toCommentResponse(
+            MusicTrackComment c,
+            User user,
+            boolean likedByMe,
+            List<MusicTrackCommentResponse> replies
+    ) {
+        String authorLabel = user == null ? "用户" : userLabel(user);
+        boolean hasAvatar = user != null && StringUtils.hasText(user.getAvatarStoredRelpath());
+        return new MusicTrackCommentResponse(
+                c.getId(),
+                c.getTrackId(),
+                c.getParentId(),
+                c.getUserId(),
+                authorLabel,
+                hasAvatar,
+                c.getContent(),
+                c.getLikeCount(),
+                c.getReplyCount(),
+                likedByMe,
+                c.getCreatedAt().toEpochMilli(),
+                c.getUpdatedAt().toEpochMilli(),
+                replies
+        );
+    }
+
     private void addMember(long playlistId, long userId, PlaylistMemberRole role) {
         if (playlistMemberRepository.existsByPlaylistIdAndUserId(playlistId, userId)) {
             return;
@@ -1107,7 +1312,15 @@ public class MusicService {
         m.setPlaylistId(playlistId);
         m.setUserId(userId);
         m.setRole(role);
-        playlistMemberRepository.save(m);
+        try {
+            // flush：并发两次「接受邀请」时可能都通过 exists 检查，第二笔 insert 会撞唯一键
+            playlistMemberRepository.saveAndFlush(m);
+        } catch (DataIntegrityViolationException ex) {
+            if (playlistMemberRepository.existsByPlaylistIdAndUserId(playlistId, userId)) {
+                return;
+            }
+            throw ex;
+        }
     }
 
     private PlaylistItemResponse toPlaylistItem(PlaylistMember row, long currentUserId) {
@@ -1120,6 +1333,7 @@ public class MusicService {
                     User owner = userRepository.findById(p.getUserId()).orElse(null);
                     String ownerLabel = owner == null ? "?" : userLabel(owner);
                     boolean shared = memCount > 1;
+                    boolean newForToday = isInAppZoneLocalToday(p.getCreatedAt()) || isInAppZoneLocalToday(row.getCreatedAt());
                     return new PlaylistItemResponse(
                             p.getId(),
                             p.getName(),
@@ -1132,10 +1346,16 @@ public class MusicService {
                             playlistWallpaperClientUrl(p),
                             totalPlayCount,
                             memCount,
-                            p.getCreatedAt().toEpochMilli()
+                            p.getCreatedAt().toEpochMilli(),
+                            newForToday
                     );
                 })
                 .orElse(null);
+    }
+
+    private static boolean isInAppZoneLocalToday(Instant instant) {
+        LocalDate d = instant.atZone(APP_ZONE).toLocalDate();
+        return d.equals(ZonedDateTime.now(APP_ZONE).toLocalDate());
     }
 
     private static String playlistWallpaperClientUrl(Playlist p) {
