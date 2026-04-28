@@ -73,14 +73,14 @@ export function AdminUserCreateModal({ open, onClose, onCreated }: Props) {
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[130] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-[130] flex items-end justify-center bg-black/60 p-0 backdrop-blur-sm sm:items-center sm:p-4"
       role="presentation"
       onClick={(ev) => {
         if (ev.target === ev.currentTarget) onClose();
       }}
     >
       <div
-        className="w-full max-w-md rounded-2xl border border-zinc-700/80 bg-zinc-900 p-4 shadow-2xl"
+        className="w-full rounded-t-2xl border border-zinc-700/80 border-b-0 bg-zinc-900 p-4 shadow-2xl max-sm:max-h-[92dvh] sm:max-w-md sm:rounded-2xl sm:border-b"
         role="dialog"
         aria-modal="true"
         onClick={(e) => e.stopPropagation()}
@@ -98,7 +98,7 @@ export function AdminUserCreateModal({ open, onClose, onCreated }: Props) {
           </button>
         </div>
 
-        <form id={formId} onSubmit={(e) => void onSubmit(e)} className="space-y-3">
+        <form id={formId} onSubmit={(e) => void onSubmit(e)} className="custom-scrollbar space-y-3 overflow-y-auto max-sm:max-h-[calc(92dvh-132px)]">
           <div>
             <label className="mb-1 block text-[11px] text-zinc-500" htmlFor={`${formId}-email`}>
               {t("admin.colEmail")}
@@ -205,7 +205,7 @@ export function AdminUserCreateModal({ open, onClose, onCreated }: Props) {
         </form>
 
         {err ? <p className="mt-2 text-center text-xs text-red-400">{err}</p> : null}
-        <div className="mt-4 flex justify-end gap-2">
+        <div className="sticky bottom-0 z-10 -mx-4 mt-4 flex justify-end gap-2 border-t border-zinc-800/80 bg-zinc-900/95 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] backdrop-blur sm:static sm:mx-0 sm:border-0 sm:bg-transparent sm:px-0 sm:pt-0 sm:pb-0">
           <button
             type="button"
             onClick={onClose}

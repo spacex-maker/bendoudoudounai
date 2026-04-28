@@ -319,7 +319,7 @@ export function UploadTrackModal({ open, onClose, onSuccess, playlistId }: Props
 
   return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 backdrop-blur-sm sm:items-center sm:p-4"
       role="presentation"
       onClick={(ev) => {
         if (ev.target === ev.currentTarget) {
@@ -329,13 +329,13 @@ export function UploadTrackModal({ open, onClose, onSuccess, playlistId }: Props
       }}
     >
       <div
-        className="w-full max-w-md overflow-hidden rounded-3xl border border-netease-line/80 bg-[#2a2a2a] text-zinc-200 shadow-2xl"
+        className="w-full overflow-hidden rounded-t-3xl border border-netease-line/80 border-b-0 bg-[#2a2a2a] text-zinc-200 shadow-2xl max-sm:max-h-[92dvh] sm:max-w-md sm:rounded-3xl sm:border-b"
         role="dialog"
         aria-modal="true"
         aria-labelledby="upload-track-title"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between border-b border-netease-line/60 px-5 py-4">
+        <div className="flex items-center justify-between border-b border-netease-line/60 px-4 py-3 sm:px-5 sm:py-4">
           <h2 id="upload-track-title" className="text-sm font-medium tracking-tight text-zinc-100">
             {t("uploadTrack.title")}
           </h2>
@@ -351,7 +351,7 @@ export function UploadTrackModal({ open, onClose, onSuccess, playlistId }: Props
             <X className="h-4 w-4" />
           </button>
         </div>
-        <form onSubmit={onSubmit} className="space-y-4 p-5 text-xs">
+        <form onSubmit={onSubmit} className="custom-scrollbar space-y-4 overflow-y-auto p-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] text-xs max-sm:max-h-[calc(92dvh-60px)] sm:p-5">
           <div>
             <label className="mb-1.5 block text-[11px] font-medium text-zinc-500">{t("uploadTrack.file")}</label>
             <div
@@ -505,7 +505,7 @@ export function UploadTrackModal({ open, onClose, onSuccess, playlistId }: Props
               </div>
             </div>
           )}
-          <div className="flex flex-wrap justify-end gap-2 pt-1">
+          <div className="sticky bottom-0 z-10 -mx-4 mt-2 flex flex-wrap justify-end gap-2 border-t border-netease-line/60 bg-[#2a2a2a]/95 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] backdrop-blur sm:static sm:mx-0 sm:border-0 sm:bg-transparent sm:px-0 sm:pt-1 sm:pb-0">
             <button
               type="button"
               onClick={() => {

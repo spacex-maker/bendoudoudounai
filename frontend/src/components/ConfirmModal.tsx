@@ -61,20 +61,20 @@ export function ConfirmModal({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-[60] flex items-end justify-center bg-black/60 p-0 backdrop-blur-sm sm:items-center sm:p-4"
       role="presentation"
       onClick={(ev) => {
         if (ev.target === ev.currentTarget && !submitting) onClose();
       }}
     >
       <div
-        className="w-full max-w-sm overflow-hidden rounded-3xl border border-netease-line/80 bg-[#2a2a2a] text-zinc-200 shadow-2xl"
+        className="w-full overflow-hidden rounded-t-3xl border border-netease-line/80 border-b-0 bg-[#2a2a2a] text-zinc-200 shadow-2xl max-sm:max-h-[86dvh] sm:max-w-sm sm:rounded-3xl sm:border-b"
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between border-b border-netease-line/60 px-5 py-4">
+        <div className="flex items-center justify-between border-b border-netease-line/60 px-4 py-3 sm:px-5 sm:py-4">
           <h2 id={titleId} className="text-sm font-medium tracking-tight text-zinc-100">
             {title}
           </h2>
@@ -88,8 +88,10 @@ export function ConfirmModal({
             <X className="h-4 w-4" />
           </button>
         </div>
-        <div className="px-5 py-4 text-sm leading-relaxed text-zinc-300">{children}</div>
-        <div className="flex justify-end gap-2 border-t border-netease-line/60 bg-[#262626] px-5 py-3">
+        <div className="custom-scrollbar overflow-y-auto px-4 py-4 text-sm leading-relaxed text-zinc-300 max-sm:max-h-[calc(86dvh-130px)] sm:px-5">
+          {children}
+        </div>
+        <div className="sticky bottom-0 z-10 flex justify-end gap-2 border-t border-netease-line/60 bg-[#262626]/95 px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] backdrop-blur sm:static sm:px-5 sm:pb-3">
           <button
             type="button"
             disabled={submitting}

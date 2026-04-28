@@ -723,7 +723,7 @@ export function MusicPage() {
                 onClick={() => setMobileNavOpen(false)}
                 className="absolute inset-0 bg-black/45 backdrop-blur-[2px]"
               />
-              <aside className="custom-scrollbar absolute left-0 top-0 h-full w-[min(80vw,18rem)] overflow-y-auto border-r border-netease-line bg-[#1f1f1f] p-3">
+              <aside className="absolute left-0 top-0 flex h-full w-[min(80vw,18rem)] flex-col border-r border-netease-line bg-[#1f1f1f] p-3">
                 <div className="mb-2 flex items-center justify-between">
                   <div className="flex items-center gap-2 text-sm text-zinc-300">
                     <Heart className="h-4 w-4 text-red-500/90" fill="currentColor" />
@@ -738,40 +738,45 @@ export function MusicPage() {
                     <X className="h-4 w-4" />
                   </button>
                 </div>
-                <div className="space-y-1 text-[13px]">
-                  <button type="button" onClick={() => { setActiveNav("discover"); setMusicView("list"); }} className={clsx("flex w-full items-center gap-2 rounded-full px-3 py-2 text-left", activeNav === "discover" ? "bg-white/10 text-white" : "text-zinc-400")}>
-                    <Home className="h-4 w-4 shrink-0" />{t("music.discover")}
-                  </button>
-                  <button type="button" onClick={() => { setActiveNav("fm"); setMusicView("list"); }} className={clsx("flex w-full items-center gap-2 rounded-full px-3 py-2 text-left", activeNav === "fm" ? "bg-white/10 text-white" : "text-zinc-400")}>
-                    <Radio className="h-4 w-4 shrink-0" />{t("music.privateFm")}
-                  </button>
-                  <button type="button" onClick={() => void onPickLiked()} className={clsx("flex w-full items-center gap-2 rounded-full px-3 py-2 text-left", activeNav === "liked" ? "bg-white/10 text-white" : "text-zinc-400")}>
-                    <Heart className={clsx("h-4 w-4 shrink-0", activeNav === "liked" ? "fill-red-500 text-red-500" : "text-red-400/80")} />
-                    {t("music.likedPlaylist", { defaultValue: "我喜欢的音乐" })}
-                  </button>
-                  <button type="button" onClick={() => void onPickHistory()} className={clsx("flex w-full items-center gap-2 rounded-full px-3 py-2 text-left", activeNav === "history" ? "bg-white/10 text-white" : "text-zinc-400")}>
-                    <History className="h-4 w-4 shrink-0" />{t("music.playHistory", { defaultValue: "播放历史" })}
-                  </button>
-                </div>
-                <div className="my-3 border-t border-netease-line/70" />
-                <h2 className="mb-2 px-1 text-[11px] font-semibold tracking-wide text-zinc-500">{t("music.myPlaylist")}</h2>
-                <div className="space-y-1">
-                  {playlists.map((p) => (
-                    <button
-                      key={p.id}
-                      type="button"
-                      onClick={() => {
-                        setActiveNav("discover");
-                        void onPickPlaylist(p.id);
-                      }}
-                      className={clsx("flex w-full items-center gap-2 rounded-full px-3 py-2 text-left transition", currentPlaylistId === p.id && activeNav === "discover" ? "bg-white/10 text-white" : "text-zinc-400")}
-                    >
-                      <ListMusic className="h-4 w-4 shrink-0 opacity-80" />
-                      <span className="min-w-0 flex-1 truncate text-[12px]">{p.name}</span>
-                      <span className="shrink-0 tabular-nums text-[11px] text-zinc-500">{p.trackCount}</span>
+
+                <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto pr-1">
+                  <div className="space-y-1 text-[13px]">
+                    <button type="button" onClick={() => { setActiveNav("discover"); setMusicView("list"); }} className={clsx("flex w-full items-center gap-2 rounded-full px-3 py-2 text-left", activeNav === "discover" ? "bg-white/10 text-white" : "text-zinc-400")}>
+                      <Home className="h-4 w-4 shrink-0" />{t("music.discover")}
                     </button>
-                  ))}
+                    <button type="button" onClick={() => { setActiveNav("fm"); setMusicView("list"); }} className={clsx("flex w-full items-center gap-2 rounded-full px-3 py-2 text-left", activeNav === "fm" ? "bg-white/10 text-white" : "text-zinc-400")}>
+                      <Radio className="h-4 w-4 shrink-0" />{t("music.privateFm")}
+                    </button>
+                    <button type="button" onClick={() => void onPickLiked()} className={clsx("flex w-full items-center gap-2 rounded-full px-3 py-2 text-left", activeNav === "liked" ? "bg-white/10 text-white" : "text-zinc-400")}>
+                      <Heart className={clsx("h-4 w-4 shrink-0", activeNav === "liked" ? "fill-red-500 text-red-500" : "text-red-400/80")} />
+                      {t("music.likedPlaylist", { defaultValue: "我喜欢的音乐" })}
+                    </button>
+                    <button type="button" onClick={() => void onPickHistory()} className={clsx("flex w-full items-center gap-2 rounded-full px-3 py-2 text-left", activeNav === "history" ? "bg-white/10 text-white" : "text-zinc-400")}>
+                      <History className="h-4 w-4 shrink-0" />{t("music.playHistory", { defaultValue: "播放历史" })}
+                    </button>
+                  </div>
+
+                  <div className="my-3 border-t border-netease-line/70" />
+                  <h2 className="mb-2 px-1 text-[11px] font-semibold tracking-wide text-zinc-500">{t("music.myPlaylist")}</h2>
+                  <div className="space-y-1">
+                    {playlists.map((p) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => {
+                          setActiveNav("discover");
+                          void onPickPlaylist(p.id);
+                        }}
+                        className={clsx("flex w-full items-center gap-2 rounded-full px-3 py-2 text-left transition", currentPlaylistId === p.id && activeNav === "discover" ? "bg-white/10 text-white" : "text-zinc-400")}
+                      >
+                        <ListMusic className="h-4 w-4 shrink-0 opacity-80" />
+                        <span className="min-w-0 flex-1 truncate text-[12px]">{p.name}</span>
+                        <span className="shrink-0 tabular-nums text-[11px] text-zinc-500">{p.trackCount}</span>
+                      </button>
+                    ))}
+                  </div>
                 </div>
+
                 <div className="mt-3 space-y-2 border-t border-netease-line pt-3">
                   <button type="button" onClick={() => setCreatePlaylistOpen(true)} className="flex w-full items-center justify-center gap-1.5 rounded-full bg-zinc-800 py-2.5 text-[13px] text-zinc-200">
                     <ListMusic className="h-3.5 w-3.5 opacity-90" />{t("music.newPlaylist")}
