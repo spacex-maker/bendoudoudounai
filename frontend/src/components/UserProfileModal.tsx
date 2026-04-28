@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { Link, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import clsx from "clsx";
-import { X, LogOut, Camera, LayoutDashboard, ChevronDown, ShieldCheck } from "lucide-react";
+import { X, LogOut, Camera, LayoutDashboard, ChevronDown, ShieldCheck, Coins } from "lucide-react";
 import type { MeResponse } from "../api/client";
 import {
   changeMyPassword,
@@ -144,6 +144,11 @@ export function UserProfileModal({ open, onClose, user }: Props) {
                 {user.displayName?.trim() || t("userProfile.noName")}
               </div>
               <div className="mt-1 break-all text-zinc-500">{user.email}</div>
+              <div className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-amber-400/25 bg-amber-500/10 px-2.5 py-1 text-[11px] text-amber-200">
+                <Coins className="h-3.5 w-3.5" />
+                <span>{t("userProfile.beanBalance")}:</span>
+                <span className="font-semibold tabular-nums">{user.beanBalance ?? 0}</span>
+              </div>
             </div>
             <div>
               <input

@@ -8,6 +8,10 @@ import {
   MessageCircle,
   CircleDot,
   ChevronRight,
+  ShieldCheck,
+  SlidersHorizontal,
+  UserRound,
+  BarChart3,
 } from "lucide-react";
 import clsx from "clsx";
 import { useTranslation } from "react-i18next";
@@ -17,8 +21,16 @@ import { FutureWishlistSection } from "../components/FutureWishlistSection";
 import { SiteHeader } from "../components/SiteHeader";
 import { DEVELOPER_NAME, FOR_NAME } from "../siteMeta";
 
-const FEATURE_ICONS = [ListMusic, Music2, ImageIcon, Headphones] as const;
-const FEATURE_KEYS = ["0", "1", "2", "3"] as const;
+const FEATURE_ITEMS = [
+  { key: "0", icon: ListMusic },
+  { key: "1", icon: Music2 },
+  { key: "2", icon: Headphones },
+  { key: "3", icon: ShieldCheck },
+  { key: "4", icon: BarChart3 },
+  { key: "5", icon: SlidersHorizontal },
+  { key: "6", icon: UserRound },
+  { key: "7", icon: ImageIcon },
+] as const;
 const STEP_KEYS = ["0", "1", "2"] as const;
 
 export function HomePage() {
@@ -96,19 +108,18 @@ export function HomePage() {
               <p className="mt-2 text-sm text-stone-600/85 sm:text-base">{t("home.sectionFeaturesSub")}</p>
             </div>
             <div className="grid gap-5 sm:grid-cols-2">
-              {FEATURE_KEYS.map((k, i) => {
-                const Icon = FEATURE_ICONS[i]!;
+              {FEATURE_ITEMS.map(({ key, icon: Icon }) => {
                 return (
                   <div
-                    key={k}
+                    key={key}
                     className="group flex gap-4 rounded-3xl border border-white/50 bg-white/55 p-6 text-left shadow-sm backdrop-blur transition hover:bg-white/75 hover:shadow-md"
                   >
                     <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-rose-100/80 text-rose-600 transition group-hover:scale-105">
                       <Icon className="h-6 w-6" strokeWidth={1.75} />
                     </div>
                     <div>
-                      <h3 className="font-display text-lg text-warm-600">{t(`homeFeatures.${k}.title`)}</h3>
-                      <p className="mt-1.5 text-sm leading-relaxed text-stone-600/90">{t(`homeFeatures.${k}.body`)}</p>
+                      <h3 className="font-display text-lg text-warm-600">{t(`homeFeatures.${key}.title`)}</h3>
+                      <p className="mt-1.5 text-sm leading-relaxed text-stone-600/90">{t(`homeFeatures.${key}.body`)}</p>
                     </div>
                   </div>
                 );

@@ -12,6 +12,7 @@ import {
 } from "../api/client";
 
 type Props = {
+  playlistName: string;
   tracks: MusicTrackDto[];
   listLoading: boolean;
   showRemoveTrack: boolean;
@@ -33,6 +34,7 @@ function formatDuration(sec: number) {
 }
 
 export function MusicTrackTable({
+  playlistName,
   tracks,
   listLoading,
   showRemoveTrack,
@@ -70,6 +72,9 @@ export function MusicTrackTable({
 
   return (
     <div className="overflow-hidden rounded-2xl border border-netease-line">
+      <div className="border-b border-netease-line/70 bg-[#1e1e1e]/75 px-3 py-2.5">
+        <p className="truncate text-sm font-semibold text-zinc-200">{playlistName}</p>
+      </div>
       <div className="divide-y divide-netease-line/60 md:hidden">
         {listLoading
           ? loadingPlaceholders.map((n) => (

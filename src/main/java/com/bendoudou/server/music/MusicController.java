@@ -7,6 +7,7 @@ import com.bendoudou.server.music.dto.CosUploadTicketResponse;
 import com.bendoudou.server.music.dto.InvitationItemResponse;
 import com.bendoudou.server.music.dto.InviteToPlaylistRequest;
 import com.bendoudou.server.music.dto.MusicPreviewResponse;
+import com.bendoudou.server.music.dto.MusicMentionNotificationResponse;
 import com.bendoudou.server.music.dto.MusicTrackCommentResponse;
 import com.bendoudou.server.music.dto.MusicTrackResponse;
 import com.bendoudou.server.music.dto.PlaylistItemResponse;
@@ -337,6 +338,20 @@ public class MusicController {
             Authentication authentication
     ) {
         return musicService.unlikeTrackComment(parseUserId(authentication), id);
+    }
+
+    @GetMapping("/mentions")
+    public List<MusicMentionNotificationResponse> listMentions(
+            @RequestParam(defaultValue = "30") int size,
+            Authentication authentication
+    ) {
+        int s = Math.min(Math.max(size, 1), 100);
+        return musicService.listMentionNotifications(parseUserId(authentication), s);
+    }
+
+    @PostMapping("/mentions/{id}/read")
+    public void markMentionRead(@PathVariable long id, Authentication authentication) {
+        musicService.markMentionNotificationRead(parseUserId(authentication), id);
     }
 
     @GetMapping("/tracks/{id}/cover")

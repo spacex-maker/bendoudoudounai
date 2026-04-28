@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { Home, ListMusic, Search, Heart, Radio, Music2, ChevronRight, Settings2, LayoutDashboard, History, Menu, X, ArrowLeft } from "lucide-react";
+import { Home, ListMusic, Search, Heart, Radio, Music2, ChevronRight, Settings2, LayoutDashboard, History, Menu, X, ArrowLeft, Bell } from "lucide-react";
 import clsx from "clsx";
 import { mapApiError } from "../i18n/mapApiError";
 import { LanguageSwitch } from "../components/LanguageSwitch";
@@ -17,6 +17,7 @@ import { UserProfileModal } from "../components/UserProfileModal";
 import { ConfirmModal } from "../components/ConfirmModal";
 import { MusicTrackTable } from "../components/MusicTrackTable";
 import { MusicTrackComments } from "../components/MusicTrackComments";
+import { MusicMentionList } from "../components/MusicMentionList";
 import { FOR_NAME } from "../siteMeta";
 import { useSyncedLyrics } from "../music/useSyncedLyrics";
 import { useMusicPlayer } from "../music/MusicPlayerContext";
@@ -25,6 +26,7 @@ import {
   type PlaylistItemDto,
   type PlaylistListeningStatusItemDto,
   type PlaylistListeningWsEvent,
+  type MusicMentionNotificationDto,
   type InvitationItemDto,
   fetchMusicTracks,
   recordTrackPlay,
@@ -79,6 +81,7 @@ export function MusicPage() {
   const [listErr, setListErr] = useState<string | null>(null);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [playlistSettingsOpen, setPlaylistSettingsOpen] = useState(false);
+  const [mentionsOpen, setMentionsOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [createPlaylistOpen, setCreatePlaylistOpen] = useState(false);
   const [removeTrackDialog, setRemoveTrackDialog] = useState<{
@@ -369,7 +372,7 @@ export function MusicPage() {
     [activeNav, currentPl?.iAmOwner]
   );
 
-  const onPickPlaylist = useCallback(async (id: number) => {
+  const onPickPlaylist = useCallback(async (id: number): Promise<MusicTrackDto[]> => {
     setCurrentPlaylistId(id);
     setMusicView("list");
     setStoredPlaylistId(id);
@@ -379,8 +382,10 @@ export function MusicPage() {
     try {
       const trackList = await fetchMusicTracks(id);
       setTracks(trackList);
+      return trackList;
     } catch (e) {
       setListErr(mapApiError(t, e));
+      return [];
     } finally {
       setListLoading(false);
     }
@@ -599,7 +604,7 @@ export function MusicPage() {
             <button
               type="button"
               onClick={() => setCreatePlaylistOpen(true)}
-              className="flex w-full items-center justify-center gap-1.5 rounded-full bg-zinc-800 py-2.5 text-[13px] text-zinc-200 transition hover:bg-zinc-700"
+              className="flex w-full items-center justify-center gap-1.5 rounded-full border border-netease-line bg-zinc-800 py-2.5 text-[13px] text-zinc-200 transition hover:bg-zinc-700"
             >
               <ListMusic className="h-3.5 w-3.5 opacity-90" />
               {t("music.newPlaylist")}
@@ -614,18 +619,18 @@ export function MusicPage() {
             </button>
             <Link
               to="/"
-              className="block truncate rounded-full px-3 py-1.5 text-zinc-400 hover:bg-white/5 hover:text-zinc-300"
+              className="flex w-full items-center justify-center gap-1.5 rounded-full border border-netease-line bg-[#252525] py-2.5 text-[13px] text-zinc-300 transition hover:bg-[#2a2a2a] hover:text-zinc-100"
             >
+              <Home className="h-3.5 w-3.5 shrink-0 opacity-90" />
               {t("music.backToSite")}
             </Link>
             {user && userIsAdmin(user) ? (
               <Link
                 to="/admin"
-                className="flex w-full items-center gap-2 rounded-full px-2 py-1.5 text-left text-violet-300/90 transition hover:bg-violet-500/10"
+                className="flex w-full items-center justify-center gap-1.5 rounded-full border border-violet-500/30 bg-violet-500/10 py-2.5 text-[13px] text-violet-200 transition hover:bg-violet-500/20"
               >
-                <LayoutDashboard className="h-4 w-4 shrink-0" />
-                <span className="min-w-0 flex-1 truncate text-[12px] font-medium">{t("admin.consoleLink")}</span>
-                <ChevronRight className="h-4 w-4 shrink-0 text-violet-500/60" aria-hidden />
+                <LayoutDashboard className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">{t("admin.consoleLink")}</span>
               </Link>
             ) : null}
             {user ? (
@@ -669,6 +674,15 @@ export function MusicPage() {
                 compact
                 className="border border-netease-line bg-[#2a2a2a] p-0.5 text-[10px] text-zinc-300"
               />
+              <button
+                type="button"
+                onClick={() => setMentionsOpen(true)}
+                className="flex shrink-0 items-center gap-1.5 rounded-full border border-netease-line bg-[#2a2a2a] px-3 py-1.5 text-[11px] text-zinc-300 transition hover:bg-[#333] hover:text-zinc-100"
+                title={t("music.mentionsTitle", { defaultValue: "消息列表" })}
+              >
+                <Bell className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">{t("music.mentionsTitle", { defaultValue: "消息列表" })}</span>
+              </button>
               {activeNav === "discover" && currentPl != null && currentPlaylistId != null ? (
                 <button
                   type="button"
@@ -753,7 +767,7 @@ export function MusicPage() {
             </div>
           ) : null}
 
-          <div className="custom-scrollbar scrollbar-no-gutter min-h-0 flex-1 overflow-y-auto p-3 pb-40 sm:p-4">
+          <div className="custom-scrollbar scrollbar-no-gutter min-h-0 flex-1 overflow-y-auto p-3 pb-48 sm:p-4 sm:pb-48">
             {activeNav !== "fm" && (
               <>
                 {activeNav === "discover" && currentPlaylistId == null && (
@@ -851,6 +865,7 @@ export function MusicPage() {
                 <section className={clsx(showListModule ? "block" : "hidden")} aria-label="List Module">
                   {listErr && <p className="mb-2 text-xs text-red-400/90">{listErr}</p>}
                   <MusicTrackTable
+                    playlistName={playlistName}
                     tracks={filtered}
                     listLoading={listLoading}
                     showRemoveTrack={showRemoveTrack}
@@ -974,6 +989,55 @@ export function MusicPage() {
         currentUserEmail={user?.email ?? ""}
         onCreated={(id) => void onCreatedPlaylist(id)}
       />
+
+      {mentionsOpen ? (
+        <div
+          className="fixed inset-0 z-[85] flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm"
+          onClick={() => setMentionsOpen(false)}
+        >
+          <section
+            className="w-full max-w-2xl rounded-2xl border border-zinc-700 bg-zinc-900 p-4 text-zinc-200 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-zinc-100">
+                {t("music.mentionsTitle", { defaultValue: "消息列表" })}
+              </h3>
+              <button
+                type="button"
+                className="rounded-full p-1 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+                onClick={() => setMentionsOpen(false)}
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="max-h-[70vh] overflow-y-auto pr-1">
+              <MusicMentionList
+                embedded
+                hideHeader
+                onOpenMention={async (item: MusicMentionNotificationDto) => {
+                  let playlistTracks = tracks;
+                  if (activeNav !== "discover") {
+                    setActiveNav("discover");
+                  }
+                  if (currentPlaylistId !== item.playlistId) {
+                    playlistTracks = await onPickPlaylist(item.playlistId);
+                  }
+                  const target = playlistTracks.find((x) => x.id === item.trackId);
+                  if (target) {
+                    setCurrentTrackIdFromList(item.trackId);
+                    selectTrack(target);
+                  } else {
+                    setCurrentId(item.trackId);
+                  }
+                  setMusicView("player");
+                  setMentionsOpen(false);
+                }}
+              />
+            </div>
+          </section>
+        </div>
+      ) : null}
     </div>
   );
 }

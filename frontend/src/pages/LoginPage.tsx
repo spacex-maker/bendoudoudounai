@@ -8,6 +8,8 @@ import { useAuth } from "../auth/AuthContext";
 import { usePageAppearance } from "../pageAppearance/PageAppearanceContext";
 import { LanguageSwitch } from "../components/LanguageSwitch";
 
+const REMEMBER_LOGIN_KEY = "bendoudou_login_remember";
+
 export function LoginPage() {
   const { t } = useTranslation();
   const { loginWithToken, state: authState } = useAuth();
@@ -18,8 +20,23 @@ export function LoginPage() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [rememberPassword, setRememberPassword] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(REMEMBER_LOGIN_KEY);
+      if (!raw) return;
+      const saved = JSON.parse(raw) as { email?: string; password?: string; remember?: boolean };
+      if (!saved?.remember) return;
+      setRememberPassword(true);
+      if (typeof saved.email === "string") setEmail(saved.email);
+      if (typeof saved.password === "string") setPassword(saved.password);
+    } catch {
+      // ignore invalid saved login payload
+    }
+  }, []);
 
   useEffect(() => {
     if (authState.status === "authed") {
@@ -46,6 +63,18 @@ export function LoginPage() {
     setSubmitting(true);
     try {
       const res = await login(email, password);
+      if (rememberPassword) {
+        localStorage.setItem(
+          REMEMBER_LOGIN_KEY,
+          JSON.stringify({
+            email: email.trim(),
+            password,
+            remember: true,
+          })
+        );
+      } else {
+        localStorage.removeItem(REMEMBER_LOGIN_KEY);
+      }
       await loginWithToken(res.token);
       nav(from && from !== "/login" ? from : "/music", { replace: true });
     } catch (e: unknown) {
@@ -127,6 +156,15 @@ export function LoginPage() {
                 />
               </div>
             </div>
+            <label className="flex cursor-pointer items-center gap-2 pl-0.5 text-xs text-stone-500">
+              <input
+                type="checkbox"
+                checked={rememberPassword}
+                onChange={(e) => setRememberPassword(e.target.checked)}
+                className="h-4 w-4 rounded border-rose-200 text-rose-500 focus:ring-rose-300"
+              />
+              <span>{t("auth.rememberPassword", { defaultValue: "记住密码" })}</span>
+            </label>
 
             {err && (
               <p className="rounded-lg bg-rose-50 px-3 py-2 text-center text-sm text-rose-600">{err}</p>

@@ -633,6 +633,19 @@ export interface MusicTrackCommentDto {
   replies: MusicTrackCommentDto[];
 }
 
+export interface MusicMentionNotificationDto {
+  id: number;
+  playlistId: number;
+  trackId: number;
+  trackTitle: string;
+  commentId: number;
+  actorUserId: number;
+  actorLabel: string;
+  contentPreview: string;
+  read: boolean;
+  createdAtMillis: number;
+}
+
 export interface MusicTrackCommentPageDto {
   content: MusicTrackCommentDto[];
   totalElements: number;
@@ -1217,6 +1230,7 @@ export async function postTrackComment(input: {
   trackId: number;
   content: string;
   parentId?: number | null;
+  mentionUserIds?: number[];
 }): Promise<MusicTrackCommentDto> {
   const res = await fetch(apiPath(`/api/music/tracks/${input.trackId}/comments`), {
     method: "POST",
@@ -1227,9 +1241,28 @@ export async function postTrackComment(input: {
     body: JSON.stringify({
       content: input.content.trim(),
       parentId: input.parentId ?? null,
+      mentionUserIds: input.mentionUserIds ?? [],
     }),
   });
   return authJson(res);
+}
+
+export async function fetchMusicMentions(size = 30): Promise<MusicMentionNotificationDto[]> {
+  const q = new URLSearchParams({ size: String(size) });
+  const res = await fetch(apiPath(`/api/music/mentions?${q.toString()}`), {
+    headers: { Authorization: `Bearer ${getStoredToken()}` },
+  });
+  return authJson(res);
+}
+
+export async function markMusicMentionRead(mentionId: number): Promise<void> {
+  const res = await fetch(apiPath(`/api/music/mentions/${mentionId}/read`), {
+    method: "POST",
+    headers: { Authorization: `Bearer ${getStoredToken()}` },
+  });
+  if (!res.ok) {
+    await authJson(res);
+  }
 }
 
 export async function likeTrackComment(commentId: number): Promise<MusicTrackCommentDto> {

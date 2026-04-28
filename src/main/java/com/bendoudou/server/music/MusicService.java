@@ -10,6 +10,7 @@ import com.bendoudou.server.music.dto.CreateTrackFromCosRequest;
 import com.bendoudou.server.music.dto.CosUploadTicketResponse;
 import com.bendoudou.server.music.dto.InvitationItemResponse;
 import com.bendoudou.server.music.dto.InviteToPlaylistRequest;
+import com.bendoudou.server.music.dto.MusicMentionNotificationResponse;
 import com.bendoudou.server.music.dto.MusicPreviewResponse;
 import com.bendoudou.server.music.dto.MusicTrackCommentResponse;
 import com.bendoudou.server.music.dto.MusicTrackResponse;
@@ -32,6 +33,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -84,6 +86,7 @@ public class MusicService {
     private final UserTrackPlayHistoryRepository userTrackPlayHistoryRepository;
     private final MusicTrackCommentRepository musicTrackCommentRepository;
     private final MusicTrackCommentLikeRepository musicTrackCommentLikeRepository;
+    private final MusicMentionNotificationRepository musicMentionNotificationRepository;
     private final PlaylistListeningStatusRepository playlistListeningStatusRepository;
     private final UserRepository userRepository;
     private final AudioMetadataExtractor audioMetadataExtractor;
@@ -104,6 +107,7 @@ public class MusicService {
             UserTrackPlayHistoryRepository userTrackPlayHistoryRepository,
             MusicTrackCommentRepository musicTrackCommentRepository,
             MusicTrackCommentLikeRepository musicTrackCommentLikeRepository,
+            MusicMentionNotificationRepository musicMentionNotificationRepository,
             PlaylistListeningStatusRepository playlistListeningStatusRepository,
             UserRepository userRepository,
             AudioMetadataExtractor audioMetadataExtractor,
@@ -123,6 +127,7 @@ public class MusicService {
         this.userTrackPlayHistoryRepository = userTrackPlayHistoryRepository;
         this.musicTrackCommentRepository = musicTrackCommentRepository;
         this.musicTrackCommentLikeRepository = musicTrackCommentLikeRepository;
+        this.musicMentionNotificationRepository = musicMentionNotificationRepository;
         this.playlistListeningStatusRepository = playlistListeningStatusRepository;
         this.userRepository = userRepository;
         this.audioMetadataExtractor = audioMetadataExtractor;
@@ -797,6 +802,7 @@ public class MusicService {
             musicTrackCommentLikeRepository.deleteByCommentIdIn(commentIds);
             musicTrackCommentRepository.deleteByTrackId(trackId);
         }
+        musicMentionNotificationRepository.deleteByTrackId(trackId);
         userTrackHeartRepository.deleteByTrackId(trackId);
         userTrackPlayHistoryRepository.deleteByTrackId(trackId);
         musicTrackRepository.delete(t);
@@ -946,10 +952,55 @@ public class MusicService {
         c.setCreatedAt(Instant.now());
         c.setUpdatedAt(Instant.now());
         c = musicTrackCommentRepository.save(c);
+        createMentionNotifications(track, c, content, userId, req.mentionUserIds());
         beanService.awardDailyUsage(userId);
         beanService.awardByRule(userId, BeanActionType.TRACK_COMMENT, BeanTransactionReason.TRACK_COMMENT, c.getId());
         User u = userRepository.findById(userId).orElse(null);
         return toCommentResponse(c, u, false, List.of());
+    }
+
+    @Transactional(readOnly = true)
+    public List<MusicMentionNotificationResponse> listMentionNotifications(long userId, int size) {
+        var pageable = PageRequest.of(0, size);
+        return musicMentionNotificationRepository
+                .findByRecipientUserIdOrderByCreatedAtDesc(userId, pageable)
+                .stream()
+                .map(n -> {
+                    MusicTrack track = musicTrackRepository.findById(n.getTrackId()).orElse(null);
+                    if (track == null) {
+                        return null;
+                    }
+                    if (!playlistMemberRepository.existsByPlaylistIdAndUserId(track.getPlaylistId(), userId)) {
+                        return null;
+                    }
+                    User actor = userRepository.findById(n.getActorUserId()).orElse(null);
+                    String actorLabel = actor == null ? ("用户#" + n.getActorUserId()) : userLabel(actor);
+                    return new MusicMentionNotificationResponse(
+                            n.getId(),
+                            n.getPlaylistId(),
+                            n.getTrackId(),
+                            track.getTitle(),
+                            n.getCommentId(),
+                            n.getActorUserId(),
+                            actorLabel,
+                            n.getContentPreview(),
+                            n.isRead(),
+                            n.getCreatedAt().toEpochMilli()
+                    );
+                })
+                .filter(Objects::nonNull)
+                .toList();
+    }
+
+    @Transactional
+    public void markMentionNotificationRead(long userId, long mentionId) {
+        MusicMentionNotification row = musicMentionNotificationRepository
+                .findByIdAndRecipientUserId(mentionId, userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "消息不存在"));
+        if (!row.isRead()) {
+            row.setRead(true);
+            musicMentionNotificationRepository.save(row);
+        }
     }
 
     @Transactional
@@ -1427,6 +1478,48 @@ public class MusicService {
                 playlistId,
                 new PlaylistListeningStatusItemResponse(trackId, userId, label, now.toEpochMilli())
         );
+    }
+
+    private void createMentionNotifications(
+            MusicTrack track,
+            MusicTrackComment comment,
+            String content,
+            long actorUserId,
+            List<Long> rawMentionUserIds
+    ) {
+        if (rawMentionUserIds == null || rawMentionUserIds.isEmpty()) {
+            return;
+        }
+        Set<Long> memberIds = playlistMemberRepository.findByPlaylistId(track.getPlaylistId())
+                .stream()
+                .map(PlaylistMember::getUserId)
+                .collect(Collectors.toSet());
+        List<Long> mentionUserIds = rawMentionUserIds.stream()
+                .filter(Objects::nonNull)
+                .map(Long::longValue)
+                .distinct()
+                .filter(uid -> uid != actorUserId)
+                .filter(memberIds::contains)
+                .limit(20)
+                .toList();
+        if (mentionUserIds.isEmpty()) {
+            return;
+        }
+        String preview = content.length() > 260 ? content.substring(0, 260) : content;
+        List<MusicMentionNotification> batch = new ArrayList<>();
+        for (Long mentionUserId : mentionUserIds) {
+            MusicMentionNotification n = new MusicMentionNotification();
+            n.setRecipientUserId(mentionUserId);
+            n.setActorUserId(actorUserId);
+            n.setPlaylistId(track.getPlaylistId());
+            n.setTrackId(track.getId());
+            n.setCommentId(comment.getId());
+            n.setContentPreview(preview);
+            n.setRead(false);
+            n.setCreatedAt(Instant.now());
+            batch.add(n);
+        }
+        musicMentionNotificationRepository.saveAll(batch);
     }
 
     private PlaylistItemResponse toPlaylistItem(PlaylistMember row, long currentUserId) {
