@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type RefObject } from "react";
+import { useEffect, useRef, useState, type RefObject, type TouchEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { Play, Pause, SkipBack, SkipForward, Volume2, Music2, Repeat, Repeat1, Shuffle, History } from "lucide-react";
 import clsx from "clsx";
@@ -85,6 +85,7 @@ export function MusicPlayerBar({
 }: MusicPlayerBarProps) {
   const { t } = useTranslation();
   const footerRef = useRef<HTMLElement | null>(null);
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const [bufferedEnd, setBufferedEnd] = useState(0);
   useAudioAnalyserGlow(audioRef, footerRef, {
     playing,
@@ -164,6 +165,30 @@ export function MusicPlayerBar({
   const modeAriaLabel = t("player.modeSwitch", { mode: modeTitle });
   const ModeIcon = playMode === "single" ? Repeat1 : playMode === "shuffle" ? Shuffle : Repeat;
 
+  const onMobileSwipeStart = (e: TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length !== 1) return;
+    const target = e.target as HTMLElement | null;
+    if (target?.closest('input[type="range"]')) return;
+    const t = e.touches[0];
+    if (!t) return;
+    touchStartRef.current = { x: t.clientX, y: t.clientY };
+  };
+
+  const onMobileSwipeEnd = (e: TouchEvent<HTMLDivElement>) => {
+    const start = touchStartRef.current;
+    touchStartRef.current = null;
+    if (!start) return;
+    const t = e.changedTouches[0];
+    if (!t) return;
+    const dx = t.clientX - start.x;
+    const dy = t.clientY - start.y;
+    // 水平滑动阈值 + 竖向抑制，避免滚动时误触切歌
+    if (Math.abs(dx) < 42 || Math.abs(dx) < Math.abs(dy) * 1.2) return;
+    if (playlistEmpty) return;
+    if (dx > 0) onPrev();
+    else onNext();
+  };
+
   return (
     <div className="pointer-events-none fixed bottom-4 left-0 right-0 z-50 flex justify-center px-4 sm:bottom-6 sm:px-6">
       <footer
@@ -179,7 +204,11 @@ export function MusicPlayerBar({
           <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-4">
           
           {/* 左侧：封面与歌曲信息 & 移动端控制按钮 */}
-          <div className="flex w-full items-center gap-3 sm:w-auto sm:min-w-[240px] sm:max-w-[300px] shrink-0 rounded-full bg-white/[0.03] p-1.5 pr-4 shadow-sm ring-1 ring-white/[0.05]">
+          <div
+            className="flex w-full shrink-0 flex-wrap items-center gap-2 rounded-3xl bg-white/[0.03] p-1.5 pr-3 shadow-sm ring-1 ring-white/[0.05] sm:w-auto sm:min-w-[240px] sm:max-w-[300px] sm:flex-nowrap sm:gap-3 sm:rounded-full sm:pr-4"
+            onTouchStart={onMobileSwipeStart}
+            onTouchEnd={onMobileSwipeEnd}
+          >
             <div
               onClick={onOpenPlayerView}
               className={clsx(
@@ -244,6 +273,55 @@ export function MusicPlayerBar({
                 <History className="h-4 w-4" />
               </button>
             </div>
+
+            {/* 移动端：将进度并入播放操作区域，降低整体高度 */}
+            <div className="basis-full px-1 pb-1 sm:hidden">
+              <div className="grid grid-cols-[2.2rem_1fr_2.2rem] items-center gap-x-2">
+                <span className="min-w-0 text-right text-[10px] tabular-nums text-zinc-500">
+                  {formatTime(playPos)}
+                </span>
+                <div className="group relative flex h-5 min-w-0 touch-none items-center cursor-pointer">
+                  <input
+                    type="range"
+                    aria-label={t("player.ariaProgress")}
+                    className="music-progress-range absolute inset-0 z-20 h-full w-full cursor-pointer opacity-[0.01] disabled:cursor-not-allowed"
+                    min={0}
+                    max={progressMax}
+                    step={0.01}
+                    value={progressMax > 0 ? Math.min(playPos, progressMax) : 0}
+                    disabled={!hasTrack || progressMax <= 0}
+                    onPointerDown={(e) => {
+                      e.stopPropagation();
+                      onScrubbingChange(true);
+                    }}
+                    onChange={(e) => applySeek(e.target.valueAsNumber)}
+                    onInput={(e) => applySeek((e.target as HTMLInputElement).valueAsNumber)}
+                  />
+                  <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-zinc-800/80">
+                    <div
+                      className="absolute left-0 top-0 z-0 h-full rounded-full bg-zinc-500/50 transition-[width] duration-200 ease-out"
+                      style={{
+                        width: `${Number.isFinite(bufferedPercent) ? bufferedPercent : 0}%`,
+                      }}
+                      aria-hidden
+                    />
+                    <div
+                      className="absolute left-0 top-0 z-[1] h-full rounded-full bg-gradient-to-r from-red-500 to-rose-400 transition-all duration-150 ease-out"
+                      style={{ width: `${progressPercent}%` }}
+                      aria-hidden
+                    />
+                  </div>
+                </div>
+                <span className="min-w-0 text-left text-[10px] tabular-nums text-zinc-600">
+                  {formatTime(barMax)}
+                </span>
+              </div>
+              {barLyricLine ? (
+                <p className="mt-1 truncate px-[2.2rem] text-center text-[11px] leading-snug text-zinc-300/95">
+                  {barLyricLine}
+                </p>
+              ) : null}
+            </div>
           </div>
 
           {/* 桌面端居中：播放控制区 */}
@@ -290,7 +368,7 @@ export function MusicPlayerBar({
           {/* 进度条与时间；歌词仅出现在滑轨正下方（与时间列对齐的 grid） */}
           <div
             className={clsx(
-              "flex min-w-0 flex-1 flex-col px-3 py-1 sm:min-w-[11rem] sm:px-2 sm:py-0 md:min-w-[14rem]",
+              "hidden min-w-0 flex-1 flex-col px-3 py-1 sm:flex sm:min-w-[11rem] sm:px-2 sm:py-0 md:min-w-[14rem]",
               barLyricLine ? "gap-1" : "gap-0"
             )}
           >

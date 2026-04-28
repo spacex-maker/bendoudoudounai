@@ -45,7 +45,7 @@ export function HomePage() {
       <div
         className={clsx(
           "relative overflow-x-clip overflow-y-clip",
-          wallpaperActive ? "" : "bg-romantic-mesh"
+          wallpaperActive ? "" : "bg-theme-home"
         )}
       >
         {!wallpaperActive ? (
@@ -53,6 +53,7 @@ export function HomePage() {
             <div className="absolute -left-20 -top-20 h-72 w-72 rounded-full bg-pink-200/25 blur-3xl" />
             <div className="absolute bottom-0 right-0 h-72 w-72 translate-y-1/4 rounded-full bg-rose-200/30 blur-3xl" />
             <div className="absolute left-1/3 top-1/4 h-48 w-48 rounded-full bg-amber-100/35 blur-2xl" />
+            <div className="absolute inset-0 bg-theme-home-overlay" />
             <div
               className="absolute inset-0 opacity-[0.35]"
               style={{

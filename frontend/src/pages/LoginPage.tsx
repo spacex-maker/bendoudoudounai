@@ -11,7 +11,7 @@ import { LanguageSwitch } from "../components/LanguageSwitch";
 const REMEMBER_LOGIN_KEY = "bendoudou_login_remember";
 
 export function LoginPage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { loginWithToken, state: authState } = useAuth();
   const { wallpaperActive } = usePageAppearance();
   const nav = useNavigate();
@@ -23,6 +23,7 @@ export function LoginPage() {
   const [rememberPassword, setRememberPassword] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const isZh = /^(zh)\b/i.test(i18n.resolvedLanguage ?? i18n.language ?? "");
 
   useEffect(() => {
     try {
@@ -98,11 +99,18 @@ export function LoginPage() {
     <div
       className={clsx(
         "relative min-h-dvh w-full overflow-hidden",
-        wallpaperActive ? "bg-transparent" : "bg-romantic-mesh"
+        wallpaperActive ? "bg-transparent" : "bg-theme-login"
       )}
     >
       {!wallpaperActive ? (
-        <div className="pointer-events-none absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PCEtLSBsaWdodCBkaWFtb25kIHBhdHRlcm4gLS0+PHBhdGggZD0iTTMwIDMwYzAgNCAzIDcgNyA3IDQgMCA3LTMgNy03IDAtNCAtMy03LTctNy0zIDAtNCA0LTQgOCAwIDYgNCA4IDggMnoiIGZpbGw9IiNGRkYiIGZpbGwtb3BhY2l0eT0iLjA2Ii8+PC9zdmc+')] opacity-50" />
+        <div className="pointer-events-none absolute inset-0 overflow-hidden">
+          <div className="absolute -left-24 -top-20 h-80 w-80 rounded-full bg-rose-300/35 blur-3xl" />
+          <div className="absolute right-[-7rem] top-1/4 h-96 w-96 rounded-full bg-fuchsia-300/25 blur-3xl" />
+          <div className="absolute bottom-[-8rem] left-1/3 h-96 w-96 rounded-full bg-amber-200/25 blur-3xl" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(255,255,255,0.45),transparent_38%),radial-gradient(circle_at_78%_30%,rgba(255,170,210,0.25),transparent_35%),radial-gradient(circle_at_50%_82%,rgba(255,210,150,0.2),transparent_34%)]" />
+          <div className="absolute inset-0 bg-theme-login-overlay" />
+          <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHBhdGggZD0iTTMwIDMwYzAgNCAzIDcgNyA3IDQgMCA3LTMgNy03IDAtNCAtMy03LTctNy0zIDAtNCA0LTQgOCAwIDYgNCA4IDggMnoiIGZpbGw9IiNGRkYiIGZpbGwtb3BhY2l0eT0iLjA2Ii8+PC9zdmc+')] opacity-50" />
+        </div>
       ) : null}
       <div className="relative z-10 mx-auto flex min-h-dvh max-w-md flex-col justify-center px-6 py-10">
         <div className="mb-4 flex items-center justify-between gap-2">
@@ -115,16 +123,42 @@ export function LoginPage() {
           </Link>
           <LanguageSwitch />
         </div>
-        <div className="rounded-3xl border border-white/60 bg-white/70 p-8 shadow-lg shadow-rose-200/20 backdrop-blur">
-          <div className="mb-6 text-center">
-            <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-rose-100 to-amber-100 text-rose-400">
-              <Heart className="h-7 w-7" fill="currentColor" fillOpacity={0.25} />
+        <div className="relative overflow-hidden rounded-3xl border border-white/60 bg-white/72 p-8 shadow-[0_16px_60px_rgba(251,113,133,0.22)] backdrop-blur-xl">
+          <div className="pointer-events-none absolute inset-0 rounded-3xl border border-white/55" />
+          <div className="pointer-events-none absolute -inset-px rounded-3xl bg-[conic-gradient(from_140deg,rgba(255,255,255,0.28),rgba(255,180,210,0.2),rgba(255,240,205,0.22),rgba(255,255,255,0.3))] opacity-65 blur-[1px]" />
+          <div className="pointer-events-none absolute inset-0 rounded-3xl bg-[radial-gradient(circle_at_10%_0%,rgba(255,255,255,0.45),transparent_30%),radial-gradient(circle_at_90%_100%,rgba(255,195,220,0.2),transparent_34%)]" />
+          <div className="pointer-events-none absolute -right-8 -top-12 h-64 w-64 text-rose-300/35 blur-[1px]">
+            <Heart className="h-full w-full" fill="currentColor" />
+          </div>
+          <div className="pointer-events-none absolute -left-10 -top-20 h-60 w-60 text-amber-200/25">
+            <Heart className="h-full w-full rotate-[-18deg]" fill="currentColor" />
+          </div>
+          <div className="pointer-events-none absolute left-1/2 top-0 h-52 w-[120%] -translate-x-1/2 bg-[radial-gradient(circle_at_50%_10%,rgba(255,255,255,0.65),rgba(255,255,255,0.18)_45%,transparent_75%)]" />
+          <div className="mb-6 text-center relative z-10">
+            <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-rose-100/95 to-amber-100/95 text-rose-400 shadow-[0_10px_24px_rgba(251,113,133,0.28)]">
+              <Heart className="h-8 w-8" fill="currentColor" fillOpacity={0.35} />
             </div>
-            <h1 className="font-display text-2xl text-warm-600">{t("auth.welcomeBack")}</h1>
-            <p className="mt-1 text-sm text-stone-500">{t("auth.subLogin")}</p>
+            <h1
+              className={clsx(
+                "text-3xl text-warm-600 drop-shadow-[0_1px_0_rgba(255,255,255,0.35)]",
+                isZh ? "font-normal tracking-[0.045em]" : "font-semibold tracking-[0.05em]"
+              )}
+              style={
+                isZh
+                  ? {
+                      fontFamily:
+                        '"ZCOOL QingKe HuangYou","Noto Sans SC","PingFang SC","Hiragino Sans GB","Microsoft YaHei","Source Han Sans SC",ui-sans-serif,system-ui,sans-serif',
+                    }
+                  : undefined
+              }
+            >
+              {t("auth.welcomeBack")}
+            </h1>
+            <div className="mx-auto mt-1.5 h-px w-16 bg-gradient-to-r from-transparent via-stone-300/90 to-transparent" />
+            <p className="mx-auto mt-2 max-w-[26ch] text-sm leading-relaxed text-stone-500">{t("auth.subLogin")}</p>
           </div>
 
-          <form onSubmit={onSubmit} className="space-y-4">
+          <form onSubmit={onSubmit} className="relative z-10 space-y-4">
             <div>
               <label className="mb-1 block text-xs font-medium text-stone-500">{t("auth.email")}</label>
               <div className="relative">

@@ -446,9 +446,10 @@ export function MusicPage() {
     <div
       className={clsx(
         "relative flex h-dvh max-h-dvh min-h-0 flex-col overflow-hidden text-zinc-200 font-semibold",
-        wallpaperActive ? "bg-netease-bg/68 backdrop-blur-sm" : "bg-netease-bg"
+        wallpaperActive ? "bg-netease-bg/68 backdrop-blur-sm" : "bg-netease-bg bg-theme-music"
       )}
     >
+      {!wallpaperActive ? <div className="pointer-events-none absolute inset-0 bg-theme-music-overlay" aria-hidden /> : null}
       <div className="flex min-h-0 flex-1">
         <aside className="hidden w-[200px] shrink-0 flex-col border-r border-netease-line bg-[#1f1f1f] md:flex">
           <div className="flex h-12 items-center gap-2 border-b border-netease-line px-4 text-sm text-zinc-400">
