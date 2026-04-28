@@ -46,6 +46,7 @@ export function GlobalMusicPlayer() {
   const [historyTracks, setHistoryTracks] = useState<MusicTrackDto[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyErr, setHistoryErr] = useState<string | null>(null);
+  const [musicMobileNavOpen, setMusicMobileNavOpen] = useState(false);
 
   const isOnMusicPage = location.pathname === "/music";
   const hasTrack = currentTrack != null;
@@ -108,6 +109,15 @@ export function GlobalMusicPlayer() {
     if (!currentTrack?.hasLyrics || syncedLyrics.lines.length === 0) return null;
     return getActiveLyricText(syncedLyrics.lines, playPos);
   }, [currentTrack?.hasLyrics, syncedLyrics.lines, playPos]);
+
+  useEffect(() => {
+    const onMenuToggle = (ev: Event) => {
+      const custom = ev as CustomEvent<{ open?: boolean }>;
+      setMusicMobileNavOpen(Boolean(custom.detail?.open));
+    };
+    window.addEventListener("music-mobile-nav-toggle", onMenuToggle as EventListener);
+    return () => window.removeEventListener("music-mobile-nav-toggle", onMenuToggle as EventListener);
+  }, []);
 
   const barMax = useMemo(() => {
     if (playDur > 0 && Number.isFinite(playDur)) return playDur;
@@ -199,7 +209,7 @@ export function GlobalMusicPlayer() {
         }}
       />
 
-      {isOnMusicPage && (
+      {isOnMusicPage && !musicMobileNavOpen && (
         <MusicPlayerBar
           {...sharedBarProps}
           title={currentTrack?.title ?? t("music.pickTrack")}

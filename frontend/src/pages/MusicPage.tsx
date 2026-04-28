@@ -252,6 +252,22 @@ export function MusicPage() {
   }, [activeNav, currentPlaylistId]);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.dispatchEvent(
+      new CustomEvent("music-mobile-nav-toggle", {
+        detail: { open: mobileNavOpen },
+      })
+    );
+    return () => {
+      window.dispatchEvent(
+        new CustomEvent("music-mobile-nav-toggle", {
+          detail: { open: false },
+        })
+      );
+    };
+  }, [mobileNavOpen]);
+
+  useEffect(() => {
     setMusicView("list");
   }, [activeNav, currentPlaylistId, search, setMusicView]);
 
@@ -699,7 +715,7 @@ export function MusicPage() {
           </header>
 
           {mobileNavOpen ? (
-            <div className="fixed inset-0 z-[75] md:hidden">
+            <div className="fixed inset-0 z-[120] md:hidden">
               <button
                 type="button"
                 aria-hidden
@@ -707,7 +723,7 @@ export function MusicPage() {
                 onClick={() => setMobileNavOpen(false)}
                 className="absolute inset-0 bg-black/45 backdrop-blur-[2px]"
               />
-              <aside className="custom-scrollbar absolute left-0 top-0 h-full w-[min(88vw,22rem)] overflow-y-auto border-r border-netease-line bg-[#1f1f1f] p-3">
+              <aside className="custom-scrollbar absolute left-0 top-0 h-full w-[min(80vw,18rem)] overflow-y-auto border-r border-netease-line bg-[#1f1f1f] p-3">
                 <div className="mb-2 flex items-center justify-between">
                   <div className="flex items-center gap-2 text-sm text-zinc-300">
                     <Heart className="h-4 w-4 text-red-500/90" fill="currentColor" />
@@ -763,6 +779,22 @@ export function MusicPage() {
                   <button type="button" onClick={() => setUploadOpen(true)} className="flex w-full items-center justify-center gap-1.5 rounded-full border border-dashed border-red-900/40 bg-[#252525] py-2.5 text-[13px] text-red-200/90">
                     <Music2 className="h-3.5 w-3.5" />{t("music.uploadNew")}
                   </button>
+                  <Link
+                    to="/"
+                    className="flex w-full items-center justify-center gap-1.5 rounded-full border border-netease-line bg-[#252525] py-2.5 text-[13px] text-zinc-300 transition hover:bg-[#2a2a2a] hover:text-zinc-100"
+                  >
+                    <Home className="h-3.5 w-3.5 shrink-0 opacity-90" />
+                    {t("music.backToSite")}
+                  </Link>
+                  {user && userIsAdmin(user) ? (
+                    <Link
+                      to="/admin"
+                      className="flex w-full items-center justify-center gap-1.5 rounded-full border border-violet-500/30 bg-violet-500/10 py-2.5 text-[13px] text-violet-200 transition hover:bg-violet-500/20"
+                    >
+                      <LayoutDashboard className="h-3.5 w-3.5 shrink-0" />
+                      <span className="truncate">{t("admin.consoleLink")}</span>
+                    </Link>
+                  ) : null}
                 </div>
               </aside>
             </div>
