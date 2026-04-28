@@ -55,6 +55,7 @@ export type MusicPlayerBarProps = {
   playMode: "single" | "list" | "shuffle";
   onCyclePlayMode: () => void;
   onOpenHistoryPanel: () => void;
+  onOpenPlayerView?: () => void;
 };
 
 export function MusicPlayerBar({
@@ -80,6 +81,7 @@ export function MusicPlayerBar({
   playMode,
   onCyclePlayMode,
   onOpenHistoryPanel,
+  onOpenPlayerView,
 }: MusicPlayerBarProps) {
   const { t } = useTranslation();
   const footerRef = useRef<HTMLElement | null>(null);
@@ -178,7 +180,13 @@ export function MusicPlayerBar({
           
           {/* 左侧：封面与歌曲信息 & 移动端控制按钮 */}
           <div className="flex w-full items-center gap-3 sm:w-auto sm:min-w-[240px] sm:max-w-[300px] shrink-0 rounded-full bg-white/[0.03] p-1.5 pr-4 shadow-sm ring-1 ring-white/[0.05]">
-            <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-full shadow-md bg-zinc-800 ring-2 ring-zinc-900">
+            <div
+              onClick={onOpenPlayerView}
+              className={clsx(
+                "relative h-12 w-12 shrink-0 overflow-hidden rounded-full shadow-md bg-zinc-800 ring-2 ring-zinc-900",
+                onOpenPlayerView ? "cursor-pointer" : undefined
+              )}
+            >
               {coverSrc ? (
                 <img
                   src={coverSrc}
@@ -195,7 +203,10 @@ export function MusicPlayerBar({
               {/* 黑胶唱片中心圆孔 */}
               <div className="absolute inset-0 m-auto h-3 w-3 rounded-full bg-zinc-900 border border-zinc-700/50 shadow-inner" />
             </div>
-            <div className="min-w-0 flex-1">
+            <div
+              onClick={onOpenPlayerView}
+              className={clsx("min-w-0 flex-1", onOpenPlayerView ? "cursor-pointer" : undefined)}
+            >
               <div className="truncate text-[14px] font-bold leading-tight tracking-wide text-zinc-100">
                 {title || t("player.idle")}
               </div>

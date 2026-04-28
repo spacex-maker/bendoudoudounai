@@ -20,6 +20,7 @@ export function AdminUserCreateModal({ open, onClose, onCreated }: Props) {
   const [displayName, setDisplayName] = useState("");
   const [password, setPassword] = useState("");
   const [password2, setPassword2] = useState("");
+  const [gender, setGender] = useState<"UNKNOWN" | "MALE" | "FEMALE">("UNKNOWN");
   const [role, setRole] = useState<"USER" | "ADMIN">("USER");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -30,6 +31,7 @@ export function AdminUserCreateModal({ open, onClose, onCreated }: Props) {
     setDisplayName("");
     setPassword("");
     setPassword2("");
+    setGender("UNKNOWN");
     setRole("USER");
     setErr(null);
   }, [open]);
@@ -53,6 +55,7 @@ export function AdminUserCreateModal({ open, onClose, onCreated }: Props) {
         email,
         password,
         displayName: displayName.trim() || null,
+        gender,
         role,
       });
       onCreated();
@@ -122,6 +125,21 @@ export function AdminUserCreateModal({ open, onClose, onCreated }: Props) {
               className="w-full rounded-lg border border-zinc-700 bg-zinc-950/80 px-3 py-2 text-sm text-zinc-200 placeholder:text-zinc-600 focus:border-violet-500/50 focus:outline-none"
               maxLength={255}
             />
+          </div>
+          <div>
+            <label className="mb-1 block text-[11px] text-zinc-500" htmlFor={`${formId}-gender`}>
+              性别
+            </label>
+            <select
+              id={`${formId}-gender`}
+              value={gender}
+              onChange={(e) => setGender(e.target.value as "UNKNOWN" | "MALE" | "FEMALE")}
+              className="w-full rounded-lg border border-zinc-700 bg-zinc-950/80 px-3 py-2 text-sm text-zinc-200 focus:border-violet-500/50 focus:outline-none"
+            >
+              <option value="UNKNOWN">保密</option>
+              <option value="MALE">男</option>
+              <option value="FEMALE">女</option>
+            </select>
           </div>
           <div>
             <span className="mb-1 block text-[11px] text-zinc-500">{t("admin.colRole")}</span>

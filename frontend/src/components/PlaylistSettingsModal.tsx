@@ -237,30 +237,30 @@ export function PlaylistSettingsModal({ open, onClose, playlist, onSuccess }: Pr
   return (
     <>
     <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-zinc-950/60 p-4 backdrop-blur-md transition-all"
+      className="fixed inset-0 z-[60] flex items-end justify-center bg-zinc-950/60 p-0 backdrop-blur-md transition-all sm:items-center sm:p-4"
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       <div
-        className="relative max-h-[85vh] w-full max-w-xl overflow-hidden rounded-[40px] border border-white/10 bg-zinc-900 shadow-2xl"
+        className="relative h-[100dvh] w-full max-w-xl overflow-hidden rounded-none border-0 bg-zinc-900 shadow-2xl sm:h-auto sm:max-h-[85vh] sm:rounded-[40px] sm:border sm:border-white/10"
         onClick={(e) => e.stopPropagation()}
       >
         {/* 顶部标题栏 */}
-        <header className="flex items-center justify-between px-8 py-6">
+        <header className="flex items-center justify-between px-4 py-4 sm:px-8 sm:py-6">
           <div>
-            <h2 className="text-xl font-bold text-white">{t("playlistModal.title")}</h2>
+            <h2 className="text-lg font-bold text-white sm:text-xl">{t("playlistModal.title")}</h2>
             <p className="mt-0.5 text-xs text-zinc-500">{t("playlistModal.subtitle")}</p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-white/5 text-zinc-400 transition hover:bg-white/10 hover:text-white"
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-white/5 text-zinc-400 transition hover:bg-white/10 hover:text-white sm:h-10 sm:w-10"
             aria-label={t("common.cancel")}
           >
             <X className="h-5 w-5" />
           </button>
         </header>
 
-        <div className="custom-scrollbar overflow-y-auto px-8 pb-10 pt-2" style={{ maxHeight: "calc(85vh - 100px)" }}>
+        <div className="custom-scrollbar overflow-y-auto px-4 pb-6 pt-2 sm:px-8 sm:pb-10" style={{ maxHeight: "calc(100dvh - 72px)" }}>
           <div className="space-y-8">
             
             {/* 1. 数据概览卡片区 */}
@@ -281,7 +281,7 @@ export function PlaylistSettingsModal({ open, onClose, playlist, onSuccess }: Pr
 
             {/* 2. 基本设置（仅 Owner） */}
             {playlist.iAmOwner && (
-              <section className="rounded-[32px] bg-white/[0.03] p-6 ring-1 ring-white/[0.05]">
+              <section className="rounded-2xl bg-white/[0.03] p-4 ring-1 ring-white/[0.05] sm:rounded-[32px] sm:p-6">
                 <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-zinc-200">
                   <ShieldCheck className="h-4 w-4 text-rose-500" aria-hidden />
                   {t("playlistModal.basicInfo")}
@@ -298,7 +298,7 @@ export function PlaylistSettingsModal({ open, onClose, playlist, onSuccess }: Pr
                   <button
                     type="submit"
                     disabled={renameBusy}
-                    className="rounded-full bg-white px-6 py-3 text-sm font-bold text-black transition hover:bg-zinc-200 active:scale-95 disabled:opacity-50"
+                    className="rounded-full bg-white px-5 py-2.5 text-sm font-bold text-black transition hover:bg-zinc-200 active:scale-95 disabled:opacity-50"
                   >
                     {renameBusy ? t("playlistModal.saving") : t("playlistModal.save")}
                   </button>
@@ -308,7 +308,7 @@ export function PlaylistSettingsModal({ open, onClose, playlist, onSuccess }: Pr
             )}
 
             {/* 3. 背景视觉设置 */}
-            <section className="rounded-[32px] bg-white/[0.03] p-6 ring-1 ring-white/[0.05]">
+            <section className="rounded-2xl bg-white/[0.03] p-4 ring-1 ring-white/[0.05] sm:rounded-[32px] sm:p-6">
               <h3 className="mb-4 text-sm font-semibold text-zinc-200">{t("playlistModal.coverAndBg")}</h3>
               <div className="flex flex-col gap-4 sm:flex-row">
                 <div className="relative aspect-video w-full overflow-hidden rounded-2xl bg-zinc-800 sm:w-48">
@@ -369,7 +369,7 @@ export function PlaylistSettingsModal({ open, onClose, playlist, onSuccess }: Pr
             </section>
 
             {/* 4. 成员与协作 */}
-            <section className="rounded-[32px] bg-white/[0.03] p-6 ring-1 ring-white/[0.05]">
+            <section className="rounded-2xl bg-white/[0.03] p-4 ring-1 ring-white/[0.05] sm:rounded-[32px] sm:p-6">
               <div className="mb-4 flex items-center justify-between">
                 <h3 className="text-sm font-semibold text-zinc-200">{t("playlistModal.collaborators")}</h3>
                 <span className="rounded-full bg-zinc-800 px-2.5 py-0.5 text-[10px] text-zinc-400">
@@ -472,7 +472,7 @@ export function PlaylistSettingsModal({ open, onClose, playlist, onSuccess }: Pr
                     <button
                       type="submit"
                       disabled={inviteBusy || dirLoading || inviteUserId === "" || inviteCandidates.length === 0}
-                      className="shrink-0 rounded-full bg-rose-600 px-6 py-2.5 text-xs font-bold text-white transition hover:bg-rose-500 active:scale-95 disabled:opacity-50"
+                    className="w-full shrink-0 rounded-full bg-rose-600 px-6 py-2.5 text-xs font-bold text-white transition hover:bg-rose-500 active:scale-95 disabled:opacity-50 sm:w-auto"
                     >
                       {inviteBusy ? t("playlistModal.sendingInvite") : t("playlistModal.sendInvite")}
                     </button>
@@ -482,7 +482,7 @@ export function PlaylistSettingsModal({ open, onClose, playlist, onSuccess }: Pr
               )}
             </section>
             {playlist.iAmOwner && (
-              <section className="rounded-[32px] bg-rose-500/[0.06] p-6 ring-1 ring-rose-400/20">
+              <section className="rounded-2xl bg-rose-500/[0.06] p-4 ring-1 ring-rose-400/20 sm:rounded-[32px] sm:p-6">
                 <h3 className="mb-3 text-sm font-semibold text-rose-200">{t("playlistModal.deleteSectionTitle")}</h3>
                 <p className="mb-4 text-xs text-rose-100/80">{t("playlistModal.deleteHint")}</p>
                 <button

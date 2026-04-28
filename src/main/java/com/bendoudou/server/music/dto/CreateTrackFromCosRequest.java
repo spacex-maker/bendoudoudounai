@@ -6,8 +6,12 @@ import jakarta.validation.constraints.Size;
 
 public record CreateTrackFromCosRequest(
         Long playlistId,
-        @NotBlank @Pattern(regexp = "^[a-fA-F0-9]{64}$", message = "audioSha256 格式错误") String audioSha256,
-        @NotBlank @Pattern(regexp = "^(mp3|m4a|flac|wav|ogg|aac|rc)$", message = "audioExt 不支持") String audioExt,
+        @NotBlank
+        @Pattern(regexp = "^[a-fA-F0-9]{64}$", message = "audioSha256 format invalid")
+        String audioSha256,
+        @NotBlank
+        @Pattern(regexp = "^(mp3|m4a|flac|wav|ogg|aac|rc)$", message = "audioExt unsupported")
+        String audioExt,
         @Size(max = 512) String title,
         @Size(max = 512) String artist,
         @Size(max = 512) String album,

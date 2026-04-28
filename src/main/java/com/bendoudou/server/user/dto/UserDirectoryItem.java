@@ -9,5 +9,9 @@ public record UserDirectoryItem(
         String email,
         boolean hasAvatar,
         /** USER 或 ADMIN */
-        String role
+        String role,
+        Long beanBalance,
+        String beanLevelCode,
+        String beanLevelName,
+        Long lastOnlineAtMillis
 ) {}

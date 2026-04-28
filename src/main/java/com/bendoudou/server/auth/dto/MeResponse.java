@@ -8,5 +8,9 @@ public record MeResponse(
         String displayName,
         boolean hasAvatar,
         String role,
-        List<String> roles
+        List<String> roles,
+        String gender,
+        long beanBalance,
+        String beanLevelCode,
+        String beanLevelName
 ) {}

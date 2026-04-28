@@ -43,6 +43,13 @@ public class User {
     @Column(name = "account_enabled", nullable = false)
     private boolean accountEnabled = true;
 
+    @Column(name = "last_active_at")
+    private Instant lastActiveAt;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "gender", nullable = false, length = 16)
+    private UserGender gender = UserGender.UNKNOWN;
+
     @PrePersist
     void ensureRole() {
         if (role == null) {
@@ -112,5 +119,21 @@ public class User {
 
     public void setRole(UserRole role) {
         this.role = role;
+    }
+
+    public Instant getLastActiveAt() {
+        return lastActiveAt;
+    }
+
+    public void setLastActiveAt(Instant lastActiveAt) {
+        this.lastActiveAt = lastActiveAt;
+    }
+
+    public UserGender getGender() {
+        return gender;
+    }
+
+    public void setGender(UserGender gender) {
+        this.gender = gender;
     }
 }

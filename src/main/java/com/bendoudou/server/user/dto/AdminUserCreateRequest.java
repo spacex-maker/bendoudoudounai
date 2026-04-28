@@ -14,6 +14,8 @@ public record AdminUserCreateRequest(
         String password,
         /** 可空，空串视为无昵称 */
         String displayName,
+        /** 可空；MALE | FEMALE | UNKNOWN */
+        String gender,
         /** 可空；未传时默认 USER。USER | ADMIN */
         String role
 ) {}

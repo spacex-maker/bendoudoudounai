@@ -1,5 +1,6 @@
 package com.bendoudou.server.user;
 
+import com.bendoudou.server.bean.BeanService;
 import com.bendoudou.server.auth.dto.AuthResponse;
 import com.bendoudou.server.auth.dto.MeResponse;
 import com.bendoudou.server.security.JwtTokenService;
@@ -7,6 +8,7 @@ import com.bendoudou.server.user.dto.AdminUserCreateRequest;
 import com.bendoudou.server.user.dto.AdminUserListItem;
 import com.bendoudou.server.user.dto.AdminUserPatchRequest;
 import com.bendoudou.server.user.dto.ChangePasswordRequest;
+import com.bendoudou.server.user.dto.UpdateMyProfileRequest;
 import com.bendoudou.server.user.dto.UserDirectoryItem;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Sort;
@@ -28,7 +30,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
-import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
@@ -41,6 +42,8 @@ public class UserService {
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenService jwtTokenService;
     private final AccountRoleService accountRoleService;
+    private final BeanService beanService;
+    private final UserPrivacyService userPrivacyService;
     private final Path uploadBase;
 
     public UserService(
@@ -48,16 +51,20 @@ public class UserService {
             PasswordEncoder passwordEncoder,
             JwtTokenService jwtTokenService,
             AccountRoleService accountRoleService,
+            BeanService beanService,
+            UserPrivacyService userPrivacyService,
             @Value("${bendoudou.music-upload-dir}") String musicUploadDir
     ) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtTokenService = jwtTokenService;
         this.accountRoleService = accountRoleService;
+        this.beanService = beanService;
+        this.userPrivacyService = userPrivacyService;
         this.uploadBase = Path.of(musicUploadDir).toAbsolutePath().normalize();
     }
 
-    public AuthResponse login(String email, String password) {
+    public AuthResponse login(String email, String password, String clientIp) {
         User u = userRepository.findByEmail(email.trim().toLowerCase())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "邮箱或密码错误"));
         if (!passwordEncoder.matches(password, u.getPasswordHash())) {
@@ -65,6 +72,12 @@ public class UserService {
         }
         if (!u.isAccountEnabled()) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "账号已禁用");
+        }
+        userPrivacyService.recordLogin(u.getId(), clientIp);
+        u.setLastActiveAt(java.time.Instant.now());
+        userRepository.save(u);
+        if (userPrivacyService.shouldRecordLogin(u.getId())) {
+            beanService.awardDailyUsage(u.getId());
         }
         return buildAuthResponse(u);
     }
@@ -84,19 +97,29 @@ public class UserService {
         var eff = accountRoleService.effectiveRolesForUserId(u.getId());
         var roleNames = eff.stream().map(UserRole::name).sorted().collect(Collectors.toList());
         var primary = AccountRoleService.primaryRoleName(eff);
+        long beanBalance = beanService.queryBalance(u.getId());
         return new MeResponse(
                 u.getId(),
                 u.getEmail(),
                 u.getDisplayName(),
                 StringUtils.hasText(u.getAvatarStoredRelpath()),
                 primary,
-                roleNames
+                roleNames,
+                (u.getGender() == null ? UserGender.UNKNOWN : u.getGender()).name(),
+                beanBalance,
+                beanService.resolveLevelCode(beanBalance),
+                beanService.resolveLevelName(beanBalance)
         );
     }
 
     public User requireUser(long id) {
         return userRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "用户不存在"));
+    }
+
+    @Transactional
+    public User saveUser(User u) {
+        return userRepository.save(u);
     }
 
     @Transactional(readOnly = true)
@@ -123,6 +146,7 @@ public class UserService {
         if (StringUtils.hasText(req.displayName())) {
             u.setDisplayName(req.displayName().trim());
         }
+        u.setGender(parseGender(req.gender()));
         UserRole newRole = UserRole.USER;
         if (StringUtils.hasText(req.role())) {
             try {
@@ -146,7 +170,7 @@ public class UserService {
         assertIsAdmin(requesterId);
         User u = requireUser(targetId);
         if (req.displayName() == null && req.role() == null && req.enabled() == null
-                && !StringUtils.hasText(req.newPassword())) {
+                && !StringUtils.hasText(req.newPassword()) && req.gender() == null) {
             return toAdminListItem(u);
         }
         if (StringUtils.hasText(req.newPassword())) {
@@ -184,8 +208,25 @@ public class UserService {
             String dn = req.displayName().trim();
             u.setDisplayName(StringUtils.hasText(dn) ? dn : null);
         }
+        if (req.gender() != null) {
+            u.setGender(parseGender(req.gender()));
+        }
         userRepository.save(u);
         return toAdminListItem(u);
+    }
+
+    @Transactional
+    public MeResponse updateOwnProfile(long userId, UpdateMyProfileRequest req) {
+        User u = requireUser(userId);
+        if (req.displayName() != null) {
+            String dn = req.displayName().trim();
+            u.setDisplayName(StringUtils.hasText(dn) ? dn : null);
+        }
+        if (req.gender() != null) {
+            u.setGender(parseGender(req.gender()));
+        }
+        userRepository.save(u);
+        return toMeResponse(u);
     }
 
     @Transactional
@@ -227,6 +268,7 @@ public class UserService {
                 u.getId(),
                 u.getEmail(),
                 u.getDisplayName(),
+                (u.getGender() == null ? UserGender.UNKNOWN : u.getGender()).name(),
                 primary,
                 names,
                 StringUtils.hasText(u.getAvatarStoredRelpath()),
@@ -235,18 +277,46 @@ public class UserService {
         );
     }
 
+    private static UserGender parseGender(String raw) {
+        if (!StringUtils.hasText(raw)) {
+            return UserGender.UNKNOWN;
+        }
+        try {
+            return UserGender.valueOf(raw.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "无效的性别");
+        }
+    }
+
     /** 留言板选择「仅某人可见」：列出全部注册用户（小站用户量小，直接全表）。 */
     public List<UserDirectoryItem> listDirectoryForGuestbook() {
         return userRepository.findAll(Sort.by("id")).stream()
                 .filter(User::isAccountEnabled)
                 .map(u -> {
                     UserRole r = u.getRole() != null ? u.getRole() : UserRole.USER;
+                    Long beanBalance = null;
+                    String beanLevelCode = null;
+                    String beanLevelName = null;
+                    if (userPrivacyService.canExposeBeanLevel(u.getId())) {
+                        long b = beanService.queryBalance(u.getId());
+                        beanBalance = b;
+                        beanLevelCode = beanService.resolveLevelCode(b);
+                        beanLevelName = beanService.resolveLevelName(b);
+                    }
+                    Long lastOnlineAtMillis = null;
+                    if (userPrivacyService.canExposeLastOnline(u.getId()) && u.getLastActiveAt() != null) {
+                        lastOnlineAtMillis = u.getLastActiveAt().toEpochMilli();
+                    }
                     return new UserDirectoryItem(
                             u.getId(),
                             StringUtils.hasText(u.getDisplayName()) ? u.getDisplayName().trim() : u.getEmail(),
                             u.getEmail(),
                             StringUtils.hasText(u.getAvatarStoredRelpath()),
-                            r.name()
+                            r.name(),
+                            beanBalance,
+                            beanLevelCode,
+                            beanLevelName,
+                            lastOnlineAtMillis
                     );
                 })
                 .toList();

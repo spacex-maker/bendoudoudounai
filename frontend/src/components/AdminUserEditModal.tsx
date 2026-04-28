@@ -24,6 +24,7 @@ export function AdminUserEditModal({ open, user, isSelf, onClose, onSaved }: Pro
   const { t } = useTranslation();
   const formId = useId();
   const [displayName, setDisplayName] = useState("");
+  const [gender, setGender] = useState<"UNKNOWN" | "MALE" | "FEMALE">("UNKNOWN");
   const [role, setRole] = useState<"USER" | "ADMIN">("USER");
   const [enabled, setEnabled] = useState(true);
   const [pwdOld, setPwdOld] = useState("");
@@ -36,6 +37,7 @@ export function AdminUserEditModal({ open, user, isSelf, onClose, onSaved }: Pro
   useEffect(() => {
     if (!open) return;
     setDisplayName(user.displayName?.trim() ?? "");
+    setGender((user.gender ?? "UNKNOWN") as "UNKNOWN" | "MALE" | "FEMALE");
     setRole(user.role === "ADMIN" ? "ADMIN" : "USER");
     setEnabled(user.enabled);
     setPwdOld("");
@@ -90,10 +92,12 @@ export function AdminUserEditModal({ open, user, isSelf, onClose, onSaved }: Pro
       }
       const body: {
         displayName?: string | null;
+        gender?: "UNKNOWN" | "MALE" | "FEMALE";
         role?: "USER" | "ADMIN";
         enabled?: boolean;
       } = {
         displayName: displayName.trim() || null,
+        gender,
       };
       if (!isSelf) {
         body.role = role;
@@ -150,6 +154,36 @@ export function AdminUserEditModal({ open, user, isSelf, onClose, onSaved }: Pro
               className="w-full rounded-lg border border-zinc-700 bg-zinc-950/80 px-3 py-2 text-sm text-zinc-200 focus:border-violet-500/50 focus:outline-none"
               maxLength={255}
             />
+          </div>
+          <div>
+            <label className="mb-1 block text-[11px] text-zinc-500">
+              性别
+            </label>
+            <div className="grid grid-cols-3 gap-1 rounded-lg border border-zinc-700 bg-zinc-950/80 p-1">
+              {[
+                { key: "UNKNOWN", label: "保密", tone: "text-zinc-300" },
+                { key: "MALE", label: "男 ♂", tone: "text-sky-300" },
+                { key: "FEMALE", label: "女 ♀", tone: "text-pink-300" },
+              ].map((item) => {
+                const active = gender === item.key;
+                return (
+                  <button
+                    key={item.key}
+                    type="button"
+                    onClick={() => setGender(item.key as "UNKNOWN" | "MALE" | "FEMALE")}
+                    className={clsx(
+                      "rounded-md px-2 py-1.5 text-xs font-medium transition",
+                      active
+                        ? "bg-zinc-800 ring-1 ring-violet-500/40"
+                        : "text-zinc-500 hover:bg-zinc-800/70",
+                      active && item.tone
+                    )}
+                  >
+                    {item.label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
           {isSelf ? (
             <div className="space-y-2 rounded-lg border border-zinc-800/80 bg-zinc-950/40 p-2.5">

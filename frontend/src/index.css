@@ -39,6 +39,14 @@
   .romantic-glow {
     box-shadow: 0 0 40px rgba(255, 140, 160, 0.15), 0 8px 32px rgba(200, 80, 100, 0.08);
   }
+
+  /* Keep vertical scrollbar visible but outside content layout width. */
+  .scrollbar-no-gutter {
+    padding-left: 10px;
+    padding-right: 10px;
+    margin-left: -10px;
+    margin-right: -10px;
+  }
 }
 
 /* 底部播放器：进度条略粗、音量条更细；拇指带高光与 hover */

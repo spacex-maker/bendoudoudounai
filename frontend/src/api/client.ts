@@ -129,6 +129,18 @@ export interface MeResponse {
   role?: string;
   /** 多角色；缺省时用 role 兜底 */
   roles?: string[];
+  gender?: "UNKNOWN" | "MALE" | "FEMALE";
+  beanBalance?: number;
+  beanLevelCode?: string;
+  beanLevelName?: string;
+}
+
+export interface UserPrivacySettingsDto {
+  recordLoginActivity: boolean;
+  recordPlayActivity: boolean;
+  publicBeanLevel: boolean;
+  publicLastOnline: boolean;
+  allowPlaylistInvite: boolean;
 }
 
 function roleListOf(user: Pick<MeResponse, "role" | "roles"> | null | undefined): string[] {
@@ -164,13 +176,27 @@ export async function fetchMe(): Promise<MeResponse> {
   const { data } = await api.get<MeResponse>("/api/users/me");
   const role = data.role ?? "USER";
   const roles = data.roles && data.roles.length > 0 ? data.roles : [role];
-  return { ...data, role, roles };
+  const gender = data.gender ?? "UNKNOWN";
+  return { ...data, role, roles, gender };
+}
+
+export async function fetchMyPrivacySettings(): Promise<UserPrivacySettingsDto> {
+  const { data } = await api.get<UserPrivacySettingsDto>("/api/users/me/privacy");
+  return data;
+}
+
+export async function updateMyPrivacySettings(
+  input: Partial<UserPrivacySettingsDto>
+): Promise<UserPrivacySettingsDto> {
+  const { data } = await api.post<UserPrivacySettingsDto>("/api/users/me/privacy", input);
+  return data;
 }
 
 export interface AdminUserRowDto {
   id: number;
   email: string;
   displayName: string | null;
+  gender: "UNKNOWN" | "MALE" | "FEMALE";
   role: string;
   roles?: string[];
   hasAvatar: boolean;
@@ -178,17 +204,96 @@ export interface AdminUserRowDto {
   enabled: boolean;
 }
 
+export interface BeanBalanceDto {
+  balance: number;
+  levelCode: string;
+  levelName: string;
+  nextLevelMinBeans: number | null;
+}
+
+export interface BeanTransactionDto {
+  id: number;
+  userId: number;
+  userLabel: string;
+  delta: number;
+  reason: string;
+  actionType: string | null;
+  relatedId: number | null;
+  createdAtMillis: number;
+}
+
+export interface BeanTransactionPageDto {
+  content: BeanTransactionDto[];
+  totalElements: number;
+  totalPages: number;
+  number: number;
+  size: number;
+}
+
+export interface BeanRuleDto {
+  actionType: string;
+  beanDelta: number;
+  enabled: boolean;
+}
+
+export interface BeanLevelDto {
+  id: number;
+  code: string;
+  name: string;
+  minBeans: number;
+  sortOrder: number;
+}
+
 export async function fetchAdminUsers(): Promise<AdminUserRowDto[]> {
   const { data } = await api.get<AdminUserRowDto[]>("/api/admin/users");
   return data.map((row) => {
     const r = row.role ?? "USER";
     const roles = row.roles && row.roles.length > 0 ? row.roles : [r];
-    return { ...row, role: r, roles, enabled: row.enabled !== false };
+    const gender = row.gender ?? "UNKNOWN";
+    return { ...row, role: r, roles, gender, enabled: row.enabled !== false };
   });
+}
+
+export async function fetchMyBeanOverview(): Promise<BeanBalanceDto> {
+  const { data } = await api.get<BeanBalanceDto>("/api/beans/me");
+  return data;
+}
+
+export async function fetchMyBeanTransactions(page = 0, size = 20): Promise<BeanTransactionPageDto> {
+  const { data } = await api.get<BeanTransactionPageDto>(`/api/beans/me/transactions?page=${page}&size=${size}`);
+  return data;
+}
+
+export async function fetchAdminBeanTransactions(page = 0, size = 30): Promise<BeanTransactionPageDto> {
+  const { data } = await api.get<BeanTransactionPageDto>(`/api/admin/beans/transactions?page=${page}&size=${size}`);
+  return data;
+}
+
+export async function fetchAdminBeanRules(): Promise<BeanRuleDto[]> {
+  const { data } = await api.get<BeanRuleDto[]>("/api/admin/beans/rules");
+  return data;
+}
+
+export async function updateAdminBeanRules(rules: BeanRuleDto[]): Promise<BeanRuleDto[]> {
+  const { data } = await api.put<BeanRuleDto[]>("/api/admin/beans/rules", rules);
+  return data;
+}
+
+export async function fetchAdminBeanLevels(): Promise<BeanLevelDto[]> {
+  const { data } = await api.get<BeanLevelDto[]>("/api/admin/beans/levels");
+  return data;
+}
+
+export async function updateAdminBeanLevels(
+  levels: Array<Pick<BeanLevelDto, "id" | "code" | "name" | "minBeans" | "sortOrder">>
+): Promise<BeanLevelDto[]> {
+  const { data } = await api.put<BeanLevelDto[]>("/api/admin/beans/levels", levels);
+  return data;
 }
 
 export type AdminUserPatchBody = {
   displayName?: string | null;
+  gender?: "UNKNOWN" | "MALE" | "FEMALE";
   /** 主身份仅 USER 或 ADMIN */
   role?: "USER" | "ADMIN";
   enabled?: boolean;
@@ -200,7 +305,8 @@ export async function patchAdminUser(id: number, body: AdminUserPatchBody): Prom
   const { data } = await api.patch<AdminUserRowDto>(`/api/admin/users/${id}`, body);
   const r = data.role ?? "USER";
   const roles = data.roles && data.roles.length > 0 ? data.roles : [r];
-  return { ...data, role: r, roles, enabled: data.enabled !== false };
+  const gender = data.gender ?? "UNKNOWN";
+  return { ...data, role: r, roles, gender, enabled: data.enabled !== false };
 }
 
 export async function resetAdminUserPassword(id: number): Promise<void> {
@@ -211,17 +317,20 @@ export async function createAdminUser(input: {
   email: string;
   password: string;
   displayName?: string | null;
+  gender?: "UNKNOWN" | "MALE" | "FEMALE";
   role?: "USER" | "ADMIN";
 }): Promise<AdminUserRowDto> {
   const { data } = await api.post<AdminUserRowDto>("/api/admin/users", {
     email: input.email.trim(),
     password: input.password,
     displayName: input.displayName?.trim() ? input.displayName.trim() : null,
+    gender: input.gender ?? "UNKNOWN",
     role: input.role ?? "USER",
   });
   const r = data.role ?? "USER";
   const roles = data.roles && data.roles.length > 0 ? data.roles : [r];
-  return { ...data, role: r, roles, enabled: data.enabled !== false };
+  const gender = data.gender ?? "UNKNOWN";
+  return { ...data, role: r, roles, gender, enabled: data.enabled !== false };
 }
 
 // —— 开发日记（GET 可匿名，写操作需登录且为开发者/管理员）——
@@ -484,6 +593,30 @@ export interface MusicTrackDto {
   hearted?: boolean;
 }
 
+export interface PlaylistListeningStatusItemDto {
+  trackId: number;
+  userId: number;
+  userLabel: string;
+  updatedAtMillis: number;
+}
+
+export interface PlaylistListeningStatusDto {
+  items: PlaylistListeningStatusItemDto[];
+}
+
+export interface PlaylistListeningWsEvent {
+  type: "listening_update" | "listening_clear";
+  playlistId: number;
+  item?: PlaylistListeningStatusItemDto;
+  userId?: number;
+}
+
+export interface TrackPlayUserStatDto {
+  userId: number;
+  userLabel: string;
+  playCount: number;
+}
+
 export interface MusicTrackCommentDto {
   id: number;
   trackId: number;
@@ -712,6 +845,10 @@ export interface UserDirectoryItemDto {
   hasAvatar: boolean;
   /** 旧服务端可能缺省，按 USER */
   role?: UserRole;
+  beanBalance?: number | null;
+  beanLevelCode?: string | null;
+  beanLevelName?: string | null;
+  lastOnlineAtMillis?: number | null;
 }
 
 /** 站内用户头像直链（供 img；需已登录，对方无头像时返回 null） */
@@ -940,6 +1077,13 @@ export async function recordTrackPlay(trackId: number): Promise<MusicTrackDto> {
   return authJson(res);
 }
 
+export async function fetchTrackPlayStats(trackId: number): Promise<TrackPlayUserStatDto[]> {
+  const res = await fetch(apiPath(`/api/music/tracks/${trackId}/play-stats`), {
+    headers: { Authorization: `Bearer ${getStoredToken()}` },
+  });
+  return authJson(res);
+}
+
 export async function uploadPlaylistWallpaper(
   playlistId: number,
   file: File
@@ -960,6 +1104,87 @@ export async function fetchMusicTracks(playlistId: number): Promise<MusicTrackDt
     headers: { Authorization: `Bearer ${getStoredToken()}` },
   });
   return authJson(res);
+}
+
+export async function fetchPlaylistListeningStatus(playlistId: number): Promise<PlaylistListeningStatusDto> {
+  const res = await fetch(apiPath(`/api/music/playlists/${playlistId}/listening-status`), {
+    headers: { Authorization: `Bearer ${getStoredToken()}` },
+  });
+  return authJson(res);
+}
+
+export async function updatePlaylistListeningState(
+  playlistId: number,
+  input: { trackId?: number | null; playing: boolean }
+): Promise<void> {
+  await api.post(`/api/music/playlists/${playlistId}/listening-state`, input);
+}
+
+/**
+ * 非阻塞上报「正在听」状态：
+ * - 延后到下一轮事件循环，避免与点击播放同帧竞争
+ * - 请求超时后直接放弃，不影响本地播放
+ * - 失败静默处理，由后续状态变更继续覆盖
+ */
+export function updatePlaylistListeningStateAsync(
+  playlistId: number,
+  input: { trackId?: number | null; playing: boolean },
+  timeoutMs = 1200
+): void {
+  window.setTimeout(() => {
+    const token = getStoredToken();
+    if (!token) return;
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+    void fetch(apiPath(`/api/music/playlists/${playlistId}/listening-state`), {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(input),
+      signal: controller.signal,
+      keepalive: true,
+    })
+      .catch(() => {
+        // no-op: intentionally non-blocking
+      })
+      .finally(() => {
+        window.clearTimeout(timer);
+      });
+  }, 0);
+}
+
+export function playlistListeningWsUrl(playlistId: number): string | null {
+  const token = getStoredToken();
+  if (!token) return null;
+  const base = getBackendBase();
+  let wsOrigin: string;
+  if (!base) {
+    wsOrigin = `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}`;
+  } else if (base.startsWith("https://")) {
+    wsOrigin = `wss://${base.slice("https://".length).replace(/\/$/, "")}`;
+  } else if (base.startsWith("http://")) {
+    wsOrigin = `ws://${base.slice("http://".length).replace(/\/$/, "")}`;
+  } else {
+    wsOrigin = `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}`;
+  }
+  const params = new URLSearchParams({
+    playlistId: String(playlistId),
+    access_token: token,
+  });
+  return `${wsOrigin}/ws/playlist-listening?${params.toString()}`;
+}
+
+export async function updateMyProfile(input: {
+  displayName?: string | null;
+  gender?: "UNKNOWN" | "MALE" | "FEMALE";
+}): Promise<MeResponse> {
+  const { data } = await api.post<MeResponse>("/api/users/me/profile", {
+    displayName: input.displayName,
+    gender: input.gender,
+  });
+  return data;
 }
 
 export async function fetchHeartTracks(): Promise<MusicTrackDto[]> {

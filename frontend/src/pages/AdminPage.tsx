@@ -3,6 +3,7 @@ import { Link, NavLink, Outlet, useLocation, useMatch } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
   Code2,
+  Coins,
   Heart,
   LayoutDashboard,
   Menu,
@@ -46,6 +47,7 @@ export function AdminPage() {
   const isUsers = useMatch({ path: "/admin/users", end: true });
   const isGuestbook = useMatch({ path: "/admin/guestbook", end: true });
   const isWishlist = useMatch({ path: "/admin/wishlist", end: true });
+  const isBeans = useMatch({ path: "/admin/beans", end: true });
   const inDevSection = pathname.startsWith("/admin/developers");
   const isDevApps = pathname.includes("/admin/developers/applications");
   const sectionTitle = inDevSection
@@ -54,6 +56,8 @@ export function AdminPage() {
       ? t("admin.guestbookTitle")
       : isWishlist
         ? t("admin.wishlistTitle")
+        : isBeans
+          ? "豆值管理"
         : isUsers
           ? t("admin.usersTitle")
           : t("admin.pageTitle");
@@ -65,6 +69,8 @@ export function AdminPage() {
       ? t("admin.guestbookSub")
       : isWishlist
         ? t("admin.wishlistSub")
+        : isBeans
+          ? "配置豆值规则与等级，并查看流水"
         : isUsers
           ? t("admin.usersSub")
           : t("admin.pageSub");
@@ -147,6 +153,14 @@ export function AdminPage() {
           >
             <Heart className="h-4 w-4 shrink-0 opacity-90" />
             {t("admin.navWishlist")}
+          </NavLink>
+          <NavLink
+            to="beans"
+            className={({ isActive }) => sideNavItemCls(isActive)}
+            {...navLinkProps}
+          >
+            <Coins className="h-4 w-4 shrink-0 opacity-90" />
+            豆值管理
           </NavLink>
           <NavLink
             to="developers/list"

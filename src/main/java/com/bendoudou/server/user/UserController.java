@@ -1,8 +1,11 @@
 package com.bendoudou.server.user;
 
 import com.bendoudou.server.auth.dto.MeResponse;
-import com.bendoudou.server.user.User;
+import com.bendoudou.server.bean.BeanService;
 import com.bendoudou.server.user.dto.ChangePasswordRequest;
+import com.bendoudou.server.user.dto.UpdateUserPrivacySettingsRequest;
+import com.bendoudou.server.user.dto.UpdateMyProfileRequest;
+import com.bendoudou.server.user.dto.UserPrivacySettingsResponse;
 import com.bendoudou.server.user.dto.UserDirectoryItem;
 import jakarta.validation.Valid;
 import org.springframework.core.io.Resource;
@@ -26,9 +29,17 @@ import org.springframework.web.multipart.MultipartFile;
 public class UserController {
 
     private final UserService userService;
+    private final BeanService beanService;
+    private final UserPrivacyService userPrivacyService;
 
-    public UserController(UserService userService) {
+    public UserController(
+            UserService userService,
+            BeanService beanService,
+            UserPrivacyService userPrivacyService
+    ) {
         this.userService = userService;
+        this.beanService = beanService;
+        this.userPrivacyService = userPrivacyService;
     }
 
     @GetMapping("/directory")
@@ -45,7 +56,10 @@ public class UserController {
             );
         }
         long id = Long.parseLong(auth.getName());
+        beanService.awardDailyUsage(id);
         User u = userService.requireUser(id);
+        u.setLastActiveAt(java.time.Instant.now());
+        userService.saveUser(u);
         return userService.toMeResponse(u);
     }
 
@@ -92,6 +106,30 @@ public class UserController {
     ) {
         long id = parseUserId(auth);
         userService.changeOwnPassword(id, body);
+    }
+
+    @PostMapping("/me/profile")
+    public MeResponse updateMyProfile(
+            @RequestBody UpdateMyProfileRequest body,
+            Authentication auth
+    ) {
+        long id = parseUserId(auth);
+        return userService.updateOwnProfile(id, body);
+    }
+
+    @GetMapping("/me/privacy")
+    public UserPrivacySettingsResponse myPrivacy(Authentication auth) {
+        long id = parseUserId(auth);
+        return userPrivacyService.getSettings(id);
+    }
+
+    @PostMapping("/me/privacy")
+    public UserPrivacySettingsResponse updateMyPrivacy(
+            @RequestBody UpdateUserPrivacySettingsRequest body,
+            Authentication auth
+    ) {
+        long id = parseUserId(auth);
+        return userPrivacyService.updateSettings(id, body);
     }
 
     private static long parseUserId(Authentication auth) {

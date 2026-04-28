@@ -10,11 +10,15 @@ import com.bendoudou.server.music.dto.MusicPreviewResponse;
 import com.bendoudou.server.music.dto.MusicTrackCommentResponse;
 import com.bendoudou.server.music.dto.MusicTrackResponse;
 import com.bendoudou.server.music.dto.PlaylistItemResponse;
+import com.bendoudou.server.music.dto.PlaylistListeningStatusResponse;
 import com.bendoudou.server.music.dto.PlaylistMemberItemResponse;
 import com.bendoudou.server.music.dto.PostTrackCommentRequest;
 import com.bendoudou.server.music.dto.UpdateMusicTrackRequest;
+import com.bendoudou.server.music.dto.UpdatePlaylistListeningStateRequest;
 import com.bendoudou.server.music.dto.UpdatePlaylistNameRequest;
 import com.bendoudou.server.music.dto.UpdatePlaylistWallpaperRequest;
+import com.bendoudou.server.music.dto.TrackPlayUserStatResponse;
+import com.bendoudou.server.bean.BeanService;
 import jakarta.validation.Valid;
 import org.springframework.core.io.Resource;
 import org.springframework.data.domain.Page;
@@ -49,14 +53,18 @@ public class MusicController {
     private static final Pattern SAFE_NAME = Pattern.compile("^[a-zA-Z0-9._-]+$");
 
     private final MusicService musicService;
+    private final BeanService beanService;
 
-    public MusicController(MusicService musicService) {
+    public MusicController(MusicService musicService, BeanService beanService) {
         this.musicService = musicService;
+        this.beanService = beanService;
     }
 
     @GetMapping("/playlists")
     public List<PlaylistItemResponse> listPlaylists(Authentication authentication) {
-        return musicService.listVisiblePlaylists(parseUserId(authentication));
+        long userId = parseUserId(authentication);
+        beanService.awardDailyUsage(userId);
+        return musicService.listVisiblePlaylists(userId);
     }
 
     @PostMapping("/playlists")
@@ -87,6 +95,23 @@ public class MusicController {
             Authentication authentication
     ) {
         return musicService.listPlaylistMembers(parseUserId(authentication), id);
+    }
+
+    @GetMapping("/playlists/{id}/listening-status")
+    public PlaylistListeningStatusResponse playlistListeningStatus(
+            @PathVariable long id,
+            Authentication authentication
+    ) {
+        return musicService.listPlaylistListeningStatus(parseUserId(authentication), id);
+    }
+
+    @PostMapping("/playlists/{id}/listening-state")
+    public void updatePlaylistListeningState(
+            @PathVariable long id,
+            @Valid @RequestBody UpdatePlaylistListeningStateRequest request,
+            Authentication authentication
+    ) {
+        musicService.updatePlaylistListeningState(parseUserId(authentication), id, request);
     }
 
     @GetMapping("/playlists/{id}/invitations/pending")
@@ -266,6 +291,14 @@ public class MusicController {
             Authentication authentication
     ) {
         return musicService.recordTrackPlay(parseUserId(authentication), id);
+    }
+
+    @GetMapping("/tracks/{id}/play-stats")
+    public List<TrackPlayUserStatResponse> trackPlayStats(
+            @PathVariable long id,
+            Authentication authentication
+    ) {
+        return musicService.listTrackPlayStats(parseUserId(authentication), id);
     }
 
     @GetMapping("/tracks/{id}/comments")

@@ -1,5 +1,8 @@
 package com.bendoudou.server.music;
 
+import com.bendoudou.server.bean.BeanService;
+import com.bendoudou.server.bean.BeanActionType;
+import com.bendoudou.server.bean.BeanTransactionReason;
 import com.bendoudou.server.music.AudioMetadataExtractor.ExtractionResult;
 import com.bendoudou.server.music.dto.CreatePlaylistRequest;
 import com.bendoudou.server.music.dto.CreateCosUploadTicketRequest;
@@ -12,11 +15,17 @@ import com.bendoudou.server.music.dto.MusicTrackCommentResponse;
 import com.bendoudou.server.music.dto.MusicTrackResponse;
 import com.bendoudou.server.music.dto.PlaylistMemberItemResponse;
 import com.bendoudou.server.music.dto.PlaylistItemResponse;
+import com.bendoudou.server.music.dto.PlaylistListeningStatusItemResponse;
+import com.bendoudou.server.music.dto.PlaylistListeningStatusResponse;
 import com.bendoudou.server.music.dto.PostTrackCommentRequest;
 import com.bendoudou.server.music.dto.UpdateMusicTrackRequest;
+import com.bendoudou.server.music.dto.UpdatePlaylistListeningStateRequest;
 import com.bendoudou.server.music.dto.UpdatePlaylistNameRequest;
 import com.bendoudou.server.music.dto.UpdatePlaylistWallpaperRequest;
+import com.bendoudou.server.music.dto.TrackPlayUserStatResponse;
+import com.bendoudou.server.music.ws.PlaylistListeningWebSocketHandler;
 import com.bendoudou.server.user.User;
+import com.bendoudou.server.user.UserPrivacyService;
 import com.bendoudou.server.user.UserRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -75,11 +84,15 @@ public class MusicService {
     private final UserTrackPlayHistoryRepository userTrackPlayHistoryRepository;
     private final MusicTrackCommentRepository musicTrackCommentRepository;
     private final MusicTrackCommentLikeRepository musicTrackCommentLikeRepository;
+    private final PlaylistListeningStatusRepository playlistListeningStatusRepository;
     private final UserRepository userRepository;
     private final AudioMetadataExtractor audioMetadataExtractor;
     private final CosStorageService cosStorageService;
     private final CosStsService cosStsService;
     private final FileContentHasher fileContentHasher;
+    private final BeanService beanService;
+    private final UserPrivacyService userPrivacyService;
+    private final PlaylistListeningWebSocketHandler playlistListeningWebSocketHandler;
 
     public MusicService(
             @Value("${bendoudou.music-upload-dir}") String musicUploadDir,
@@ -91,11 +104,15 @@ public class MusicService {
             UserTrackPlayHistoryRepository userTrackPlayHistoryRepository,
             MusicTrackCommentRepository musicTrackCommentRepository,
             MusicTrackCommentLikeRepository musicTrackCommentLikeRepository,
+            PlaylistListeningStatusRepository playlistListeningStatusRepository,
             UserRepository userRepository,
             AudioMetadataExtractor audioMetadataExtractor,
             CosStorageService cosStorageService,
             CosStsService cosStsService,
-            FileContentHasher fileContentHasher
+            FileContentHasher fileContentHasher,
+            BeanService beanService,
+            UserPrivacyService userPrivacyService,
+            PlaylistListeningWebSocketHandler playlistListeningWebSocketHandler
     ) {
         this.uploadBase = Path.of(musicUploadDir).toAbsolutePath().normalize();
         this.playlistRepository = playlistRepository;
@@ -106,11 +123,15 @@ public class MusicService {
         this.userTrackPlayHistoryRepository = userTrackPlayHistoryRepository;
         this.musicTrackCommentRepository = musicTrackCommentRepository;
         this.musicTrackCommentLikeRepository = musicTrackCommentLikeRepository;
+        this.playlistListeningStatusRepository = playlistListeningStatusRepository;
         this.userRepository = userRepository;
         this.audioMetadataExtractor = audioMetadataExtractor;
         this.cosStorageService = cosStorageService;
         this.cosStsService = cosStsService;
         this.fileContentHasher = fileContentHasher;
+        this.beanService = beanService;
+        this.userPrivacyService = userPrivacyService;
+        this.playlistListeningWebSocketHandler = playlistListeningWebSocketHandler;
     }
 
     @Transactional(readOnly = true)
@@ -139,6 +160,8 @@ public class MusicService {
         p.setDefaultPlaylist(false);
         p = playlistRepository.save(p);
         addMember(p.getId(), userId, PlaylistMemberRole.OWNER);
+        beanService.awardDailyUsage(userId);
+        beanService.awardByRule(userId, BeanActionType.PLAYLIST_CREATE, BeanTransactionReason.PLAYLIST_CREATE, p.getId());
         return toPlaylistItem(playlistMemberRepository.findByPlaylistIdAndUserId(p.getId(), userId).orElseThrow(), userId);
     }
 
@@ -152,6 +175,9 @@ public class MusicService {
         assertMember(pl.getId(), inviterId);
         User invitee = userRepository.findByEmail(req.inviteeEmail().trim().toLowerCase(Locale.ROOT))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "该邮箱尚未注册"));
+        if (!userPrivacyService.canReceivePlaylistInvite(invitee.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "对方已关闭歌单邀请");
+        }
         if (invitee.getId() == inviterId) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "不能邀请自己");
         }
@@ -664,6 +690,21 @@ public class MusicService {
                 .collect(Collectors.toList());
     }
 
+    @Transactional(readOnly = true)
+    public List<TrackPlayUserStatResponse> listTrackPlayStats(long requesterId, long trackId) {
+        MusicTrack track = musicTrackRepository.findById(trackId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "歌曲不存在"));
+        assertMember(track.getPlaylistId(), requesterId);
+        return userTrackPlayHistoryRepository.countByTrackGroupedByUser(trackId).stream()
+                .map(row -> {
+                    long uid = row.getUserId() == null ? 0L : row.getUserId();
+                    User u = uid == 0L ? null : userRepository.findById(uid).orElse(null);
+                    String label = u == null ? ("用户#" + uid) : userLabel(u);
+                    return new TrackPlayUserStatResponse(uid, label, row.getPlayCount());
+                })
+                .toList();
+    }
+
     @Transactional
     public List<MusicTrackResponse> listHeartTracks(long userId) {
         List<UserTrackHeart> hearts = userTrackHeartRepository.findByUserIdOrderByCreatedAtDesc(userId);
@@ -686,6 +727,9 @@ public class MusicService {
 
     @Transactional
     public List<MusicTrackResponse> listPlayHistoryTracks(long userId) {
+        if (!userPrivacyService.shouldRecordPlay(userId)) {
+            return List.of();
+        }
         List<UserTrackPlayHistory> rows = userTrackPlayHistoryRepository.findTop200ByUserIdOrderByPlayedAtDesc(userId);
         LinkedHashSet<Long> recentTrackIds = new LinkedHashSet<>();
         for (UserTrackPlayHistory row : rows) {
@@ -718,6 +762,8 @@ public class MusicService {
             row.setUserId(userId);
             row.setTrackId(trackId);
             userTrackHeartRepository.save(row);
+            beanService.awardDailyUsage(userId);
+            beanService.awardByRule(userId, BeanActionType.TRACK_HEART, BeanTransactionReason.TRACK_HEART, trackId);
         }
         return toResponse(t, true);
     }
@@ -766,11 +812,57 @@ public class MusicService {
         assertMember(t.getPlaylistId(), userId);
         t.setPlayCount(t.getPlayCount() + 1);
         musicTrackRepository.save(t);
-        UserTrackPlayHistory row = new UserTrackPlayHistory();
-        row.setUserId(userId);
-        row.setTrackId(trackId);
-        userTrackPlayHistoryRepository.save(row);
+        touchListeningStatus(t.getPlaylistId(), userId, trackId);
+        if (userPrivacyService.shouldRecordPlay(userId)) {
+            UserTrackPlayHistory row = new UserTrackPlayHistory();
+            row.setUserId(userId);
+            row.setTrackId(trackId);
+            userTrackPlayHistoryRepository.save(row);
+            beanService.awardDailyUsage(userId);
+            beanService.awardByRule(userId, BeanActionType.TRACK_PLAY, BeanTransactionReason.TRACK_PLAY, trackId);
+        }
         return toResponse(t, userTrackHeartRepository.existsByUserIdAndTrackId(userId, trackId));
+    }
+
+    @Transactional
+    public void updatePlaylistListeningState(long userId, long playlistId, UpdatePlaylistListeningStateRequest req) {
+        assertMember(playlistId, userId);
+        if (!req.playing()) {
+            playlistListeningStatusRepository.deleteByPlaylistIdAndUserId(playlistId, userId);
+            playlistListeningWebSocketHandler.broadcastListeningClear(playlistId, userId);
+            return;
+        }
+        if (req.trackId() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "缺少 trackId");
+        }
+        MusicTrack t = musicTrackRepository.findById(req.trackId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "歌曲不存在"));
+        if (t.getPlaylistId() != playlistId) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "歌曲不属于该歌单");
+        }
+        touchListeningStatus(playlistId, userId, req.trackId());
+    }
+
+    @Transactional(readOnly = true)
+    public PlaylistListeningStatusResponse listPlaylistListeningStatus(long userId, long playlistId) {
+        assertMember(playlistId, userId);
+        Instant activeAfter = Instant.now().minusSeconds(120);
+        List<PlaylistListeningStatusItemResponse> items = playlistListeningStatusRepository
+                .findByPlaylistIdAndUpdatedAtAfter(playlistId, activeAfter)
+                .stream()
+                .filter(s -> s.getUserId() != userId)
+                .map(s -> {
+                    User u = userRepository.findById(s.getUserId()).orElse(null);
+                    String label = u == null ? ("用户#" + s.getUserId()) : userLabel(u);
+                    return new PlaylistListeningStatusItemResponse(
+                            s.getTrackId(),
+                            s.getUserId(),
+                            label,
+                            s.getUpdatedAt().toEpochMilli()
+                    );
+                })
+                .toList();
+        return new PlaylistListeningStatusResponse(items);
     }
 
     @Transactional(readOnly = true)
@@ -854,6 +946,8 @@ public class MusicService {
         c.setCreatedAt(Instant.now());
         c.setUpdatedAt(Instant.now());
         c = musicTrackCommentRepository.save(c);
+        beanService.awardDailyUsage(userId);
+        beanService.awardByRule(userId, BeanActionType.TRACK_COMMENT, BeanTransactionReason.TRACK_COMMENT, c.getId());
         User u = userRepository.findById(userId).orElse(null);
         return toCommentResponse(c, u, false, List.of());
     }
@@ -1321,6 +1415,18 @@ public class MusicService {
             }
             throw ex;
         }
+    }
+
+    private void touchListeningStatus(long playlistId, long userId, long trackId) {
+        Instant now = Instant.now();
+        // 单条 SQL 原子 UPSERT，避免并发下 insert 后异常污染当前 Hibernate Session
+        playlistListeningStatusRepository.upsertListeningStatus(playlistId, userId, trackId, now);
+        User u = userRepository.findById(userId).orElse(null);
+        String label = u == null ? ("用户#" + userId) : userLabel(u);
+        playlistListeningWebSocketHandler.broadcastListeningUpdate(
+                playlistId,
+                new PlaylistListeningStatusItemResponse(trackId, userId, label, now.toEpochMilli())
+        );
     }
 
     private PlaylistItemResponse toPlaylistItem(PlaylistMember row, long currentUserId) {

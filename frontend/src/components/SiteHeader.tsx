@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Link, useLocation } from "react-router-dom";
-import { BookHeart, Compass, Heart, LogIn, Menu, Music2, X } from "lucide-react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { BookHeart, Compass, Heart, LogIn, LogOut, Menu, Music2, ShieldCheck, UserCog, X } from "lucide-react";
 import clsx from "clsx";
 import { useTranslation } from "react-i18next";
 import { useAuth, useAuthedUser } from "../auth/AuthContext";
 import { LanguageSwitch } from "./LanguageSwitch";
 import { UserAvatar } from "./UserAvatar";
-import { UserProfileModal } from "./UserProfileModal";
+import { userIsAdmin } from "../api/client";
 import { FOR_NAME } from "../siteMeta";
 
 function scrollToId(id: string) {
@@ -28,7 +28,8 @@ type Props = {
  */
 export function SiteHeader({ className }: Props) {
   const { t } = useTranslation();
-  const { state } = useAuth();
+  const { state, logout } = useAuth();
+  const navigate = useNavigate();
   const user = useAuthedUser();
   const { pathname } = useLocation();
   const isHome = pathname === "/";
@@ -36,16 +37,18 @@ export function SiteHeader({ className }: Props) {
   const isDevDiary = pathname.startsWith("/dev-diary");
   const isMusic = pathname === "/music";
 
-  const [profileOpen, setProfileOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileSheetEntered, setMobileSheetEntered] = useState(false);
   const mobileMenuRef = useRef<HTMLDivElement>(null);
   const mobileSheetRef = useRef<HTMLDivElement>(null);
+  const userMenuRef = useRef<HTMLDivElement>(null);
 
   const closeMobileMenu = () => setMobileMenuOpen(false);
 
   useEffect(() => {
     setMobileMenuOpen(false);
+    setUserMenuOpen(false);
   }, [pathname]);
 
   useEffect(() => {
@@ -67,6 +70,24 @@ export function SiteHeader({ className }: Props) {
       document.body.style.overflow = prevOverflow;
     };
   }, [mobileMenuOpen]);
+
+  useEffect(() => {
+    if (!userMenuOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setUserMenuOpen(false);
+    };
+    const onDoc = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (userMenuRef.current?.contains(t)) return;
+      setUserMenuOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    document.addEventListener("mousedown", onDoc);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("mousedown", onDoc);
+    };
+  }, [userMenuOpen]);
 
   useEffect(() => {
     if (!mobileMenuOpen) return;
@@ -164,6 +185,10 @@ export function SiteHeader({ className }: Props) {
               <Link to="/dev-diary" className="flex items-center gap-2 px-3 py-2 text-xs text-warm-700 transition hover:bg-white/60">
                 <BookHeart className="h-3.5 w-3.5 shrink-0 opacity-80" />
                 {t("nav.diary")}
+              </Link>
+              <Link to="/beans" className="flex items-center gap-2 px-3 py-2 text-xs text-warm-700 transition hover:bg-white/60">
+                <span className="inline-flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-amber-400/80 px-1 text-[9px] font-bold text-black">豆</span>
+                豆值系统
               </Link>
             </div>
           </details>
@@ -292,6 +317,10 @@ export function SiteHeader({ className }: Props) {
                             <BookHeart className="h-5 w-5 shrink-0 opacity-80" aria-hidden />
                             {t("nav.diary")}
                           </Link>
+                          <Link to="/beans" className={mobileItemClass()} onClick={closeMobileMenu}>
+                            <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-400/80 px-1 text-[10px] font-bold text-black">豆</span>
+                            豆值系统
+                          </Link>
                         </div>
                         {isHome ? (
                           <button
@@ -330,20 +359,63 @@ export function SiteHeader({ className }: Props) {
           {authLoading ? (
             <div className="h-9 w-24 animate-pulse rounded-full bg-white/35" aria-hidden />
           ) : authed && user ? (
-            <>
+            <div className="relative" ref={userMenuRef}>
               <button
                 type="button"
-                onClick={() => setProfileOpen(true)}
+                onClick={() => setUserMenuOpen((v) => !v)}
                 className="inline-flex max-w-[min(100%,14rem)] items-center gap-2 rounded-full border border-white/40 bg-white/25 py-1 pl-1 pr-2.5 text-warm-800 shadow-sm transition hover:bg-white/40 sm:max-w-[18rem] sm:gap-2.5 sm:pl-1.5 sm:pr-3"
                 title={t("userProfile.title")}
+                aria-haspopup="menu"
+                aria-expanded={userMenuOpen}
               >
                 <UserAvatar user={user} className="h-8 w-8 shrink-0 border border-white/50 shadow sm:h-9 sm:w-9" />
                 <span className="min-w-0 flex-1 truncate text-left text-sm font-medium">
                   {user.displayName?.trim() || user.email}
                 </span>
               </button>
-              <UserProfileModal open={profileOpen} onClose={() => setProfileOpen(false)} user={user} />
-            </>
+              {userMenuOpen ? (
+                <div className="absolute right-0 top-[calc(100%+0.45rem)] z-40 w-48 overflow-hidden rounded-xl border border-white/45 bg-white/95 py-1 text-xs shadow-lg shadow-rose-200/25 backdrop-blur-xl">
+                  <Link
+                    to="/account/profile"
+                    className="flex items-center gap-2 px-3 py-2 text-warm-700 transition hover:bg-white/70"
+                    onClick={() => setUserMenuOpen(false)}
+                  >
+                    <UserCog className="h-3.5 w-3.5" />
+                    个人信息
+                  </Link>
+                  <Link
+                    to="/account/privacy"
+                    className="flex items-center gap-2 px-3 py-2 text-warm-700 transition hover:bg-white/70"
+                    onClick={() => setUserMenuOpen(false)}
+                  >
+                    <ShieldCheck className="h-3.5 w-3.5" />
+                    隐私设置
+                  </Link>
+                  {userIsAdmin(user) ? (
+                    <Link
+                      to="/admin"
+                      className="flex items-center gap-2 px-3 py-2 text-warm-700 transition hover:bg-white/70"
+                      onClick={() => setUserMenuOpen(false)}
+                    >
+                      <Compass className="h-3.5 w-3.5" />
+                      管理后台
+                    </Link>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-rose-600 transition hover:bg-rose-50"
+                    onClick={() => {
+                      logout();
+                      setUserMenuOpen(false);
+                      navigate("/login", { replace: true });
+                    }}
+                  >
+                    <LogOut className="h-3.5 w-3.5" />
+                    退出登录
+                  </button>
+                </div>
+              ) : null}
+            </div>
           ) : (
             <Link
               to="/login"

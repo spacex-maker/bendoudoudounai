@@ -3,9 +3,15 @@ import { createPortal } from "react-dom";
 import { Link, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import clsx from "clsx";
-import { X, LogOut, Camera, LayoutDashboard, ChevronDown } from "lucide-react";
+import { X, LogOut, Camera, LayoutDashboard, ChevronDown, ShieldCheck } from "lucide-react";
 import type { MeResponse } from "../api/client";
-import { changeMyPassword, uploadUserAvatar, userIsAdmin } from "../api/client";
+import {
+  changeMyPassword,
+  fetchMyPrivacySettings,
+  updateMyPrivacySettings,
+  uploadUserAvatar,
+  userIsAdmin,
+} from "../api/client";
 import { mapApiError } from "../i18n/mapApiError";
 import { useAuth } from "../auth/AuthContext";
 import { UserAvatar } from "./UserAvatar";
@@ -30,6 +36,9 @@ export function UserProfileModal({ open, onClose, user }: Props) {
   const [pwdMsg, setPwdMsg] = useState<string | null>(null);
   const [pwdSuccess, setPwdSuccess] = useState(false);
   const [pwdOpen, setPwdOpen] = useState(false);
+  const [privacyLoading, setPrivacyLoading] = useState(false);
+  const [recordLoginActivity, setRecordLoginActivity] = useState(true);
+  const [recordPlayActivity, setRecordPlayActivity] = useState(true);
 
   useEffect(() => {
     if (!open) return;
@@ -39,6 +48,18 @@ export function UserProfileModal({ open, onClose, user }: Props) {
     setPwdOld("");
     setPwdNew("");
     setPwdOpen(false);
+    setPrivacyLoading(true);
+    void (async () => {
+      try {
+        const p = await fetchMyPrivacySettings();
+        setRecordLoginActivity(p.recordLoginActivity);
+        setRecordPlayActivity(p.recordPlayActivity);
+      } catch {
+        // ignore and keep defaults
+      } finally {
+        setPrivacyLoading(false);
+      }
+    })();
   }, [open]);
 
   if (!open) return null;
@@ -68,6 +89,20 @@ export function UserProfileModal({ open, onClose, user }: Props) {
     logout();
     onClose();
     navigate("/login", { replace: true });
+  };
+
+  const onTogglePrivacy = async (field: "recordLoginActivity" | "recordPlayActivity", next: boolean) => {
+    setPrivacyLoading(true);
+    try {
+      const updated = await updateMyPrivacySettings({ [field]: next });
+      setRecordLoginActivity(updated.recordLoginActivity);
+      setRecordPlayActivity(updated.recordPlayActivity);
+      setErr(null);
+    } catch (ex) {
+      setErr(ex instanceof Error ? ex.message : "隐私设置更新失败");
+    } finally {
+      setPrivacyLoading(false);
+    }
   };
 
   /** 挂到 body，避免放在带 backdrop-blur 的 fixed header 内导致 fixed 相对顶栏、弹层挤在页面顶部 */
@@ -219,6 +254,61 @@ export function UserProfileModal({ open, onClose, user }: Props) {
                 </button>
               </form>
             ) : null}
+          </div>
+
+          <div className="space-y-2 rounded-2xl border border-emerald-400/20 bg-emerald-500/10 p-3">
+            <p className="inline-flex items-center gap-1.5 text-[11px] font-medium text-emerald-200">
+              <ShieldCheck className="h-3.5 w-3.5" />
+              隐私设置
+            </p>
+            <p className="text-[11px] leading-relaxed text-emerald-100/90">
+              我们对隐私的保护是认真的。你可以随时关闭登录记录和听歌记录；关闭后系统将不再记录对应数据，同时相关行为也不会计入豆值。
+            </p>
+
+            <div className="space-y-2 rounded-xl border border-white/10 bg-zinc-950/35 p-2.5">
+              <label className="flex items-center justify-between gap-3">
+                <span className="text-[12px] text-zinc-300">记录登录活动（并计入豆值）</span>
+                <button
+                  type="button"
+                  disabled={privacyLoading}
+                  onClick={() => void onTogglePrivacy("recordLoginActivity", !recordLoginActivity)}
+                  className={clsx(
+                    "relative h-6 w-11 rounded-full transition",
+                    recordLoginActivity ? "bg-emerald-500/80" : "bg-zinc-600/80",
+                    privacyLoading && "opacity-50"
+                  )}
+                  aria-label="切换登录活动记录"
+                >
+                  <span
+                    className={clsx(
+                      "absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform",
+                      recordLoginActivity ? "left-[22px]" : "left-0.5"
+                    )}
+                  />
+                </button>
+              </label>
+              <label className="flex items-center justify-between gap-3">
+                <span className="text-[12px] text-zinc-300">记录听歌活动（并计入豆值）</span>
+                <button
+                  type="button"
+                  disabled={privacyLoading}
+                  onClick={() => void onTogglePrivacy("recordPlayActivity", !recordPlayActivity)}
+                  className={clsx(
+                    "relative h-6 w-11 rounded-full transition",
+                    recordPlayActivity ? "bg-emerald-500/80" : "bg-zinc-600/80",
+                    privacyLoading && "opacity-50"
+                  )}
+                  aria-label="切换听歌活动记录"
+                >
+                  <span
+                    className={clsx(
+                      "absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform",
+                      recordPlayActivity ? "left-[22px]" : "left-0.5"
+                    )}
+                  />
+                </button>
+              </label>
+            </div>
           </div>
 
           {err ? <p className="text-center text-[11px] text-red-400/90">{err}</p> : null}

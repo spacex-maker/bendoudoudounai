@@ -1,7 +1,15 @@
+import { useState } from "react";
 import clsx from "clsx";
-import { Download, Heart, Music2, Pause, Play, Trash2 } from "lucide-react";
+import { Download, Heart, Loader2, Music2, Pause, Play, Trash2, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { coverDisplayUrl, getTrackFileUrl, type MusicTrackDto } from "../api/client";
+import {
+  coverDisplayUrl,
+  fetchTrackPlayStats,
+  getTrackFileUrl,
+  type MusicTrackDto,
+  type PlaylistListeningStatusItemDto,
+  type TrackPlayUserStatDto,
+} from "../api/client";
 
 type Props = {
   tracks: MusicTrackDto[];
@@ -14,6 +22,7 @@ type Props = {
   onSetCurrentId: (id: number) => void;
   onToggleHeart: (track: MusicTrackDto) => void | Promise<void>;
   onRequestRemoveTrack: (track: MusicTrackDto) => void;
+  listeningByTrack?: Record<number, PlaylistListeningStatusItemDto[]>;
 };
 
 function formatDuration(sec: number) {
@@ -34,11 +43,30 @@ export function MusicTrackTable({
   onSetCurrentId,
   onToggleHeart,
   onRequestRemoveTrack,
+  listeningByTrack,
 }: Props) {
   const { t } = useTranslation();
   const tableCoverLabel = t("music.tableCover");
   const tableDurationLabel = t("music.tableDuration");
   const loadingPlaceholders = [1, 2, 3, 4, 5];
+  const [playStatsOpenFor, setPlayStatsOpenFor] = useState<MusicTrackDto | null>(null);
+  const [playStatsRows, setPlayStatsRows] = useState<TrackPlayUserStatDto[]>([]);
+  const [playStatsLoading, setPlayStatsLoading] = useState(false);
+  const [playStatsErr, setPlayStatsErr] = useState<string | null>(null);
+
+  const openPlayStats = async (tr: MusicTrackDto) => {
+    setPlayStatsOpenFor(tr);
+    setPlayStatsRows([]);
+    setPlayStatsErr(null);
+    setPlayStatsLoading(true);
+    try {
+      setPlayStatsRows(await fetchTrackPlayStats(tr.id));
+    } catch (e) {
+      setPlayStatsErr(e instanceof Error ? e.message : "加载失败");
+    } finally {
+      setPlayStatsLoading(false);
+    }
+  };
 
   return (
     <div className="overflow-hidden rounded-2xl border border-netease-line">
@@ -67,7 +95,9 @@ export function MusicTrackTable({
         {tracks.length === 0 && !listLoading ? (
           <div className="px-4 py-8 text-center text-xs text-zinc-500">{t("music.emptyTracks")}</div>
         ) : null}
-        {tracks.map((tr) => (
+        {tracks.map((tr) => {
+          const listeners = listeningByTrack?.[tr.id] ?? [];
+          return (
           <div
             key={tr.id}
             onDoubleClick={() => onSelectTrack(tr, true)}
@@ -94,9 +124,25 @@ export function MusicTrackTable({
                 </div>
                 <div className="min-w-0 flex min-h-[3.5rem] flex-1 flex-col">
                   <div className="truncate text-sm text-zinc-200">{tr.title}</div>
+                  {listeners.length > 0 ? (
+                    <div className="mt-0.5 truncate text-[11px] text-emerald-300/90">
+                      {listeners[0]!.userLabel}
+                      {listeners.length > 1 ? ` 等 ${listeners.length} 位协作者` : ""} 正在听
+                    </div>
+                  ) : null}
                   <div className="mt-0.5 truncate text-xs text-zinc-500">{tr.artist}{tr.album ? ` · ${tr.album}` : ""}</div>
                   <div className="mt-auto pt-1 text-[11px] text-zinc-500">
-                    {formatDuration(tr.durationSeconds)} · {t("music.tablePlays")}: {tr.playCount ?? 0}
+                    {formatDuration(tr.durationSeconds)} ·{" "}
+                    <button
+                      type="button"
+                      className="rounded px-1 py-0.5 text-zinc-400 underline-offset-2 transition hover:bg-white/10 hover:text-zinc-200 hover:underline"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void openPlayStats(tr);
+                      }}
+                    >
+                      {t("music.tablePlays")}: {tr.playCount ?? 0}
+                    </button>
                   </div>
                 </div>
               </div>
@@ -123,7 +169,8 @@ export function MusicTrackTable({
               </div>
             </div>
           </div>
-        ))}
+          );
+        })}
       </div>
       <table className="hidden w-full text-left text-xs md:table">
         <thead className="bg-[#1e1e1e]/65 text-zinc-500">
@@ -190,7 +237,9 @@ export function MusicTrackTable({
               </td>
             </tr>
           )}
-          {tracks.map((tr) => (
+          {tracks.map((tr) => {
+            const listeners = listeningByTrack?.[tr.id] ?? [];
+            return (
             <tr
               key={tr.id}
               onDoubleClick={() => onSelectTrack(tr, true)}
@@ -221,7 +270,8 @@ export function MusicTrackTable({
                 </div>
               </td>
               <td className="max-w-[1px] px-2 py-2 text-zinc-200">
-                <span className="min-w-0 truncate">
+                <div className="min-w-0">
+                <span className="min-w-0 truncate block">
                   {tr.title}
                   {tr.metadataFromFile && (
                     <span className="ml-1 rounded-full bg-zinc-700/60 px-1.5 py-px text-[10px] text-zinc-400">
@@ -230,10 +280,28 @@ export function MusicTrackTable({
                   )}
                   {tr.note && <span className="ml-1 text-zinc-500">· {tr.note}</span>}
                 </span>
+                {listeners.length > 0 ? (
+                  <div className="truncate text-[11px] text-emerald-300/90">
+                    {listeners[0]!.userLabel}
+                    {listeners.length > 1 ? ` 等 ${listeners.length} 位协作者` : ""} 正在听
+                  </div>
+                ) : null}
+                </div>
               </td>
               <td className="max-w-[1px] truncate px-2 py-2 text-zinc-400">{tr.artist}</td>
               <td className="hidden max-w-[1px] truncate px-2 py-2 text-zinc-500 sm:table-cell">{tr.album}</td>
-              <td className="px-2 py-2 text-right tabular-nums text-zinc-500">{tr.playCount ?? 0}</td>
+              <td className="px-2 py-2 text-right tabular-nums text-zinc-500">
+                <button
+                  type="button"
+                  className="rounded px-1 py-0.5 underline-offset-2 transition hover:bg-white/10 hover:text-zinc-200 hover:underline"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void openPlayStats(tr);
+                  }}
+                >
+                  {tr.playCount ?? 0}
+                </button>
+              </td>
               <td className="px-2 py-2 text-right tabular-nums text-zinc-500">{formatDuration(tr.durationSeconds)}</td>
               <td className="px-1 py-2 text-zinc-500">
                 <button
@@ -296,9 +364,54 @@ export function MusicTrackTable({
                 </a>
               </td>
             </tr>
-          ))}
+            );
+          })}
         </tbody>
       </table>
+      {playStatsOpenFor ? (
+        <div
+          className="fixed inset-0 z-[80] flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm"
+          onClick={() => setPlayStatsOpenFor(null)}
+        >
+          <section
+            className="w-full max-w-md rounded-2xl border border-zinc-700 bg-zinc-900 p-4 text-zinc-200 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-2 flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <h3 className="truncate text-sm font-semibold">播放次数明细</h3>
+                <p className="truncate text-xs text-zinc-500">《{playStatsOpenFor.title}》</p>
+              </div>
+              <button
+                type="button"
+                className="rounded-full p-1 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+                onClick={() => setPlayStatsOpenFor(null)}
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            {playStatsLoading ? (
+              <div className="flex items-center justify-center gap-2 py-8 text-sm text-zinc-500">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                加载中
+              </div>
+            ) : playStatsErr ? (
+              <p className="py-6 text-center text-sm text-red-400">{playStatsErr}</p>
+            ) : playStatsRows.length === 0 ? (
+              <p className="py-6 text-center text-sm text-zinc-500">暂无播放记录</p>
+            ) : (
+              <div className="max-h-72 space-y-1 overflow-auto pr-1">
+                {playStatsRows.map((row, idx) => (
+                  <div key={`${row.userId}-${idx}`} className="flex items-center justify-between rounded-lg px-2 py-1.5 hover:bg-white/5">
+                    <span className="truncate text-sm">{row.userLabel}</span>
+                    <span className="shrink-0 text-xs tabular-nums text-zinc-400">{row.playCount} 次</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        </div>
+      ) : null}
     </div>
   );
 }

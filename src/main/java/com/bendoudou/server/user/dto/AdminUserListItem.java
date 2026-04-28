@@ -9,6 +9,7 @@ public record AdminUserListItem(
         long id,
         String email,
         String displayName,
+        String gender,
         /** 展示用主角色，兼容旧字段 */
         String role,
         /** 当前已授予的全部角色 */

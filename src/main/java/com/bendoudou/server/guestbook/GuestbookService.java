@@ -1,5 +1,8 @@
 package com.bendoudou.server.guestbook;
 
+import com.bendoudou.server.bean.BeanActionType;
+import com.bendoudou.server.bean.BeanService;
+import com.bendoudou.server.bean.BeanTransactionReason;
 import com.bendoudou.server.guestbook.dto.CreateGuestbookMessageRequest;
 import com.bendoudou.server.guestbook.dto.GuestbookMessageResponse;
 import com.bendoudou.server.user.User;
@@ -37,11 +40,13 @@ public class GuestbookService {
 
     private final GuestbookMessageRepository repository;
     private final UserRepository userRepository;
+    private final BeanService beanService;
     private final ConcurrentHashMap<String, Long> lastSubmitMsByIp = new ConcurrentHashMap<>();
 
-    public GuestbookService(GuestbookMessageRepository repository, UserRepository userRepository) {
+    public GuestbookService(GuestbookMessageRepository repository, UserRepository userRepository, BeanService beanService) {
         this.repository = repository;
         this.userRepository = userRepository;
+        this.beanService = beanService;
     }
 
     /**
@@ -194,6 +199,15 @@ public class GuestbookService {
         m.setAuthorUserId(authedUserIdOrNull);
         m = repository.save(m);
         lastSubmitMsByIp.put(clientIp, now);
+        if (authedUserIdOrNull != null) {
+            beanService.awardDailyUsage(authedUserIdOrNull);
+            beanService.awardByRule(
+                    authedUserIdOrNull,
+                    BeanActionType.GUESTBOOK_POST,
+                    BeanTransactionReason.GUESTBOOK_POST,
+                    m.getId()
+            );
+        }
 
         String targetLabel = vis == null ? null : userRepository.findById(vis).map(GuestbookService::displayLabel).orElse(null);
         return GuestbookMessageResponse.flat(

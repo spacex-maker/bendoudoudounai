@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { Home, ListMusic, Search, Heart, Radio, Music2, ChevronRight, Settings2, LayoutDashboard, History, Menu, X } from "lucide-react";
+import { Home, ListMusic, Search, Heart, Radio, Music2, ChevronRight, Settings2, LayoutDashboard, History, Menu, X, ArrowLeft } from "lucide-react";
 import clsx from "clsx";
 import { mapApiError } from "../i18n/mapApiError";
 import { LanguageSwitch } from "../components/LanguageSwitch";
 import { useAuthedUser } from "../auth/AuthContext";
 import { usePageAppearance } from "../pageAppearance/PageAppearanceContext";
-import { MusicPlayerBar } from "../components/MusicPlayerBar";
 import { TrackLyricsScroll } from "../components/TrackLyricsScroll";
 import { NeteaseVinylDisc } from "../components/NeteaseVinylDisc";
 import { UploadTrackModal } from "../components/UploadTrackModal";
@@ -19,17 +18,20 @@ import { ConfirmModal } from "../components/ConfirmModal";
 import { MusicTrackTable } from "../components/MusicTrackTable";
 import { MusicTrackComments } from "../components/MusicTrackComments";
 import { FOR_NAME } from "../siteMeta";
-import { getActiveLyricText } from "../music/lyricsUtils";
 import { useSyncedLyrics } from "../music/useSyncedLyrics";
+import { useMusicPlayer } from "../music/MusicPlayerContext";
 import {
   type MusicTrackDto,
   type PlaylistItemDto,
+  type PlaylistListeningStatusItemDto,
+  type PlaylistListeningWsEvent,
   type InvitationItemDto,
-  coverDisplayUrl,
   fetchMusicTracks,
   recordTrackPlay,
   fetchVisiblePlaylists,
   fetchIncomingInvitations,
+  fetchPlaylistListeningStatus,
+  playlistListeningWsUrl,
   acceptInvitation,
   declineInvitation,
   getStoredPlaylistId,
@@ -43,11 +45,10 @@ import {
   deleteTrackFromPlaylist,
 } from "../api/client";
 
-type PlayMode = "single" | "list" | "shuffle";
-const PLAY_MODE_KEY = "bendoudou_play_mode";
-
 export function MusicPage() {
   const { t } = useTranslation();
+  const location = useLocation();
+  const navigate = useNavigate();
   const user = useAuthedUser();
   const {
     wallpaperActive,
@@ -55,7 +56,19 @@ export function MusicPage() {
     setWallpaperTargetPlaylistId,
     registerPlaylistsRefresh,
   } = usePageAppearance();
-  const audioRef = useRef<HTMLAudioElement>(null);
+  const {
+    currentTrack,
+    setCurrentTrack,
+    currentId,
+    setCurrentId,
+    playing,
+    setPlaying,
+    playPos,
+    playDur,
+    selectTrack,
+    coverSrc: playerCoverSrc,
+    setQueue,
+  } = useMusicPlayer();
   const [activeNav, setActiveNav] = useState("discover");
   const [search, setSearch] = useState("");
   const [tracks, setTracks] = useState<MusicTrackDto[]>([]);
@@ -72,40 +85,27 @@ export function MusicPage() {
     kind: "liked" | "playlist";
     track: MusicTrackDto;
   } | null>(null);
-  const [currentTrack, setCurrentTrack] = useState<MusicTrackDto | null>(null);
-  const [currentId, setCurrentId] = useState<number | null>(null);
-  const [playing, setPlaying] = useState(false);
-  const [playPos, setPlayPos] = useState(0);
-  const [playDur, setPlayDur] = useState(0);
-  const [audioObjectUrl, setAudioObjectUrl] = useState<string | null>(null);
-  const [scrubbing, setScrubbing] = useState(false);
-  const [historyPanelOpen, setHistoryPanelOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [mobileView, setMobileView] = useState<"list" | "player">("list");
-  const [historyTracks, setHistoryTracks] = useState<MusicTrackDto[]>([]);
-  const [historyLoading, setHistoryLoading] = useState(false);
-  const [historyErr, setHistoryErr] = useState<string | null>(null);
-  const [playMode, setPlayMode] = useState<PlayMode>(() => {
-    try {
-      const v = localStorage.getItem(PLAY_MODE_KEY);
-      if (v === "single" || v === "list" || v === "shuffle") return v;
-    } catch {
-      /* ignore */
-    }
-    return "list";
-  });
+  const [listeningByTrack, setListeningByTrack] = useState<Record<number, PlaylistListeningStatusItemDto[]>>({});
   const recordedPlayForTrackRef = useRef<number | null>(null);
 
-  const [volume, setVolume] = useState(() => {
-    try {
-      const s = localStorage.getItem("bendoudou_volume");
-      if (s == null) return 1;
-      const v = parseFloat(s);
-      return Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 1;
-    } catch {
-      return 1;
-    }
-  });
+  const setMusicView = useCallback(
+    (nextView: "list" | "player") => {
+      setMobileView(nextView);
+      const params = new URLSearchParams(window.location.search);
+      if (nextView === "player") params.set("view", "player");
+      else params.delete("view");
+      const searchText = params.toString();
+      navigate({ pathname: "/music", search: searchText ? `?${searchText}` : "" }, { replace: true });
+    },
+    [navigate]
+  );
+
+  useEffect(() => {
+    const view = new URLSearchParams(location.search).get("view");
+    setMobileView(view === "player" ? "player" : "list");
+  }, [location.search]);
 
   const loadList = useCallback(async () => {
     setListLoading(true);
@@ -214,7 +214,7 @@ export function MusicPage() {
 
   const onPickLiked = useCallback(async () => {
     setActiveNav("liked");
-    setMobileView("list");
+    setMusicView("list");
     setListLoading(true);
     setListErr(null);
     setTracks([]);
@@ -226,11 +226,11 @@ export function MusicPage() {
     } finally {
       setListLoading(false);
     }
-  }, [t]);
+  }, [setMusicView, t]);
 
   const onPickHistory = useCallback(async () => {
     setActiveNav("history");
-    setMobileView("list");
+    setMusicView("list");
     setListLoading(true);
     setListErr(null);
     setTracks([]);
@@ -242,31 +242,99 @@ export function MusicPage() {
     } finally {
       setListLoading(false);
     }
-  }, [t]);
-
-  const openHistoryPanel = useCallback(() => {
-    setHistoryPanelOpen(true);
-    setHistoryLoading(true);
-    setHistoryErr(null);
-    void (async () => {
-      try {
-        const rows = await fetchPlayHistoryTracks();
-        setHistoryTracks(rows);
-      } catch (e) {
-        setHistoryErr(mapApiError(t, e));
-      } finally {
-        setHistoryLoading(false);
-      }
-    })();
-  }, [t]);
+  }, [setMusicView, t]);
 
   useEffect(() => {
     setMobileNavOpen(false);
   }, [activeNav, currentPlaylistId]);
 
   useEffect(() => {
-    setMobileView("list");
-  }, [activeNav, currentPlaylistId, search]);
+    setMusicView("list");
+  }, [activeNav, currentPlaylistId, search, setMusicView]);
+
+  useEffect(() => {
+    if (activeNav !== "discover" || currentPlaylistId == null) {
+      setListeningByTrack({});
+      return;
+    }
+    let cancelled = false;
+    let ws: WebSocket | null = null;
+    let reconnectTimer: number | null = null;
+    const pull = async () => {
+      try {
+        const data = await fetchPlaylistListeningStatus(currentPlaylistId);
+        if (cancelled) return;
+        const grouped: Record<number, PlaylistListeningStatusItemDto[]> = {};
+        for (const item of data.items ?? []) {
+          if (!grouped[item.trackId]) grouped[item.trackId] = [];
+          grouped[item.trackId]!.push(item);
+        }
+        setListeningByTrack(grouped);
+      } catch {
+        if (!cancelled) setListeningByTrack({});
+      }
+    };
+    void pull();
+    const connect = () => {
+      if (cancelled) return;
+      const url = playlistListeningWsUrl(currentPlaylistId);
+      if (!url) return;
+      ws = new WebSocket(url);
+      ws.onmessage = (ev) => {
+        if (cancelled) return;
+        try {
+          const data = JSON.parse(ev.data) as PlaylistListeningWsEvent;
+          if (data.type === "listening_clear") {
+            const clearedUserId = data.userId;
+            if (typeof clearedUserId !== "number") return;
+            setListeningByTrack((prev) => {
+              const next: Record<number, PlaylistListeningStatusItemDto[]> = {};
+              for (const [trackKey, arr] of Object.entries(prev)) {
+                const kept = arr.filter((x) => x.userId !== clearedUserId);
+                if (kept.length > 0) next[Number(trackKey)] = kept;
+              }
+              return next;
+            });
+            return;
+          }
+          if (data.type !== "listening_update" || !data.item) return;
+          setListeningByTrack((prev) => {
+            const next: Record<number, PlaylistListeningStatusItemDto[]> = {};
+            for (const [trackKey, arr] of Object.entries(prev)) {
+              next[Number(trackKey)] = arr.filter((x) => x.userId !== data.item!.userId);
+            }
+            if (!next[data.item.trackId]) next[data.item.trackId] = [];
+            next[data.item.trackId]!.push(data.item);
+            return next;
+          });
+        } catch {
+          // ignore malformed ws payload
+        }
+      };
+      ws.onclose = () => {
+        if (cancelled) return;
+        reconnectTimer = window.setTimeout(connect, 2000);
+      };
+    };
+    connect();
+    const pruneTimer = window.setInterval(() => {
+      const now = Date.now();
+      setListeningByTrack((prev) => {
+        const next: Record<number, PlaylistListeningStatusItemDto[]> = {};
+        for (const [trackKey, arr] of Object.entries(prev)) {
+          const kept = arr.filter((x) => now - x.updatedAtMillis <= 120_000);
+          if (kept.length > 0) next[Number(trackKey)] = kept;
+        }
+        return next;
+      });
+    }, 5000);
+    return () => {
+      cancelled = true;
+      if (ws) ws.close();
+      if (reconnectTimer != null) window.clearTimeout(reconnectTimer);
+      window.clearInterval(pruneTimer);
+    };
+  }, [activeNav, currentPlaylistId]);
 
   const onToggleHeart = useCallback(
     async (tr: MusicTrackDto) => {
@@ -303,7 +371,7 @@ export function MusicPage() {
 
   const onPickPlaylist = useCallback(async (id: number) => {
     setCurrentPlaylistId(id);
-    setMobileView("list");
+    setMusicView("list");
     setStoredPlaylistId(id);
     setListLoading(true);
     setListErr(null);
@@ -316,7 +384,7 @@ export function MusicPage() {
     } finally {
       setListLoading(false);
     }
-  }, [t]);
+  }, [setMusicView, t]);
 
   const onCreatedPlaylist = useCallback(
     async (id: number) => {
@@ -349,102 +417,7 @@ export function MusicPage() {
     setCurrentTrack((prev) => (prev?.id === matched.id ? { ...prev, ...matched } : matched));
   }, [tracks, currentId]);
 
-  // COS-only：只使用后端返回的公网直链
-  useEffect(() => {
-    if (current == null) {
-      setAudioObjectUrl((prev) => {
-        if (prev && prev.startsWith("blob:")) URL.revokeObjectURL(prev);
-        return null;
-      });
-      return;
-    }
-    setAudioObjectUrl((prev) => {
-      if (prev && prev.startsWith("blob:")) URL.revokeObjectURL(prev);
-      return current.audioUrl ?? null;
-    });
-  }, [current?.id, current?.audioUrl]);
-
-  /** 封面：公网直链或「你们服务器」上的 /cover URL + token（不是用户电脑里的文件） */
-  const playerCoverSrc = useMemo(
-    () => coverDisplayUrl(current),
-    [current?.id, current?.coverUrl, current?.hasCover]
-  );
-
   const syncedLyrics = useSyncedLyrics(current);
-  const playerBarLyricLine = useMemo(() => {
-    if (!current?.hasLyrics || syncedLyrics.lines.length === 0) return null;
-    return getActiveLyricText(syncedLyrics.lines, playPos);
-  }, [current?.hasLyrics, syncedLyrics.lines, playPos]);
-
-  // 将 blob URL 交给 audio 并同步播放/暂停
-  useEffect(() => {
-    const a = audioRef.current;
-    if (!a) return;
-    if (!audioObjectUrl) {
-      a.removeAttribute("src");
-      a.load();
-      return;
-    }
-    a.src = audioObjectUrl;
-    a.load();
-    if (playing) {
-      void a.play().catch(() => setPlaying(false));
-    }
-  }, [audioObjectUrl, current?.id]);
-
-  useEffect(() => {
-    const a = audioRef.current;
-    if (a) {
-      a.volume = volume;
-    }
-  }, [volume, audioObjectUrl, current?.id]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem("bendoudou_volume", String(volume));
-    } catch {
-      /* ignore */
-    }
-  }, [volume]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(PLAY_MODE_KEY, playMode);
-    } catch {
-      /* ignore */
-    }
-  }, [playMode]);
-
-  useEffect(() => {
-    const a = audioRef.current;
-    if (!a) return;
-    if (playing) {
-      void a.play().catch(() => setPlaying(false));
-    } else {
-      a.pause();
-    }
-  }, [playing]);
-
-  const selectTrack = useCallback((t: MusicTrackDto, autoplay: boolean) => {
-    const isSameTrack = currentId === t.id;
-    setCurrentTrack(t);
-    setCurrentId(t.id);
-    setMobileView("player");
-    setPlayPos(0);
-    setPlayDur(0);
-    if (autoplay) {
-      setPlaying(true);
-      // 双击时强制触发播放，避免仅靠状态流转导致偶发“不自动播”
-      requestAnimationFrame(() => {
-        const a = audioRef.current;
-        if (!a) return;
-        if (isSameTrack) {
-          a.currentTime = 0;
-        }
-        void a.play().catch(() => setPlaying(false));
-      });
-    }
-  }, [currentId]);
 
   const setCurrentTrackIdFromList = useCallback((id: number) => {
     setCurrentId(id);
@@ -452,55 +425,17 @@ export function MusicPage() {
     if (matched) {
       setCurrentTrack((prev) => (prev?.id === matched.id ? { ...prev, ...matched } : matched));
     }
-    setMobileView("player");
   }, [filtered]);
-
-  const seekPrev = useCallback(() => {
-    if (!current || filtered.length === 0) return;
-    if (playMode === "shuffle") {
-      if (filtered.length === 1) {
-        selectTrack(filtered[0]!, true);
-        return;
-      }
-      const choices = filtered.filter((t) => t.id !== current.id);
-      const next = choices[Math.floor(Math.random() * choices.length)] ?? filtered[0]!;
-      selectTrack(next, true);
-      return;
-    }
-    const idx = filtered.findIndex((t) => t.id === current.id);
-    if (idx <= 0) {
-      const last = filtered[filtered.length - 1]!;
-      selectTrack(last, true);
-    } else {
-      selectTrack(filtered[idx - 1]!, true);
-    }
-  }, [current, filtered, playMode, selectTrack]);
-
-  const seekNext = useCallback(() => {
-    if (!current || filtered.length === 0) return;
-    if (playMode === "shuffle") {
-      if (filtered.length === 1) {
-        selectTrack(filtered[0]!, true);
-        return;
-      }
-      const choices = filtered.filter((t) => t.id !== current.id);
-      const next = choices[Math.floor(Math.random() * choices.length)] ?? filtered[0]!;
-      selectTrack(next, true);
-      return;
-    }
-    const idx = filtered.findIndex((t) => t.id === current.id);
-    if (idx < 0 || idx >= filtered.length - 1) {
-      selectTrack(filtered[0]!, true);
-    } else {
-      selectTrack(filtered[idx + 1]!, true);
-    }
-  }, [current, filtered, playMode, selectTrack]);
 
   const barMax =
     playDur > 0 && Number.isFinite(playDur) ? playDur : listDuration > 0 ? listDuration : 0;
   const vinylProgress = barMax > 0 ? Math.min(1, Math.max(0, playPos / barMax)) : 0;
   const showPlayerModule = activeNav !== "fm" && mobileView === "player";
   const showListModule = activeNav !== "fm" && mobileView === "list";
+
+  useEffect(() => {
+    setQueue(filtered);
+  }, [filtered, setQueue]);
 
   return (
     <div
@@ -509,49 +444,6 @@ export function MusicPage() {
         wallpaperActive ? "bg-netease-bg/68 backdrop-blur-sm" : "bg-netease-bg"
       )}
     >
-      <audio
-        ref={audioRef}
-        className="hidden"
-        crossOrigin="anonymous"
-        preload="auto"
-        onTimeUpdate={(e) => {
-          if (!scrubbing) {
-            setPlayPos(e.currentTarget.currentTime);
-          }
-        }}
-        onLoadedMetadata={(e) => {
-          const d = e.currentTarget.duration;
-          setPlayDur(Number.isFinite(d) && d > 0 ? d : 0);
-        }}
-        onDurationChange={(e) => {
-          const d = e.currentTarget.duration;
-          if (Number.isFinite(d) && d > 0) {
-            setPlayDur(d);
-          }
-        }}
-        onEnded={() => {
-          if (filtered.length === 0 || !current) {
-            setPlaying(false);
-            setPlayPos(0);
-            return;
-          }
-          if (playMode === "single") {
-            const a = audioRef.current;
-            if (!a) {
-              setPlaying(false);
-              setPlayPos(0);
-              return;
-            }
-            a.currentTime = 0;
-            setPlayPos(0);
-            setPlaying(true);
-            void a.play().catch(() => setPlaying(false));
-            return;
-          }
-          seekNext();
-        }}
-      />
-
       <div className="flex min-h-0 flex-1">
         <aside className="hidden w-[200px] shrink-0 flex-col border-r border-netease-line bg-[#1f1f1f] md:flex">
           <div className="flex h-12 items-center gap-2 border-b border-netease-line px-4 text-sm text-zinc-400">
@@ -563,7 +455,7 @@ export function MusicPage() {
               type="button"
               onClick={() => {
                 setActiveNav("discover");
-                setMobileView("list");
+                setMusicView("list");
               }}
               className={clsx(
                 "flex w-full items-center gap-2 rounded-full px-3 py-2 text-left transition",
@@ -577,7 +469,7 @@ export function MusicPage() {
               type="button"
               onClick={() => {
                 setActiveNav("fm");
-                setMobileView("list");
+                setMusicView("list");
               }}
               className={clsx(
                 "flex w-full items-center gap-2 rounded-full px-3 py-2 text-left transition",
@@ -816,10 +708,10 @@ export function MusicPage() {
                   </button>
                 </div>
                 <div className="space-y-1 text-[13px]">
-                  <button type="button" onClick={() => { setActiveNav("discover"); setMobileView("list"); }} className={clsx("flex w-full items-center gap-2 rounded-full px-3 py-2 text-left", activeNav === "discover" ? "bg-white/10 text-white" : "text-zinc-400")}>
+                  <button type="button" onClick={() => { setActiveNav("discover"); setMusicView("list"); }} className={clsx("flex w-full items-center gap-2 rounded-full px-3 py-2 text-left", activeNav === "discover" ? "bg-white/10 text-white" : "text-zinc-400")}>
                     <Home className="h-4 w-4 shrink-0" />{t("music.discover")}
                   </button>
-                  <button type="button" onClick={() => { setActiveNav("fm"); setMobileView("list"); }} className={clsx("flex w-full items-center gap-2 rounded-full px-3 py-2 text-left", activeNav === "fm" ? "bg-white/10 text-white" : "text-zinc-400")}>
+                  <button type="button" onClick={() => { setActiveNav("fm"); setMusicView("list"); }} className={clsx("flex w-full items-center gap-2 rounded-full px-3 py-2 text-left", activeNav === "fm" ? "bg-white/10 text-white" : "text-zinc-400")}>
                     <Radio className="h-4 w-4 shrink-0" />{t("music.privateFm")}
                   </button>
                   <button type="button" onClick={() => void onPickLiked()} className={clsx("flex w-full items-center gap-2 rounded-full px-3 py-2 text-left", activeNav === "liked" ? "bg-white/10 text-white" : "text-zinc-400")}>
@@ -861,7 +753,7 @@ export function MusicPage() {
             </div>
           ) : null}
 
-          <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto p-3 pb-40 sm:p-4">
+          <div className="custom-scrollbar scrollbar-no-gutter min-h-0 flex-1 overflow-y-auto p-3 pb-40 sm:p-4">
             {activeNav !== "fm" && (
               <>
                 {activeNav === "discover" && currentPlaylistId == null && (
@@ -874,6 +766,18 @@ export function MusicPage() {
                     <p className="text-xs text-zinc-600">{t("music.discoverWipSub")}</p>
                   </div>
                 )}
+                {showPlayerModule ? (
+                  <div className="mx-auto mb-2 flex w-full max-w-6xl justify-start">
+                    <button
+                      type="button"
+                      onClick={() => setMusicView("list")}
+                      className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-netease-line/80 bg-[#262626]/95 px-2.5 text-[12px] font-medium text-zinc-300 transition hover:border-zinc-500/60 hover:bg-[#303030] hover:text-zinc-100"
+                    >
+                      <ArrowLeft className="h-3.5 w-3.5 shrink-0" />
+                      返回歌单
+                    </button>
+                  </div>
+                ) : null}
                 <section
                   className={clsx(
                     "mx-auto mt-4 mb-4 grid w-full max-w-6xl grid-cols-1 grid-rows-[auto_1fr] gap-4 overflow-hidden p-2",
@@ -957,6 +861,7 @@ export function MusicPage() {
                     onSetCurrentId={setCurrentTrackIdFromList}
                     onToggleHeart={onToggleHeart}
                     onRequestRemoveTrack={requestRemoveTrack}
+                    listeningByTrack={listeningByTrack}
                   />
                   <p className="mt-3 hidden text-center text-[11px] text-zinc-600 md:block">{t("music.rowHint")}</p>
                 </section>
@@ -972,90 +877,6 @@ export function MusicPage() {
           </div>
         </div>
       </div>
-
-      <MusicPlayerBar
-        audioRef={audioRef}
-        coverSrc={playerCoverSrc}
-        title={current?.title ?? t("music.pickTrack")}
-        artist={current?.artist ?? t("music.unknownArtist")}
-        playPos={playPos}
-        barMax={barMax}
-        scrubbing={scrubbing}
-        onScrubbingChange={setScrubbing}
-        onPlayPosChange={setPlayPos}
-        playing={playing}
-        onTogglePlay={() => {
-          if (!current) return;
-          setPlaying((p) => !p);
-        }}
-        onPrev={seekPrev}
-        onNext={seekNext}
-        playlistEmpty={filtered.length === 0}
-        hasTrack={current != null}
-        volume={volume}
-        onVolumeChange={setVolume}
-        barLyricLine={playerBarLyricLine}
-        currentTrackId={currentId}
-        playMode={playMode}
-        onCyclePlayMode={() => {
-          setPlayMode((prev) => (prev === "list" ? "single" : prev === "single" ? "shuffle" : "list"));
-        }}
-        onOpenHistoryPanel={openHistoryPanel}
-      />
-
-      {historyPanelOpen ? (
-        <div className="fixed inset-0 z-[70] bg-black/35 backdrop-blur-[1px]" onClick={() => setHistoryPanelOpen(false)}>
-          <aside
-            className="absolute right-0 top-0 h-full w-[min(88vw,360px)] border-l border-white/10 bg-zinc-950/95 p-4 shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-zinc-100">{t("music.playHistory")}</h3>
-              <button
-                type="button"
-                className="rounded-full px-2 py-1 text-xs text-zinc-400 hover:bg-white/10 hover:text-zinc-200"
-                onClick={() => setHistoryPanelOpen(false)}
-              >
-                {t("common.close", { defaultValue: "关闭" })}
-              </button>
-            </div>
-            {historyErr ? <p className="mb-2 text-xs text-red-400/90">{historyErr}</p> : null}
-            {historyLoading ? <p className="text-xs text-zinc-500">{t("common.loading")}</p> : null}
-            {!historyLoading && historyTracks.length === 0 ? (
-              <p className="text-xs text-zinc-500">{t("music.historyEmpty", { defaultValue: "暂无播放历史" })}</p>
-            ) : null}
-            <div className="custom-scrollbar h-[calc(100%-2.25rem)] overflow-y-auto pr-1">
-              <div className="space-y-1">
-                {historyTracks.map((tr) => (
-                  <button
-                    key={tr.id}
-                    type="button"
-                    className="flex w-full items-center gap-2 rounded-xl px-2 py-2 text-left hover:bg-white/10"
-                    onClick={() => {
-                      selectTrack(tr, true);
-                      setHistoryPanelOpen(false);
-                    }}
-                  >
-                    <div className="h-10 w-10 shrink-0 overflow-hidden rounded-lg bg-zinc-800">
-                      {coverDisplayUrl(tr) ? (
-                        <img src={coverDisplayUrl(tr)!} alt={tr.title} className="h-full w-full object-cover" />
-                      ) : (
-                        <div className="flex h-full w-full items-center justify-center text-zinc-600">
-                          <Music2 className="h-4 w-4" />
-                        </div>
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-xs text-zinc-100">{tr.title}</div>
-                      <div className="truncate text-[11px] text-zinc-500">{tr.artist}</div>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-          </aside>
-        </div>
-      ) : null}
 
       <ConfirmModal
         open={removeTrackDialog != null}
