@@ -1,6 +1,9 @@
 spring:
   application:
     name: bendoudou-server
+  config:
+    # 本地/共享密钥（gitignored）：与线上 bendoudou.env 同源，改一处两边共用
+    import: optional:file:./secrets/bendoudou.env[.properties]
   datasource:
     # 库名: bendoudoudounai，首次可在服务端执行: CREATE DATABASE bendoudoudounai CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
     url: jdbc:mysql://175.27.255.29:33306/bendoudoudounai?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
@@ -19,6 +22,23 @@ spring:
     multipart:
       max-file-size: 120MB
       max-request-size: 125MB
+  # QQ SMTP：账号/授权码放 secrets/bendoudou.env 或环境变量，勿写进仓库
+  mail:
+    host: smtp.qq.com
+    port: 465
+    username: ${SPRING_MAIL_USERNAME:}
+    password: ${SPRING_MAIL_PASSWORD:}
+    protocol: smtp
+    default-encoding: UTF-8
+    properties:
+      mail:
+        smtp:
+          auth: true
+          ssl:
+            enable: true
+          socketFactory:
+            class: javax.net.ssl.SSLSocketFactory
+            port: 465
 
 server:
   port: 8882
@@ -48,3 +68,6 @@ bendoudou:
     music-u: ${BENDOUDOU_NETEASE_MUSIC_U:}
     csrf: ${BENDOUDOU_NETEASE_CSRF:}
     user-agent: ${BENDOUDOU_NETEASE_UA:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36}
+  mail:
+    # 发件显示名；SMTP 账号与 productx spring.mail.user 相同
+    personal: AIMATEX-MUSIC

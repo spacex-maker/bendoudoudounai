@@ -7,16 +7,23 @@ type Props = {
   className?: string;
   /** 更换头像后递增，避免浏览器沿用旧图缓存 */
   imageVersion?: number;
+  /** 顶栏等紧凑场景可关掉豆值角标 */
+  showLevelBadge?: boolean;
 };
 
-export function UserAvatar({ user, className, imageVersion = 0 }: Props) {
+export function UserAvatar({
+  user,
+  className,
+  imageVersion = 0,
+  showLevelBadge = true,
+}: Props) {
   const base = userAvatarDisplayUrl(user);
   const url = base
     ? `${base}${base.includes("?") ? "&" : "?"}_v=${imageVersion}`
     : null;
   const initial = (user.displayName?.trim() || user.email || "?").slice(0, 1).toUpperCase();
 
-  const badge = user.beanLevelCode ?? null;
+  const badge = showLevelBadge ? user.beanLevelCode ?? null : null;
 
   if (url) {
     return (
@@ -28,7 +35,7 @@ export function UserAvatar({ user, className, imageVersion = 0 }: Props) {
           draggable={false}
         />
         {badge ? (
-          <span className="absolute -right-1 -bottom-1 rounded-full bg-amber-500 px-1.5 py-0.5 text-[9px] font-bold leading-none text-black ring-1 ring-black/40">
+          <span className="absolute -right-0.5 -bottom-0.5 rounded-full bg-amber-400/95 px-1 py-0.5 text-[8px] font-bold leading-none text-ink-900 ring-2 ring-white">
             {badge}
           </span>
         ) : null}
@@ -40,7 +47,7 @@ export function UserAvatar({ user, className, imageVersion = 0 }: Props) {
     <div className="relative inline-flex">
       <div
         className={clsx(
-          "flex shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-rose-600 to-red-900 font-semibold text-white",
+          "flex shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#d64545] to-[#8f1c1c] text-[0.7em] font-semibold text-white",
           className
         )}
         aria-hidden
@@ -48,7 +55,7 @@ export function UserAvatar({ user, className, imageVersion = 0 }: Props) {
         {initial}
       </div>
       {badge ? (
-        <span className="absolute -right-1 -bottom-1 rounded-full bg-amber-500 px-1.5 py-0.5 text-[9px] font-bold leading-none text-black ring-1 ring-black/40">
+        <span className="absolute -right-0.5 -bottom-0.5 rounded-full bg-amber-400/95 px-1 py-0.5 text-[8px] font-bold leading-none text-ink-900 ring-2 ring-white">
           {badge}
         </span>
       ) : null}

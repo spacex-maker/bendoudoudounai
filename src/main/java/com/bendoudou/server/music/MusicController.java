@@ -16,6 +16,7 @@ import com.bendoudou.server.music.dto.MusicTrackCommentResponse;
 import com.bendoudou.server.music.dto.MusicTrackResponse;
 import com.bendoudou.server.music.dto.PlaylistItemResponse;
 import com.bendoudou.server.music.dto.PlaylistListeningStatusResponse;
+import com.bendoudou.server.music.dto.PlayHistoryItemResponse;
 import com.bendoudou.server.music.dto.PlaylistMemberItemResponse;
 import com.bendoudou.server.music.dto.PostTrackCommentRequest;
 import com.bendoudou.server.music.dto.UpdateMusicTrackRequest;
@@ -296,6 +297,18 @@ public class MusicController {
     @GetMapping("/history/tracks")
     public List<MusicTrackResponse> listPlayHistoryTracks(Authentication authentication) {
         return musicService.listPlayHistoryTracks(parseUserId(authentication));
+    }
+
+    @GetMapping("/history/plays")
+    public Page<PlayHistoryItemResponse> listPlayHistoryPlays(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "30") int size,
+            Authentication authentication
+    ) {
+        int p = Math.max(0, page);
+        int s = Math.min(100, Math.max(1, size));
+        Pageable pageable = PageRequest.of(p, s);
+        return musicService.listPlayHistoryPage(parseUserId(authentication), pageable);
     }
 
     @PostMapping("/tracks/{id}/heart")

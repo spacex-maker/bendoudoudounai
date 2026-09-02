@@ -33,6 +33,7 @@ type Props = {
   playing: boolean;
   activeNav: string;
   onSelectTrack: (track: MusicTrackDto, autoplay: boolean) => void;
+  onPlayPauseTrack: (track: MusicTrackDto) => void;
   onSetCurrentId: (id: number) => void;
   onToggleHeart: (track: MusicTrackDto) => void | Promise<void>;
   onRequestRemoveTrack: (track: MusicTrackDto) => void;
@@ -56,6 +57,7 @@ export function MusicTrackTable({
   playing,
   activeNav,
   onSelectTrack,
+  onPlayPauseTrack,
   onSetCurrentId,
   onToggleHeart,
   onRequestRemoveTrack,
@@ -170,7 +172,7 @@ export function MusicTrackTable({
                 </div>
               </div>
               <div className="flex shrink-0 items-center justify-center gap-1 self-center">
-                <button type="button" className="rounded-full p-2 hover:bg-white/10" onClick={(e) => { e.stopPropagation(); onSelectTrack(tr, true); }}>
+                <button type="button" className="rounded-full p-2 hover:bg-white/10" onClick={(e) => { e.stopPropagation(); onPlayPauseTrack(tr); }}>
                   {currentId === tr.id && playing ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
                 </button>
                 <button
@@ -350,7 +352,7 @@ export function MusicTrackTable({
                   className="rounded-full p-1 hover:bg-white/10"
                   onClick={(e) => {
                     e.stopPropagation();
-                    onSelectTrack(tr, true);
+                    onPlayPauseTrack(tr);
                   }}
                 >
                   {currentId === tr.id && playing ? (

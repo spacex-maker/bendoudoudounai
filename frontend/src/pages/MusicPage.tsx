@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { Home, ListMusic, Search, Heart, Radio, Music2, ChevronRight, Settings2, LayoutDashboard, History, Menu, X, ArrowLeft, Bell } from "lucide-react";
+import { Home, ListMusic, Search, Heart, Radio, Music2, ChevronRight, Settings2, LayoutDashboard, History, Menu, X, ArrowLeft, Bell, Expand } from "lucide-react";
 import clsx from "clsx";
 import { mapApiError } from "../i18n/mapApiError";
 import { LanguageSwitch } from "../components/LanguageSwitch";
@@ -72,8 +72,10 @@ export function MusicPage() {
     playPos,
     playDur,
     selectTrack,
+    playPauseTrack,
     coverSrc: playerCoverSrc,
     setQueue,
+    setImmersiveLyricsOpen,
   } = useMusicPlayer();
   const musicRoute = useMemo(() => parseMusicPathname(location.pathname), [location.pathname]);
   const activeNav = navKindFromRoute(musicRoute);
@@ -100,6 +102,9 @@ export function MusicPage() {
   const [listeningByTrack, setListeningByTrack] = useState<Record<number, PlaylistListeningStatusItemDto[]>>({});
   const recordedPlayForTrackRef = useRef<number | null>(null);
 
+  const locationRef = useRef(location);
+  locationRef.current = location;
+
   const goMusic = useCallback(
     (pathname: string, view: "list" | "player" = "list") => {
       const params = new URLSearchParams();
@@ -110,19 +115,22 @@ export function MusicPage() {
     [navigate]
   );
 
+  // 稳定回调：不要依赖 location.search，否则点开 ?view=player 会重建本函数，
+  // 进而触发下方 [search, setMusicView] effect 误把播放页关掉。
   const setMusicView = useCallback(
     (nextView: "list" | "player") => {
       setMobileView(nextView);
-      const params = new URLSearchParams(location.search);
+      const { pathname, search } = locationRef.current;
+      const params = new URLSearchParams(search);
       if (nextView === "player") params.set("view", "player");
       else params.delete("view");
       const searchText = params.toString();
       navigate(
-        { pathname: location.pathname, search: searchText ? `?${searchText}` : "" },
+        { pathname, search: searchText ? `?${searchText}` : "" },
         { replace: true }
       );
     },
-    [navigate, location.pathname, location.search]
+    [navigate]
   );
 
   useEffect(() => {
@@ -981,6 +989,17 @@ export function MusicPage() {
                       "min-h-0 md:h-full md:min-h-0 md:pl-7 md:pt-1"
                     )}
                   >
+                    <div className="mb-2 flex shrink-0 justify-end">
+                      <button
+                        type="button"
+                        disabled={!current}
+                        onClick={() => setImmersiveLyricsOpen(true)}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-[11px] font-medium text-zinc-300 transition hover:border-rose-400/30 hover:bg-rose-500/10 hover:text-rose-100 disabled:opacity-40"
+                      >
+                        <Expand className="h-3.5 w-3.5" />
+                        {t("lyrics.immersiveEnter")}
+                      </button>
+                    </div>
                     <TrackLyricsScroll
                       track={current}
                       currentTimeSec={playPos}
@@ -1012,6 +1031,7 @@ export function MusicPage() {
                     playing={playing}
                     activeNav={activeNav}
                     onSelectTrack={selectTrack}
+                    onPlayPauseTrack={playPauseTrack}
                     onSetCurrentId={setCurrentTrackIdFromList}
                     onToggleHeart={onToggleHeart}
                     onRequestRemoveTrack={requestRemoveTrack}

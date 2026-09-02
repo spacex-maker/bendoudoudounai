@@ -1,8 +1,16 @@
 package com.bendoudou.server.user;
 
 import com.bendoudou.server.bean.BeanService;
+import com.bendoudou.server.auth.EmailCodeGenerator;
+import com.bendoudou.server.auth.InviteCodeGenerator;
 import com.bendoudou.server.auth.dto.AuthResponse;
+import com.bendoudou.server.auth.dto.InviteCodeValidateResponse;
 import com.bendoudou.server.auth.dto.MeResponse;
+import com.bendoudou.server.auth.dto.RegisterRequest;
+import com.bendoudou.server.auth.dto.RegisterSendEmailRequest;
+import com.bendoudou.server.auth.dto.ResetPasswordRequest;
+import com.bendoudou.server.auth.dto.ResetPasswordSendEmailRequest;
+import com.bendoudou.server.mail.MailService;
 import com.bendoudou.server.security.JwtTokenService;
 import com.bendoudou.server.user.dto.AdminUserCreateRequest;
 import com.bendoudou.server.user.dto.AdminUserListItem;
@@ -10,6 +18,7 @@ import com.bendoudou.server.user.dto.AdminUserPatchRequest;
 import com.bendoudou.server.user.dto.ChangePasswordRequest;
 import com.bendoudou.server.user.dto.UpdateMyProfileRequest;
 import com.bendoudou.server.user.dto.UserDirectoryItem;
+import com.bendoudou.server.user.dto.UserEmailLookupResponse;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Sort;
 import org.springframework.core.io.FileSystemResource;
@@ -23,6 +32,8 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -39,28 +50,34 @@ public class UserService {
     private static final long MAX_AVATAR_BYTES = 2 * 1024 * 1024;
 
     private final UserRepository userRepository;
+    private final EmailVerificationCodeRepository emailVerificationCodeRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenService jwtTokenService;
     private final AccountRoleService accountRoleService;
     private final BeanService beanService;
     private final UserPrivacyService userPrivacyService;
+    private final MailService mailService;
     private final Path uploadBase;
 
     public UserService(
             UserRepository userRepository,
+            EmailVerificationCodeRepository emailVerificationCodeRepository,
             PasswordEncoder passwordEncoder,
             JwtTokenService jwtTokenService,
             AccountRoleService accountRoleService,
             BeanService beanService,
             UserPrivacyService userPrivacyService,
+            MailService mailService,
             @Value("${bendoudou.music-upload-dir}") String musicUploadDir
     ) {
         this.userRepository = userRepository;
+        this.emailVerificationCodeRepository = emailVerificationCodeRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtTokenService = jwtTokenService;
         this.accountRoleService = accountRoleService;
         this.beanService = beanService;
         this.userPrivacyService = userPrivacyService;
+        this.mailService = mailService;
         this.uploadBase = Path.of(musicUploadDir).toAbsolutePath().normalize();
     }
 
@@ -94,10 +111,17 @@ public class UserService {
     }
 
     public MeResponse toMeResponse(User u) {
+        ensureInviteCode(u);
         var eff = accountRoleService.effectiveRolesForUserId(u.getId());
         var roleNames = eff.stream().map(UserRole::name).sorted().collect(Collectors.toList());
         var primary = AccountRoleService.primaryRoleName(eff);
         long beanBalance = beanService.queryBalance(u.getId());
+        String inviteeLabel = null;
+        if (u.isInviteCodeUsed()) {
+            inviteeLabel = userRepository.findFirstByInvitedByUserId(u.getId())
+                    .map(x -> StringUtils.hasText(x.getDisplayName()) ? x.getDisplayName().trim() : x.getEmail())
+                    .orElse(null);
+        }
         return new MeResponse(
                 u.getId(),
                 u.getEmail(),
@@ -108,8 +132,166 @@ public class UserService {
                 (u.getGender() == null ? UserGender.UNKNOWN : u.getGender()).name(),
                 beanBalance,
                 beanService.resolveLevelCode(beanBalance),
-                beanService.resolveLevelName(beanBalance)
+                beanService.resolveLevelName(beanBalance),
+                u.getInviteCode(),
+                u.isInviteCodeUsed(),
+                inviteeLabel
         );
+    }
+
+    @Transactional
+    public void ensureInviteCode(User u) {
+        if (StringUtils.hasText(u.getInviteCode())) return;
+        for (int i = 0; i < 12; i++) {
+            String code = InviteCodeGenerator.generate();
+            if (!userRepository.existsByInviteCode(code)) {
+                u.setInviteCode(code);
+                userRepository.save(u);
+                return;
+            }
+        }
+        throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "邀请码生成失败");
+    }
+
+    @Transactional
+    public void sendRegisterEmailCode(RegisterSendEmailRequest req) {
+        String email = req.email().trim().toLowerCase(Locale.ROOT);
+        if (userRepository.findByEmail(email).isPresent()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "该邮箱已注册");
+        }
+        var latest = emailVerificationCodeRepository
+                .findFirstByEmailAndPurposeOrderByCreatedAtDesc(email, EmailVerificationCode.PURPOSE_REGISTER);
+        if (latest.isPresent()) {
+            Instant created = latest.get().getCreatedAt();
+            if (created != null && created.isAfter(Instant.now().minus(60, ChronoUnit.SECONDS))) {
+                throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "发送过于频繁，请稍后再试");
+            }
+        }
+        String code = EmailCodeGenerator.sixDigits();
+        emailVerificationCodeRepository.deleteByEmailAndPurpose(email, EmailVerificationCode.PURPOSE_REGISTER);
+        EmailVerificationCode row = new EmailVerificationCode();
+        row.setEmail(email);
+        row.setCode(code);
+        row.setPurpose(EmailVerificationCode.PURPOSE_REGISTER);
+        row.setCreatedAt(Instant.now());
+        row.setExpiresAt(Instant.now().plus(5, ChronoUnit.MINUTES));
+        emailVerificationCodeRepository.save(row);
+        mailService.sendRegisterCode(email, code, req.locale());
+    }
+
+    @Transactional(readOnly = true)
+    public InviteCodeValidateResponse validateInviteCode(String raw) {
+        String code = InviteCodeGenerator.normalize(raw);
+        if (!StringUtils.hasText(code)) {
+            return new InviteCodeValidateResponse(false, "请填写邀请码");
+        }
+        User inviter = userRepository.findByInviteCode(code).orElse(null);
+        if (inviter == null || !inviter.isAccountEnabled()) {
+            return new InviteCodeValidateResponse(false, "邀请码无效");
+        }
+        if (inviter.isInviteCodeUsed()) {
+            return new InviteCodeValidateResponse(false, "该邀请码已被使用");
+        }
+        return new InviteCodeValidateResponse(true, "邀请码有效");
+    }
+
+    @Transactional
+    public AuthResponse register(RegisterRequest req, String clientIp) {
+        String email = req.email().trim().toLowerCase(Locale.ROOT);
+        if (userRepository.findByEmail(email).isPresent()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "该邮箱已注册");
+        }
+        String inviteNorm = InviteCodeGenerator.normalize(req.inviteCode());
+        User inviter = userRepository.findByInviteCode(inviteNorm)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "邀请码无效"));
+        if (!inviter.isAccountEnabled()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "邀请码无效");
+        }
+        if (inviter.isInviteCodeUsed()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "该邀请码已被使用");
+        }
+
+        EmailVerificationCode stored = emailVerificationCodeRepository
+                .findFirstByEmailAndPurposeOrderByCreatedAtDesc(email, EmailVerificationCode.PURPOSE_REGISTER)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "请先获取邮箱验证码"));
+        if (stored.getExpiresAt() == null || stored.getExpiresAt().isBefore(Instant.now())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "验证码已过期，请重新获取");
+        }
+        if (!req.code().trim().equals(stored.getCode())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "验证码错误");
+        }
+
+        User u = new User();
+        u.setEmail(email);
+        u.setPasswordHash(passwordEncoder.encode(req.password()));
+        if (StringUtils.hasText(req.displayName())) {
+            u.setDisplayName(req.displayName().trim());
+        }
+        u.setRole(UserRole.USER);
+        u.setAccountEnabled(true);
+        u.setInvitedByUserId(inviter.getId());
+        ensureInviteCode(u);
+        u = userRepository.save(u);
+        accountRoleService.assignOnUserCreatedIfEmpty(u.getId(), UserRole.USER);
+
+        inviter.setInviteCodeUsed(true);
+        userRepository.save(inviter);
+        emailVerificationCodeRepository.deleteByEmailAndPurpose(email, EmailVerificationCode.PURPOSE_REGISTER);
+
+        userPrivacyService.recordLogin(u.getId(), clientIp);
+        u.setLastActiveAt(Instant.now());
+        userRepository.save(u);
+        return buildAuthResponse(u);
+    }
+
+    @Transactional
+    public void sendResetPasswordEmailCode(ResetPasswordSendEmailRequest req) {
+        String email = req.email().trim().toLowerCase(Locale.ROOT);
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "用户不存在"));
+        if (!user.isAccountEnabled()) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "账号已禁用");
+        }
+        var latest = emailVerificationCodeRepository
+                .findFirstByEmailAndPurposeOrderByCreatedAtDesc(email, EmailVerificationCode.PURPOSE_RESET_PASSWORD);
+        if (latest.isPresent()) {
+            Instant created = latest.get().getCreatedAt();
+            if (created != null && created.isAfter(Instant.now().minus(60, ChronoUnit.SECONDS))) {
+                throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "发送过于频繁，请稍后再试");
+            }
+        }
+        String code = EmailCodeGenerator.sixDigits();
+        emailVerificationCodeRepository.deleteByEmailAndPurpose(email, EmailVerificationCode.PURPOSE_RESET_PASSWORD);
+        EmailVerificationCode row = new EmailVerificationCode();
+        row.setEmail(email);
+        row.setCode(code);
+        row.setPurpose(EmailVerificationCode.PURPOSE_RESET_PASSWORD);
+        row.setCreatedAt(Instant.now());
+        row.setExpiresAt(Instant.now().plus(5, ChronoUnit.MINUTES));
+        emailVerificationCodeRepository.save(row);
+        mailService.sendResetPasswordCode(email, code, req.locale());
+    }
+
+    @Transactional
+    public void resetPassword(ResetPasswordRequest req) {
+        String email = req.email().trim().toLowerCase(Locale.ROOT);
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "用户不存在"));
+        if (!user.isAccountEnabled()) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "账号已禁用");
+        }
+        EmailVerificationCode stored = emailVerificationCodeRepository
+                .findFirstByEmailAndPurposeOrderByCreatedAtDesc(email, EmailVerificationCode.PURPOSE_RESET_PASSWORD)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "请先获取邮箱验证码"));
+        if (stored.getExpiresAt() == null || stored.getExpiresAt().isBefore(Instant.now())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "验证码已过期，请重新获取");
+        }
+        if (!req.code().trim().equals(stored.getCode())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "验证码错误");
+        }
+        user.setPasswordHash(passwordEncoder.encode(req.password()));
+        userRepository.save(user);
+        emailVerificationCodeRepository.deleteByEmailAndPurpose(email, EmailVerificationCode.PURPOSE_RESET_PASSWORD);
     }
 
     public User requireUser(long id) {
@@ -161,6 +343,7 @@ public class UserService {
         u.setRole(newRole);
         u.setAccountEnabled(true);
         u = userRepository.save(u);
+        ensureInviteCode(u);
         accountRoleService.assignOnUserCreatedIfEmpty(u.getId(), newRole);
         return toAdminListItem(u);
     }
@@ -286,6 +469,23 @@ public class UserService {
         } catch (IllegalArgumentException e) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "无效的性别");
         }
+    }
+
+    /** 精确邮箱查找（小写 trim）；未注册返回 exists=false，不抛错。 */
+    @Transactional(readOnly = true)
+    public UserEmailLookupResponse lookupByExactEmail(String rawEmail) {
+        if (!StringUtils.hasText(rawEmail)) {
+            return new UserEmailLookupResponse(false, null, null);
+        }
+        String email = rawEmail.trim().toLowerCase(Locale.ROOT);
+        return userRepository.findByEmail(email)
+                .filter(User::isAccountEnabled)
+                .map(u -> new UserEmailLookupResponse(
+                        true,
+                        StringUtils.hasText(u.getDisplayName()) ? u.getDisplayName().trim() : u.getEmail(),
+                        u.getEmail()
+                ))
+                .orElseGet(() -> new UserEmailLookupResponse(false, null, email));
     }
 
     /** 留言板选择「仅某人可见」：列出全部注册用户（小站用户量小，直接全表）。 */

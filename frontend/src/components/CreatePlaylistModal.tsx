@@ -7,6 +7,7 @@ import { isAllowedRemoteWallpaperUrl } from "../pageAppearance/PageAppearanceCon
 import {
   createPlaylist,
   inviteToPlaylist,
+  lookupUserByEmail,
   updatePlaylistWallpaperUrl,
   uploadPlaylistWallpaper,
 } from "../api/client";
@@ -36,6 +37,7 @@ export function CreatePlaylistModal({ open, onClose, onCreated, currentUserEmail
   const [wallpaperUrl, setWallpaperUrl] = useState("");
   const [err, setErr] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [inviteLookupBusy, setInviteLookupBusy] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -47,13 +49,14 @@ export function CreatePlaylistModal({ open, onClose, onCreated, currentUserEmail
     setWallpaperUrl("");
     setErr(null);
     setSubmitting(false);
+    setInviteLookupBusy(false);
   }, [open, t]);
 
   if (!open) return null;
 
   const selfLower = currentUserEmail.trim().toLowerCase();
 
-  const addInvitee = () => {
+  const addInvitee = async () => {
     const raw = inviteDraft.trim().toLowerCase();
     if (!raw) return;
     if (!isEmail(raw)) {
@@ -73,9 +76,22 @@ export function CreatePlaylistModal({ open, onClose, onCreated, currentUserEmail
       setErr(t("createPlaylist.errMax"));
       return;
     }
-    setInvitees((prev) => [...prev, raw]);
-    setInviteDraft("");
+    setInviteLookupBusy(true);
     setErr(null);
+    try {
+      const hit = await lookupUserByEmail(raw);
+      if (!hit.exists) {
+        setErr(t("playlistModal.inviteEmailNotFound"));
+        return;
+      }
+      setInvitees((prev) => [...prev, raw]);
+      setInviteDraft("");
+      setErr(null);
+    } catch (ex) {
+      setErr(mapApiError(t, ex));
+    } finally {
+      setInviteLookupBusy(false);
+    }
   };
 
   const removeInvitee = (email: string) => {
@@ -208,23 +224,26 @@ export function CreatePlaylistModal({ open, onClose, onCreated, currentUserEmail
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
                     e.preventDefault();
-                    addInvitee();
+                    void addInvitee();
                   }
                 }}
                 placeholder={t("createPlaylist.emailPh")}
-                disabled={submitting}
+                disabled={submitting || inviteLookupBusy}
                 className="min-w-0 flex-1 rounded-full border border-white/10 bg-white/[0.06] px-3 py-2 text-sm text-zinc-200 outline-none placeholder:text-zinc-600 focus:border-red-900/40"
               />
               <button
                 type="button"
-                onClick={addInvitee}
-                disabled={submitting}
+                onClick={() => void addInvitee()}
+                disabled={submitting || inviteLookupBusy}
                 className="inline-flex shrink-0 items-center gap-1 rounded-full border border-white/10 bg-white/[0.08] px-3 py-2 text-zinc-300 transition hover:bg-white/15 disabled:opacity-50"
               >
                 <UserPlus className="h-3.5 w-3.5" />
                 {t("createPlaylist.add")}
               </button>
             </div>
+            {inviteLookupBusy ? (
+              <p className="mt-1.5 text-[11px] text-zinc-500">{t("playlistModal.inviteLookupChecking")}</p>
+            ) : null}
             {invitees.length > 0 ? (
               <ul className="mt-2 flex flex-wrap gap-1.5">
                 {invitees.map((em) => (

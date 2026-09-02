@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { X } from "lucide-react";
-import { inviteToPlaylist } from "../api/client";
+import clsx from "clsx";
+import { inviteToPlaylist, lookupUserByEmail, type UserEmailLookupDto } from "../api/client";
 import { mapApiError } from "../i18n/mapApiError";
 
 type Props = {
@@ -13,26 +14,75 @@ type Props = {
   onSuccess: () => void;
 };
 
+function looksLikeEmail(value: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
 export function SharePlaylistModal({ open, onClose, playlistId, playlistName, onSuccess }: Props) {
   const { t } = useTranslation();
   const [email, setEmail] = useState("");
   const [err, setErr] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [lookup, setLookup] = useState<UserEmailLookupDto | null>(null);
+  const [lookupBusy, setLookupBusy] = useState(false);
+  const lookupSeq = useRef(0);
 
   useEffect(() => {
     if (!open) return;
     setEmail("");
     setErr(null);
     setSubmitting(false);
+    setLookup(null);
+    setLookupBusy(false);
   }, [open, playlistId]);
+
+  useEffect(() => {
+    if (!open) return;
+    const to = email.trim().toLowerCase();
+    if (!looksLikeEmail(to)) {
+      setLookup(null);
+      setLookupBusy(false);
+      return;
+    }
+    const seq = ++lookupSeq.current;
+    setLookupBusy(true);
+    const timer = window.setTimeout(() => {
+      void lookupUserByEmail(to)
+        .then((r) => {
+          if (seq !== lookupSeq.current) return;
+          setLookup(r);
+        })
+        .catch(() => {
+          if (seq !== lookupSeq.current) return;
+          setLookup(null);
+        })
+        .finally(() => {
+          if (seq !== lookupSeq.current) return;
+          setLookupBusy(false);
+        });
+    }, 320);
+    return () => window.clearTimeout(timer);
+  }, [email, open]);
 
   if (!open) return null;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const to = email.trim();
+    const to = email.trim().toLowerCase();
     if (!to) {
       setErr(t("shareModal.emailEmpty"));
+      return;
+    }
+    if (!looksLikeEmail(to)) {
+      setErr(t("playlistModal.inviteEmailInvalid"));
+      return;
+    }
+    if (lookupBusy) {
+      setErr(t("playlistModal.inviteLookupChecking"));
+      return;
+    }
+    if (lookup && !lookup.exists) {
+      setErr(t("playlistModal.inviteEmailNotFound"));
       return;
     }
     setErr(null);
@@ -98,6 +148,30 @@ export function SharePlaylistModal({ open, onClose, playlistId, playlistName, on
               disabled={submitting}
               className="w-full rounded-lg border border-netease-line bg-[#1a1a1a] px-3 py-2 text-sm text-zinc-200 outline-none placeholder:text-zinc-600 focus:border-red-900/50"
             />
+            {looksLikeEmail(email.trim()) ? (
+              <p
+                className={clsx(
+                  "mt-1.5 text-[11px]",
+                  lookupBusy
+                    ? "text-zinc-500"
+                    : lookup?.exists
+                      ? "text-emerald-400/90"
+                      : lookup
+                        ? "text-amber-300/90"
+                        : "text-zinc-500"
+                )}
+              >
+                {lookupBusy
+                  ? t("playlistModal.inviteLookupChecking")
+                  : lookup?.exists
+                    ? t("playlistModal.inviteEmailFound", {
+                        name: lookup.label || lookup.email || email.trim(),
+                      })
+                    : lookup
+                      ? t("playlistModal.inviteEmailNotFound")
+                      : null}
+              </p>
+            ) : null}
           </div>
           {err ? <p className="text-[11px] text-red-400/90">{err}</p> : null}
           <div className="flex justify-end gap-2 pt-1">
@@ -111,7 +185,7 @@ export function SharePlaylistModal({ open, onClose, playlistId, playlistName, on
             </button>
             <button
               type="submit"
-              disabled={submitting}
+              disabled={submitting || lookupBusy || (lookup != null && !lookup.exists)}
               className="rounded-full bg-red-900/80 px-4 py-2 text-white transition hover:bg-red-800 disabled:opacity-50"
             >
               {submitting ? t("shareModal.sending") : t("shareModal.send")}

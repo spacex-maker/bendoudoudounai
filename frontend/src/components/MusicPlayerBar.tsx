@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type RefObject, type TouchEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { Play, Pause, SkipBack, SkipForward, Volume2, Music2, Repeat, Repeat1, Shuffle, History } from "lucide-react";
+import { Play, Pause, SkipBack, SkipForward, Volume2, Music2, Repeat, Repeat1, Shuffle, History, Expand } from "lucide-react";
 import clsx from "clsx";
 import { useAudioAnalyserGlow } from "../music/useAudioAnalyserGlow";
 
@@ -56,6 +56,7 @@ export type MusicPlayerBarProps = {
   onCyclePlayMode: () => void;
   onOpenHistoryPanel: () => void;
   onOpenPlayerView?: () => void;
+  onOpenImmersiveLyrics?: () => void;
 };
 
 export function MusicPlayerBar({
@@ -82,6 +83,7 @@ export function MusicPlayerBar({
   onCyclePlayMode,
   onOpenHistoryPanel,
   onOpenPlayerView,
+  onOpenImmersiveLyrics,
 }: MusicPlayerBarProps) {
   const { t } = useTranslation();
   const footerRef = useRef<HTMLElement | null>(null);
@@ -234,7 +236,7 @@ export function MusicPlayerBar({
       <footer
         ref={footerRef}
         className={clsx(
-          "pointer-events-auto w-full max-w-5xl overflow-visible transition-colors duration-300",
+          "pointer-events-auto w-full max-w-6xl overflow-visible transition-colors duration-300",
           "rounded-[32px] sm:rounded-full",
           "bg-zinc-900/85 shadow-[0_16px_48px_rgba(0,0,0,0.6),0_0_0_1px_rgba(255,255,255,0.08)_inset]",
           "backdrop-blur-3xl backdrop-saturate-200"
@@ -245,7 +247,7 @@ export function MusicPlayerBar({
           
           {/* 左侧：封面与歌曲信息 & 移动端控制按钮 */}
           <div
-            className="flex w-full shrink-0 flex-wrap items-center gap-2 rounded-3xl bg-white/[0.03] p-1.5 pr-3 shadow-sm ring-1 ring-white/[0.05] sm:w-auto sm:min-w-[240px] sm:max-w-[300px] sm:flex-nowrap sm:gap-3 sm:rounded-full sm:pr-4"
+            className="flex w-full shrink-0 flex-wrap items-center gap-2 rounded-3xl bg-white/[0.03] p-1.5 pr-3 shadow-sm ring-1 ring-white/[0.05] sm:w-auto sm:min-w-[200px] sm:max-w-[220px] sm:flex-nowrap sm:gap-3 sm:rounded-full sm:pr-4 md:max-w-[260px]"
             onTouchStart={onMobileSwipeStart}
             onTouchEnd={onMobileSwipeEnd}
           >
@@ -315,6 +317,18 @@ export function MusicPlayerBar({
               >
                 <History className="h-4 w-4" />
               </button>
+              {onOpenImmersiveLyrics ? (
+                <button
+                  type="button"
+                  className="h-10 w-10 shrink-0 flex items-center justify-center rounded-full text-zinc-300 transition hover:bg-white/10 hover:text-rose-200 disabled:opacity-30"
+                  onClick={onOpenImmersiveLyrics}
+                  disabled={!hasTrack}
+                  title={t("lyrics.immersiveEnter")}
+                  aria-label={t("lyrics.immersiveEnter")}
+                >
+                  <Expand className="h-4 w-4" />
+                </button>
+              ) : null}
             </div>
 
             {/* 移动端：将进度并入播放操作区域，降低整体高度 */}
@@ -478,36 +492,52 @@ export function MusicPlayerBar({
             ) : null}
           </div>
 
-          {/* 桌面端：音量控制 */}
-          <div className="hidden sm:flex shrink-0 items-center gap-2 w-32 pl-2">
-            <Volume2 className="h-4 w-4 shrink-0 text-zinc-400" strokeWidth={2} />
-            <div className="group relative flex h-5 flex-1 items-center cursor-pointer">
-              <input
-                type="range"
-                aria-label={t("player.ariaVolume")}
-                className="music-volume-range absolute z-10 w-full h-full opacity-0 cursor-pointer"
-                min={0}
-                max={1}
-                step={0.02}
-                value={volume}
-                onChange={(e) => onVolumeChange(Number(e.target.value))}
-              />
-              <div className="relative w-full h-1.5 overflow-hidden rounded-full bg-zinc-700/50 transition-all group-hover:h-2">
-                <div 
-                  className="absolute left-0 top-0 h-full rounded-full bg-zinc-300"
-                  style={{ width: `${volume * 100}%` }}
+          {/* 桌面端：音量 + 历史 / 沉浸（拆开，避免挤掉音量条） */}
+          <div className="hidden shrink-0 items-center gap-1 sm:flex sm:pl-1 md:gap-1.5 md:pl-2">
+            <div className="flex w-[6.75rem] items-center gap-1.5 md:w-[8.5rem] md:gap-2">
+              <Volume2 className="h-4 w-4 shrink-0 text-zinc-400" strokeWidth={2} />
+              <div className="group relative flex h-5 min-w-0 flex-1 items-center cursor-pointer">
+                <input
+                  type="range"
+                  aria-label={t("player.ariaVolume")}
+                  className="music-volume-range absolute z-10 h-full w-full cursor-pointer opacity-0"
+                  min={0}
+                  max={1}
+                  step={0.02}
+                  value={volume}
+                  onChange={(e) => onVolumeChange(Number(e.target.value))}
                 />
+                <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-zinc-700/50 transition-all group-hover:h-2">
+                  <div
+                    className="absolute left-0 top-0 h-full rounded-full bg-zinc-300"
+                    style={{ width: `${volume * 100}%` }}
+                  />
+                </div>
               </div>
             </div>
-            <button
-              type="button"
-              className="ml-1 rounded-full p-2 text-zinc-400 transition hover:bg-white/10 hover:text-zinc-100"
-              onClick={onOpenHistoryPanel}
-              title={t("music.playHistory")}
-              aria-label={t("music.playHistory")}
-            >
-              <History className="h-4 w-4" />
-            </button>
+            <div className="flex shrink-0 items-center">
+              <button
+                type="button"
+                className="rounded-full p-2 text-zinc-400 transition hover:bg-white/10 hover:text-zinc-100"
+                onClick={onOpenHistoryPanel}
+                title={t("music.playHistory")}
+                aria-label={t("music.playHistory")}
+              >
+                <History className="h-4 w-4" />
+              </button>
+              {onOpenImmersiveLyrics ? (
+                <button
+                  type="button"
+                  className="rounded-full p-2 text-zinc-400 transition hover:bg-white/10 hover:text-rose-200 disabled:opacity-30"
+                  onClick={onOpenImmersiveLyrics}
+                  disabled={!hasTrack}
+                  title={t("lyrics.immersiveEnter")}
+                  aria-label={t("lyrics.immersiveEnter")}
+                >
+                  <Expand className="h-4 w-4" />
+                </button>
+              ) : null}
+            </div>
           </div>
           </div>
         </div>

@@ -50,6 +50,18 @@ public class User {
     @Column(name = "gender", nullable = false, length = 16)
     private UserGender gender = UserGender.UNKNOWN;
 
+    /** 专属邀请码（随机字母）；每人一个，仅可被使用一次 */
+    @Column(name = "invite_code", unique = true, length = 16)
+    private String inviteCode;
+
+    /** 该邀请码是否已被他人注册使用 */
+    @Column(name = "invite_code_used", nullable = false)
+    private boolean inviteCodeUsed = false;
+
+    /** 注册时使用的邀请人用户 id */
+    @Column(name = "invited_by_user_id")
+    private Long invitedByUserId;
+
     @PrePersist
     void ensureRole() {
         if (role == null) {
@@ -135,5 +147,29 @@ public class User {
 
     public void setGender(UserGender gender) {
         this.gender = gender;
+    }
+
+    public String getInviteCode() {
+        return inviteCode;
+    }
+
+    public void setInviteCode(String inviteCode) {
+        this.inviteCode = inviteCode;
+    }
+
+    public boolean isInviteCodeUsed() {
+        return inviteCodeUsed;
+    }
+
+    public void setInviteCodeUsed(boolean inviteCodeUsed) {
+        this.inviteCodeUsed = inviteCodeUsed;
+    }
+
+    public Long getInvitedByUserId() {
+        return invitedByUserId;
+    }
+
+    public void setInvitedByUserId(Long invitedByUserId) {
+        this.invitedByUserId = invitedByUserId;
     }
 }

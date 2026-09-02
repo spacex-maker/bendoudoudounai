@@ -7,6 +7,7 @@ import com.bendoudou.server.user.dto.UpdateUserPrivacySettingsRequest;
 import com.bendoudou.server.user.dto.UpdateMyProfileRequest;
 import com.bendoudou.server.user.dto.UserPrivacySettingsResponse;
 import com.bendoudou.server.user.dto.UserDirectoryItem;
+import com.bendoudou.server.user.dto.UserEmailLookupResponse;
 import jakarta.validation.Valid;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;
@@ -46,6 +47,16 @@ public class UserController {
     public List<UserDirectoryItem> directory(Authentication auth) {
         parseUserId(auth);
         return userService.listDirectoryForGuestbook();
+    }
+
+    /** 精确邮箱查找：完整邮箱匹配才返回是否存在（邀请协作者） */
+    @GetMapping("/lookup-by-email")
+    public UserEmailLookupResponse lookupByEmail(
+            @RequestParam("email") String email,
+            Authentication auth
+    ) {
+        parseUserId(auth);
+        return userService.lookupByExactEmail(email);
     }
 
     @GetMapping("/me")

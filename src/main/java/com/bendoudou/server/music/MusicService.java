@@ -18,6 +18,7 @@ import com.bendoudou.server.music.dto.PlaylistMemberItemResponse;
 import com.bendoudou.server.music.dto.PlaylistItemResponse;
 import com.bendoudou.server.music.dto.PlaylistListeningStatusItemResponse;
 import com.bendoudou.server.music.dto.PlaylistListeningStatusResponse;
+import com.bendoudou.server.music.dto.PlayHistoryItemResponse;
 import com.bendoudou.server.music.dto.PostTrackCommentRequest;
 import com.bendoudou.server.music.dto.UpdateMusicTrackRequest;
 import com.bendoudou.server.music.dto.UpdatePlaylistListeningStateRequest;
@@ -58,6 +59,7 @@ import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -730,6 +732,35 @@ public class MusicService {
         return out;
     }
 
+    @Transactional(readOnly = true)
+    public Page<PlayHistoryItemResponse> listPlayHistoryPage(long userId, Pageable pageable) {
+        if (!userPrivacyService.shouldRecordPlay(userId)) {
+            return Page.empty(pageable);
+        }
+        Page<UserTrackPlayHistory> page = userTrackPlayHistoryRepository.findAccessibleByUserId(userId, pageable);
+        List<UserTrackPlayHistory> rows = page.getContent();
+        if (rows.isEmpty()) {
+            return Page.empty(pageable);
+        }
+        List<Long> trackIds = rows.stream().map(UserTrackPlayHistory::getTrackId).distinct().toList();
+        Map<Long, MusicTrack> trackById = musicTrackRepository.findAllById(trackIds).stream()
+                .collect(Collectors.toMap(MusicTrack::getId, t -> t, (a, b) -> a));
+        Set<Long> hearted = heartedTrackIdsForUser(userId, trackIds);
+        List<PlayHistoryItemResponse> items = new ArrayList<>(rows.size());
+        for (UserTrackPlayHistory h : rows) {
+            MusicTrack t = trackById.get(h.getTrackId());
+            if (t == null) {
+                continue;
+            }
+            items.add(new PlayHistoryItemResponse(
+                    h.getId(),
+                    h.getPlayedAt().toEpochMilli(),
+                    toResponse(t, hearted.contains(t.getId()))
+            ));
+        }
+        return new org.springframework.data.domain.PageImpl<>(items, pageable, page.getTotalElements());
+    }
+
     @Transactional
     public List<MusicTrackResponse> listPlayHistoryTracks(long userId) {
         if (!userPrivacyService.shouldRecordPlay(userId)) {
@@ -910,7 +941,10 @@ public class MusicService {
 
     @Transactional
     public void updatePlaylistListeningState(long userId, long playlistId, UpdatePlaylistListeningStateRequest req) {
-        assertMember(playlistId, userId);
+        // 全局播放器会对当前曲目上报「正在听」；非成员时静默忽略，避免误报权限错误
+        if (!playlistMemberRepository.existsByPlaylistIdAndUserId(playlistId, userId)) {
+            return;
+        }
         if (!req.playing()) {
             playlistListeningStatusRepository.deleteByPlaylistIdAndUserId(playlistId, userId);
             playlistListeningWebSocketHandler.broadcastListeningClear(playlistId, userId);
@@ -1498,7 +1532,7 @@ public class MusicService {
 
     private void assertMember(long playlistId, long userId) {
         if (!playlistMemberRepository.existsByPlaylistIdAndUserId(playlistId, userId)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "你不在这个歌单中，需要对方邀请加入后才能一起听");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "你无权访问该歌单");
         }
     }
 

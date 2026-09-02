@@ -1,16 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AtSign, Heart, MessageSquare, Send, X } from "lucide-react";
+import { Heart, MessageSquare, Send, X } from "lucide-react";
 import clsx from "clsx";
 import { useTranslation } from "react-i18next";
 import {
   fetchTrackComments,
-  fetchUserDirectoryForGuestbook,
   likeTrackComment,
   postTrackComment,
   unlikeTrackComment,
   userDirectoryAvatarUrl,
   type MusicTrackCommentDto,
-  type UserDirectoryItemDto,
 } from "../api/client";
 import { mapApiError } from "../i18n/mapApiError";
 import { useDateLocale } from "../i18n/useDateLocale";
@@ -68,8 +66,6 @@ export function MusicTrackComments({ trackId }: Props) {
   const [composer, setComposer] = useState("");
   const [posting, setPosting] = useState(false);
   const [replyingTo, setReplyingTo] = useState<{ id: number; label: string } | null>(null);
-  const [mentionCandidates, setMentionCandidates] = useState<UserDirectoryItemDto[]>([]);
-  const [selectedMentionUserIds, setSelectedMentionUserIds] = useState<number[]>([]);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const canMore = page < totalPages - 1;
@@ -103,20 +99,8 @@ export function MusicTrackComments({ trackId }: Props) {
   );
 
   useEffect(() => {
-    void (async () => {
-      try {
-        const users = await fetchUserDirectoryForGuestbook();
-        setMentionCandidates(users);
-      } catch {
-        setMentionCandidates([]);
-      }
-    })();
-  }, []);
-
-  useEffect(() => {
     setComposer("");
     setReplyingTo(null);
-    setSelectedMentionUserIds([]);
     void loadPage(0, false);
   }, [trackId, loadPage]);
 
@@ -198,14 +182,8 @@ export function MusicTrackComments({ trackId }: Props) {
         trackId,
         content,
         parentId: replyingTo?.id ?? null,
-        mentionUserIds: selectedMentionUserIds.filter((id) => {
-          const u = mentionCandidates.find((x) => x.id === id);
-          if (!u) return false;
-          return content.includes(`@${u.label}`);
-        }),
       });
       setComposer("");
-      setSelectedMentionUserIds([]);
       if (replyingTo) {
         setRows((prev) =>
           prev.map((x) =>
@@ -223,40 +201,17 @@ export function MusicTrackComments({ trackId }: Props) {
     } finally {
       setPosting(false);
     }
-  }, [composer, mentionCandidates, posting, replyingTo, selectedMentionUserIds, t, trackId]);
+  }, [composer, posting, replyingTo, t, trackId]);
 
-  const startReply = useCallback(
-    (id: number, label: string) => {
-      setReplyingTo({ id, label });
-      setTimeout(() => textareaRef.current?.focus(), 50);
-    },
-    []
-  );
+  const startReply = useCallback((id: number, label: string) => {
+    setReplyingTo({ id, label });
+    setTimeout(() => textareaRef.current?.focus(), 50);
+  }, []);
 
   const emptyHint = useMemo(() => t("music.commentsEmpty"), [t]);
 
-  const onMentionPick = useCallback((user: UserDirectoryItemDto) => {
-    const mention = `@${user.label} `;
-    const el = textareaRef.current;
-    if (!el) {
-      setComposer((prev) => `${prev}${prev.endsWith(" ") || prev.length === 0 ? "" : " "}${mention}`);
-    } else {
-      const start = el.selectionStart ?? composer.length;
-      const end = el.selectionEnd ?? composer.length;
-      const next = composer.slice(0, start) + mention + composer.slice(end);
-      setComposer(next);
-      window.setTimeout(() => {
-        const pos = start + mention.length;
-        el.focus();
-        el.setSelectionRange(pos, pos);
-      }, 0);
-    }
-    setSelectedMentionUserIds((prev) => (prev.includes(user.id) ? prev : [...prev, user.id]));
-  }, [composer]);
-
   return (
     <section className="mx-auto mb-8 w-full max-w-6xl" aria-label="Track Comments">
-      {/* 标题行 */}
       <div className="mb-4 flex items-center gap-2.5">
         <div className="flex h-7 w-7 items-center justify-center rounded-full bg-zinc-800/80">
           <MessageSquare className="h-3.5 w-3.5 text-zinc-400" />
@@ -269,7 +224,6 @@ export function MusicTrackComments({ trackId }: Props) {
         )}
       </div>
 
-      {/* 输入框区域 */}
       <div className="mb-5">
         {replyingTo ? (
           <div className="mb-2 flex items-center justify-between rounded-2xl border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-xs text-rose-300">
@@ -285,21 +239,6 @@ export function MusicTrackComments({ trackId }: Props) {
           </div>
         ) : null}
         <div className="relative">
-          {mentionCandidates.length > 0 ? (
-            <div className="mb-2 flex flex-wrap items-center gap-1.5">
-              {mentionCandidates.slice(0, 8).map((u) => (
-                <button
-                  key={u.id}
-                  type="button"
-                  onClick={() => onMentionPick(u)}
-                  className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-zinc-800/70 px-2 py-1 text-[11px] text-zinc-400 transition hover:border-rose-400/30 hover:text-zinc-200"
-                >
-                  <AtSign className="h-3 w-3" />
-                  <span className="max-w-[120px] truncate">{u.label}</span>
-                </button>
-              ))}
-            </div>
-          ) : null}
           <textarea
             ref={textareaRef}
             value={composer}
@@ -325,7 +264,6 @@ export function MusicTrackComments({ trackId }: Props) {
 
       {err ? <p className="mb-3 text-xs text-red-400/90">{err}</p> : null}
 
-      {/* 评论列表 */}
       <div className="space-y-3">
         {rows.map((c) => (
           <article
@@ -335,14 +273,11 @@ export function MusicTrackComments({ trackId }: Props) {
             <div className="flex items-start gap-3">
               <Avatar label={c.authorLabel} userId={c.authorUserId} hasAvatar={c.authorHasAvatar} />
               <div className="min-w-0 flex-1">
-                {/* 作者 + 时间 */}
                 <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                   <span className="text-sm font-semibold text-zinc-100">{c.authorLabel}</span>
                   <time className="text-[11px] text-zinc-600">{fmt(c.createdAtMillis)}</time>
                 </div>
-                {/* 正文 */}
                 <p className="mt-1.5 whitespace-pre-wrap text-sm leading-relaxed text-zinc-300">{c.content}</p>
-                {/* 操作行 */}
                 <div className="mt-2.5 flex items-center gap-2">
                   <button
                     type="button"
@@ -369,7 +304,6 @@ export function MusicTrackComments({ trackId }: Props) {
               </div>
             </div>
 
-            {/* 回复列表 */}
             {c.replies.length > 0 ? (
               <div className="mt-3 ml-12 space-y-2.5">
                 {c.replies.map((r) => (
@@ -413,7 +347,6 @@ export function MusicTrackComments({ trackId }: Props) {
         ))}
       </div>
 
-      {/* 空状态 */}
       {!loading && rows.length === 0 ? (
         <div className="flex flex-col items-center justify-center gap-2 py-10 text-zinc-600">
           <MessageSquare className="h-8 w-8 opacity-40" />

@@ -50,7 +50,7 @@ export class ApiHttpError extends Error {
 export const I18N_LOAD_FAILED = "__I18N_LOAD_FAILED__";
 
 /** 产线 API 域名（浏览器走 443/80，无端口；服务端反代到后端由运维配置） */
-const PROD_API_ORIGIN = "https://api.bendoudoudounai.com";
+const PROD_API_ORIGIN = "https://music-api.aimatex.com";
 /** 本地开发后端（不走 Vite 代理，直接请求） */
 const DEV_API_ORIGIN = "http://127.0.0.1:8882";
 
@@ -133,6 +133,9 @@ export interface MeResponse {
   beanBalance?: number;
   beanLevelCode?: string;
   beanLevelName?: string;
+  inviteCode?: string | null;
+  inviteCodeUsed?: boolean;
+  inviteeLabel?: string | null;
 }
 
 export interface UserPrivacySettingsDto {
@@ -170,6 +173,53 @@ export function userCanManageDevDiary(
 export async function login(email: string, password: string): Promise<AuthResponse> {
   const { data } = await api.post<AuthResponse>("/api/auth/login", { email, password });
   return data;
+}
+
+export async function sendRegisterEmailCode(email: string, locale?: string): Promise<void> {
+  await api.post("/api/auth/register/send-email", { email: email.trim(), locale: locale ?? undefined });
+}
+
+export async function registerWithEmail(input: {
+  email: string;
+  password: string;
+  code: string;
+  inviteCode: string;
+  displayName?: string;
+}): Promise<AuthResponse> {
+  const { data } = await api.post<AuthResponse>("/api/auth/register", {
+    email: input.email.trim(),
+    password: input.password,
+    code: input.code.trim(),
+    inviteCode: input.inviteCode.trim(),
+    displayName: input.displayName?.trim() || undefined,
+  });
+  return data;
+}
+
+export async function validateInviteCode(code: string): Promise<{ valid: boolean; message: string }> {
+  const { data } = await api.get<{ valid: boolean; message: string }>("/api/auth/invite/validate", {
+    params: { code: code.trim() },
+  });
+  return data;
+}
+
+export async function sendResetPasswordEmailCode(email: string, locale?: string): Promise<void> {
+  await api.post("/api/auth/reset-password/send-email", {
+    email: email.trim(),
+    locale: locale ?? undefined,
+  });
+}
+
+export async function resetPasswordWithEmail(input: {
+  email: string;
+  code: string;
+  password: string;
+}): Promise<void> {
+  await api.post("/api/auth/reset-password", {
+    email: input.email.trim(),
+    code: input.code.trim(),
+    password: input.password,
+  });
 }
 
 export async function fetchMe(): Promise<MeResponse> {
@@ -953,6 +1003,21 @@ export async function fetchUserDirectoryForGuestbook(): Promise<UserDirectoryIte
   return rows.map((u) => ({ ...u, role: u.role ?? "USER" }));
 }
 
+export type UserEmailLookupDto = {
+  exists: boolean;
+  label: string | null;
+  email: string | null;
+};
+
+/** 精确邮箱查找：仅完整匹配时返回是否已注册 */
+export async function lookupUserByEmail(email: string): Promise<UserEmailLookupDto> {
+  const q = encodeURIComponent(email.trim());
+  const res = await fetch(apiPath(`/api/users/lookup-by-email?email=${q}`), {
+    headers: { Authorization: `Bearer ${getStoredToken()}` },
+  });
+  return authJson(res) as Promise<UserEmailLookupDto>;
+}
+
 /** 发帖或回复主楼。定向 visibleToUserId 非空时须已登录。parentId 为回复主楼。 */
 export async function submitGuestbookMessage(input: {
   content: string;
@@ -1284,8 +1349,31 @@ export async function fetchHeartTracks(): Promise<MusicTrackDto[]> {
   return authJson(res);
 }
 
+export interface PlayHistoryItemDto {
+  historyId: number;
+  playedAtMillis: number;
+  track: MusicTrackDto;
+}
+
+export interface PlayHistoryPageDto {
+  content: PlayHistoryItemDto[];
+  totalElements: number;
+  totalPages: number;
+  number: number;
+  size: number;
+  last?: boolean;
+}
+
 export async function fetchPlayHistoryTracks(): Promise<MusicTrackDto[]> {
   const res = await fetch(apiPath("/api/music/history/tracks"), {
+    headers: { Authorization: `Bearer ${getStoredToken()}` },
+  });
+  return authJson(res);
+}
+
+export async function fetchPlayHistoryPlays(page = 0, size = 30): Promise<PlayHistoryPageDto> {
+  const q = new URLSearchParams({ page: String(page), size: String(size) });
+  const res = await fetch(apiPath(`/api/music/history/plays?${q.toString()}`), {
     headers: { Authorization: `Bearer ${getStoredToken()}` },
   });
   return authJson(res);
