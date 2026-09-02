@@ -1299,6 +1299,62 @@ export async function recordTrackPlay(trackId: number): Promise<MusicTrackDto> {
   return authJson(res);
 }
 
+/** 用户操作痕迹入库（歌单内搜索等前端侧行为；发现搜索等由服务端自动记） */
+export async function recordUserActivity(input: {
+  action: string;
+  scope?: string | null;
+  query?: string | null;
+  targetType?: string | null;
+  targetId?: number | null;
+  detailJson?: string | null;
+}): Promise<void> {
+  try {
+    const res = await fetch(apiPath("/api/activity"), {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${getStoredToken()}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        action: input.action,
+        scope: input.scope ?? null,
+        query: input.query ?? null,
+        targetType: input.targetType ?? null,
+        targetId: input.targetId ?? null,
+        detailJson: input.detailJson ?? null,
+      }),
+    });
+    if (!res.ok) return;
+  } catch {
+    /* 埋点失败忽略 */
+  }
+}
+
+export async function fetchMyActivity(params?: {
+  action?: string;
+  limit?: number;
+}): Promise<
+  Array<{
+    id: number;
+    action: string;
+    scope: string | null;
+    query: string | null;
+    targetType: string | null;
+    targetId: number | null;
+    detailJson: string | null;
+    createdAtMillis: number;
+  }>
+> {
+  const sp = new URLSearchParams();
+  if (params?.action) sp.set("action", params.action);
+  if (params?.limit != null) sp.set("limit", String(params.limit));
+  const q = sp.toString();
+  const res = await fetch(apiPath(`/api/activity/me${q ? `?${q}` : ""}`), {
+    headers: { Authorization: `Bearer ${getStoredToken()}` },
+  });
+  return authJson(res);
+}
+
 export async function fetchTrackPlayStats(trackId: number): Promise<TrackPlayUserStatDto[]> {
   const res = await fetch(apiPath(`/api/music/tracks/${trackId}/play-stats`), {
     headers: { Authorization: `Bearer ${getStoredToken()}` },

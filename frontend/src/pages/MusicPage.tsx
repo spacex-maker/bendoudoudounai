@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { Home, ListMusic, Search, Heart, Radio, Music2, ChevronRight, Settings2, LayoutDashboard, History, Menu, X, ArrowLeft, Bell, Expand } from "lucide-react";
+import { MusicSearchBar } from "../components/MusicSearchBar";
+import { pushSearchHistory } from "../music/searchHistory";
+import { Home, ListMusic, Heart, Radio, Music2, ChevronRight, Settings2, LayoutDashboard, History, Menu, X, ArrowLeft, Bell, Expand } from "lucide-react";
 import clsx from "clsx";
 import { mapApiError } from "../i18n/mapApiError";
 import { LanguageSwitch } from "../components/LanguageSwitch";
@@ -33,6 +35,7 @@ import {
   type InvitationItemDto,
   fetchMusicTracks,
   recordTrackPlay,
+  recordUserActivity,
   fetchVisiblePlaylists,
   fetchIncomingInvitations,
   fetchPlaylistListeningStatus,
@@ -789,16 +792,32 @@ export function MusicPage() {
             >
               <Menu className="h-4 w-4" />
             </button>
-            <div className="relative min-w-0 max-w-md flex-1">
-              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500" />
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder={isDiscoverCatalog ? t("music.discoverSearchPh") : t("music.searchPh")}
-                className="h-8 w-full rounded-full border border-netease-line bg-[#2a2a2a] pl-8 pr-3 text-xs text-zinc-200 placeholder:text-zinc-500 focus:border-red-900/50 focus:outline-none"
-              />
-            </div>
-            <div className="hidden shrink-0 text-xs text-zinc-500 sm:block">{t("music.uploadHint")}</div>
+            <MusicSearchBar
+              value={search}
+              onChange={setSearch}
+              scope={isDiscoverCatalog ? "discover" : "library"}
+              placeholder={isDiscoverCatalog ? t("music.discoverSearchPh") : t("music.searchPh")}
+              onCommit={(q) => {
+                if (isDiscoverCatalog) {
+                  pushSearchHistory("discover", q);
+                  // 发现搜索由服务端 /discover/search 自动入库
+                } else {
+                  pushSearchHistory("library", q);
+                  void recordUserActivity({
+                    action: "SEARCH_LIBRARY",
+                    scope: "library",
+                    query: q,
+                  });
+                }
+              }}
+            />
+            {!isDiscoverCatalog && search.trim().length >= 1 ? (
+              <span className="hidden shrink-0 text-[11px] text-zinc-500 md:inline">
+                {t("music.searchLibraryHit", { count: filtered.length })}
+              </span>
+            ) : (
+              <div className="hidden shrink-0 text-xs text-zinc-500 sm:block">{t("music.uploadHint")}</div>
+            )}
             <div className="ml-auto flex min-w-0 shrink-0 items-center gap-2">
               <LanguageSwitch
                 compact
@@ -1030,6 +1049,7 @@ export function MusicPage() {
                 ) : showDiscoverPanel ? (
                   <DiscoverMusicPanel
                     query={search}
+                    onPickQuery={setSearch}
                     onPlayTrack={onDiscoverPlay}
                     onHeartTrack={onDiscoverHeart}
                     onTrackSynced={onDiscoverImported}

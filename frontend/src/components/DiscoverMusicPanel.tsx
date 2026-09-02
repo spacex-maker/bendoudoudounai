@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Heart, ListPlus, Loader2, Music2, Play } from "lucide-react";
+import { Clock3, Heart, ListPlus, Loader2, Music2, Play, X } from "lucide-react";
 import clsx from "clsx";
 import { mapApiError } from "../i18n/mapApiError";
 import {
@@ -10,6 +10,12 @@ import {
   importNeteaseTrack,
 } from "../api/client";
 import { isAudioQualityCode, qualityRank, type AudioQualityCode } from "../music/audioQuality";
+import {
+  clearSearchHistory,
+  pushSearchHistory,
+  readSearchHistory,
+  removeSearchHistoryItem,
+} from "../music/searchHistory";
 import { AddToPlaylistModal } from "./AddToPlaylistModal";
 
 const QUALITY_KEY = "bendoudou_discover_quality";
@@ -39,6 +45,8 @@ type DiscoverMusicPanelProps = {
   onHeartTrack: (track: MusicTrackDto) => void;
   /** 首次入库云端时回调（用于刷新歌单曲目数） */
   onTrackSynced?: (track: MusicTrackDto) => void;
+  /** 点选历史词时回填顶部搜索框 */
+  onPickQuery?: (query: string) => void;
 };
 
 export function DiscoverMusicPanel({
@@ -46,6 +54,7 @@ export function DiscoverMusicPanel({
   onPlayTrack,
   onHeartTrack,
   onTrackSynced,
+  onPickQuery,
 }: DiscoverMusicPanelProps) {
   const { t } = useTranslation();
   const [results, setResults] = useState<DiscoverSearchItemDto[]>([]);
@@ -61,9 +70,14 @@ export function DiscoverMusicPanel({
   const [qualityBySong, setQualityBySong] = useState<Record<number, string>>({});
   const [downgradeHint, setDowngradeHint] = useState<string | null>(null);
   const [addToPlaylistItem, setAddToPlaylistItem] = useState<DiscoverSearchItemDto | null>(null);
+  const [history, setHistory] = useState<string[]>(() => readSearchHistory("discover"));
   const trackCacheRef = useRef<Map<string, MusicTrackDto>>(new Map());
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastQueryRef = useRef("");
+
+  useEffect(() => {
+    setHistory(readSearchHistory("discover"));
+  }, [query]);
 
   useEffect(() => {
     try {
@@ -103,6 +117,7 @@ export function DiscoverMusicPanel({
           setHasMore(page.hasMore);
           setTotal(page.total);
           setHeartedIds(new Set((page.items ?? []).filter((x) => x.hearted).map((x) => x.neteaseSongId)));
+          setHistory(pushSearchHistory("discover", q));
         } catch (e) {
           if (lastQueryRef.current !== q) return;
           setErr(mapApiError(t, e));
@@ -291,11 +306,58 @@ export function DiscoverMusicPanel({
 
       {q.length < 2 ? (
         <div
-          className="flex min-h-[160px] flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-netease-line/60 px-4 py-10 text-center"
+          className="flex min-h-[160px] flex-col items-stretch justify-start gap-4 rounded-2xl border border-dashed border-netease-line/60 px-4 py-6"
           role="status"
         >
-          <Music2 className="h-8 w-8 text-zinc-600" />
-          <p className="text-sm text-zinc-500">{t("music.discoverHint")}</p>
+          <div className="flex flex-col items-center gap-2 text-center">
+            <Music2 className="h-8 w-8 text-zinc-600" />
+            <p className="text-sm text-zinc-500">{t("music.discoverHint")}</p>
+            <p className="text-[11px] text-zinc-600">{t("music.searchTips")}</p>
+          </div>
+          {history.length > 0 ? (
+            <div>
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <p className="inline-flex items-center gap-1.5 text-[11px] font-medium text-zinc-500">
+                  <Clock3 className="h-3.5 w-3.5" />
+                  {t("music.searchHistory")}
+                </p>
+                <button
+                  type="button"
+                  className="text-[10px] text-zinc-500 transition hover:text-zinc-300"
+                  onClick={() => {
+                    clearSearchHistory("discover");
+                    setHistory([]);
+                  }}
+                >
+                  {t("music.searchHistoryClear")}
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {history.map((item) => (
+                  <span
+                    key={item}
+                    className="group inline-flex max-w-full items-center gap-0.5 rounded-full border border-netease-line bg-[#2a2a2a] pl-2.5 text-[11px] text-zinc-300"
+                  >
+                    <button
+                      type="button"
+                      className="max-w-[12rem] truncate py-1 transition hover:text-white"
+                      onClick={() => onPickQuery?.(item)}
+                    >
+                      {item}
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-full p-1 text-zinc-600 opacity-70 transition hover:bg-white/10 hover:text-zinc-300 group-hover:opacity-100"
+                      aria-label={t("music.searchHistoryRemove")}
+                      onClick={() => setHistory(removeSearchHistoryItem("discover", item))}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            </div>
+          ) : null}
         </div>
       ) : loading ? (
         <div className="flex min-h-[120px] items-center justify-center gap-2 text-sm text-zinc-500">
