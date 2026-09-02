@@ -1,9 +1,13 @@
 package com.bendoudou.server.music;
 
+import com.bendoudou.server.music.dto.AddTrackToPlaylistRequest;
 import com.bendoudou.server.music.dto.CreatePlaylistRequest;
 import com.bendoudou.server.music.dto.CreateCosUploadTicketRequest;
 import com.bendoudou.server.music.dto.CreateTrackFromCosRequest;
 import com.bendoudou.server.music.dto.CosUploadTicketResponse;
+import com.bendoudou.server.music.dto.DiscoverSearchItemResponse;
+import com.bendoudou.server.music.dto.DiscoverSearchPageResponse;
+import com.bendoudou.server.music.dto.ImportNeteaseTrackRequest;
 import com.bendoudou.server.music.dto.InvitationItemResponse;
 import com.bendoudou.server.music.dto.InviteToPlaylistRequest;
 import com.bendoudou.server.music.dto.MusicPreviewResponse;
@@ -20,6 +24,7 @@ import com.bendoudou.server.music.dto.UpdatePlaylistNameRequest;
 import com.bendoudou.server.music.dto.UpdatePlaylistWallpaperRequest;
 import com.bendoudou.server.music.dto.TrackPlayUserStatResponse;
 import com.bendoudou.server.bean.BeanService;
+import com.bendoudou.server.music.netease.DiscoverMusicService;
 import jakarta.validation.Valid;
 import org.springframework.core.io.Resource;
 import org.springframework.data.domain.Page;
@@ -55,10 +60,16 @@ public class MusicController {
 
     private final MusicService musicService;
     private final BeanService beanService;
+    private final DiscoverMusicService discoverMusicService;
 
-    public MusicController(MusicService musicService, BeanService beanService) {
+    public MusicController(
+            MusicService musicService,
+            BeanService beanService,
+            DiscoverMusicService discoverMusicService
+    ) {
         this.musicService = musicService;
         this.beanService = beanService;
+        this.discoverMusicService = discoverMusicService;
     }
 
     @GetMapping("/playlists")
@@ -244,6 +255,31 @@ public class MusicController {
         return musicService.createTrackFromCos(parseUserId(authentication), request);
     }
 
+    @GetMapping("/discover/search")
+    public DiscoverSearchPageResponse discoverSearch(
+            @RequestParam("q") String q,
+            @RequestParam(value = "offset", defaultValue = "0") int offset,
+            @RequestParam(value = "limit", defaultValue = "20") int limit,
+            Authentication authentication
+    ) {
+        beanService.awardDailyUsage(parseUserId(authentication));
+        return discoverMusicService.search(parseUserId(authentication), q, offset, limit);
+    }
+
+    @PostMapping("/discover/import")
+    public MusicTrackResponse discoverImport(
+            @Valid @RequestBody ImportNeteaseTrackRequest request,
+            Authentication authentication
+    ) {
+        return discoverMusicService.importSong(
+                parseUserId(authentication),
+                request.neteaseSongId(),
+                request.playlistId(),
+                Boolean.TRUE.equals(request.heart()),
+                request.quality()
+        );
+    }
+
     @GetMapping("/tracks")
     public List<MusicTrackResponse> list(
             @RequestParam("playlistId") long playlistId,
@@ -265,6 +301,15 @@ public class MusicController {
     @PostMapping("/tracks/{id}/heart")
     public MusicTrackResponse addHeart(@PathVariable long id, Authentication authentication) {
         return musicService.addHeart(parseUserId(authentication), id);
+    }
+
+    @PostMapping("/tracks/{id}/add-to-playlist")
+    public MusicTrackResponse addTrackToPlaylist(
+            @PathVariable long id,
+            @Valid @RequestBody AddTrackToPlaylistRequest request,
+            Authentication authentication
+    ) {
+        return musicService.addTrackToPlaylist(parseUserId(authentication), id, request.playlistId());
     }
 
     @DeleteMapping("/tracks/{id}/heart")

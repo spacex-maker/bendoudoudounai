@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { ChevronUp, Music2, Pause, Play } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useMusicPlayer } from "../music/MusicPlayerContext";
+import { isMusicPath } from "../music/musicRoutes";
 import { MusicPlayerBar } from "./MusicPlayerBar";
 import { useSyncedLyrics } from "../music/useSyncedLyrics";
 import { getActiveLyricText } from "../music/lyricsUtils";
@@ -48,7 +49,16 @@ export function GlobalMusicPlayer() {
   const [historyErr, setHistoryErr] = useState<string | null>(null);
   const [musicMobileNavOpen, setMusicMobileNavOpen] = useState(false);
 
-  const isOnMusicPage = location.pathname === "/music";
+  const isOnMusicPage = isMusicPath(location.pathname);
+  const openMusicPlayerView = useCallback(() => {
+    if (isOnMusicPage) {
+      const params = new URLSearchParams(location.search);
+      params.set("view", "player");
+      navigate({ pathname: location.pathname, search: `?${params.toString()}` });
+      return;
+    }
+    navigate("/music?view=player");
+  }, [isOnMusicPage, location.pathname, location.search, navigate]);
   const hasTrack = currentTrack != null;
   const playlistEmpty = queue.length === 0;
   const audioObjectUrl = currentTrack?.audioUrl ?? null;
@@ -169,7 +179,7 @@ export function GlobalMusicPlayer() {
     playMode,
     onCyclePlayMode: handleCyclePlayMode,
     onOpenHistoryPanel: openHistoryPanel,
-    onOpenPlayerView: () => navigate("/music?view=player"),
+    onOpenPlayerView: openMusicPlayerView,
   };
 
   return (
@@ -214,7 +224,7 @@ export function GlobalMusicPlayer() {
           {...sharedBarProps}
           title={currentTrack?.title ?? t("music.pickTrack")}
           artist={currentTrack?.artist ?? t("music.unknownArtist")}
-          onOpenPlayerView={() => navigate("/music?view=player")}
+          onOpenPlayerView={openMusicPlayerView}
         />
       )}
 
@@ -225,7 +235,7 @@ export function GlobalMusicPlayer() {
             {/* Vinyl thumbnail */}
             <button
               type="button"
-              onClick={() => navigate("/music?view=player")}
+              onClick={openMusicPlayerView}
               className="relative h-9 w-9 shrink-0 overflow-hidden rounded-full border-0 bg-zinc-800 p-0 ring-1 ring-white/10 appearance-none"
             >
               {coverSrc ? (
@@ -246,7 +256,7 @@ export function GlobalMusicPlayer() {
             {/* Track info */}
             <button
               type="button"
-              onClick={() => navigate("/music?view=player")}
+              onClick={openMusicPlayerView}
               className="min-w-0 max-w-[110px] border-0 bg-transparent p-0 px-1 text-left appearance-none"
             >
               <div className="truncate text-xs font-semibold leading-tight text-zinc-100">

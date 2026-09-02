@@ -241,11 +241,11 @@ export function PlaylistSettingsModal({ open, onClose, playlist, onSuccess }: Pr
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       <div
-        className="relative h-[100dvh] w-full max-w-xl overflow-hidden rounded-none border-0 bg-zinc-900 shadow-2xl sm:h-auto sm:max-h-[85vh] sm:rounded-[40px] sm:border sm:border-white/10"
+        className="relative flex h-[100dvh] w-full max-w-xl flex-col overflow-hidden rounded-none border-0 bg-zinc-900 shadow-2xl sm:h-auto sm:max-h-[min(85dvh,100dvh-2rem)] sm:rounded-[40px] sm:border sm:border-white/10"
         onClick={(e) => e.stopPropagation()}
       >
         {/* 顶部标题栏 */}
-        <header className="flex items-center justify-between px-4 py-4 sm:px-8 sm:py-6">
+        <header className="flex shrink-0 items-center justify-between px-4 py-4 sm:px-8 sm:py-6">
           <div>
             <h2 className="text-lg font-bold text-white sm:text-xl">{t("playlistModal.title")}</h2>
             <p className="mt-0.5 text-xs text-zinc-500">{t("playlistModal.subtitle")}</p>
@@ -260,8 +260,8 @@ export function PlaylistSettingsModal({ open, onClose, playlist, onSuccess }: Pr
           </button>
         </header>
 
-        <div className="custom-scrollbar overflow-y-auto px-4 pb-6 pt-2 sm:px-8 sm:pb-10" style={{ maxHeight: "calc(100dvh - 72px)" }}>
-          <div className="space-y-8">
+        <div className="custom-scrollbar scrollbar-overlay min-h-0 flex-1 overflow-y-auto overscroll-contain">
+          <div className="space-y-8 px-4 pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))] pt-2 sm:px-8 sm:pb-10">
             
             {/* 1. 数据概览卡片区 */}
             <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">

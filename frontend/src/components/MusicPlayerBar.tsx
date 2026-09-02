@@ -87,11 +87,19 @@ export function MusicPlayerBar({
   const footerRef = useRef<HTMLElement | null>(null);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const [bufferedEnd, setBufferedEnd] = useState(0);
+  const [modeTip, setModeTip] = useState<{ label: string; token: number } | null>(null);
+  const modeTipHideRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useAudioAnalyserGlow(audioRef, footerRef, {
     playing,
     hasTrack,
     volume,
   });
+
+  useEffect(() => {
+    return () => {
+      if (modeTipHideRef.current) clearTimeout(modeTipHideRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     if (!scrubbing) return;
@@ -165,6 +173,38 @@ export function MusicPlayerBar({
   const modeAriaLabel = t("player.modeSwitch", { mode: modeTitle });
   const ModeIcon = playMode === "single" ? Repeat1 : playMode === "shuffle" ? Shuffle : Repeat;
 
+  const handleCyclePlayMode = () => {
+    const next =
+      playMode === "list" ? "single" : playMode === "single" ? "shuffle" : "list";
+    const label =
+      next === "single"
+        ? t("player.modeSingle")
+        : next === "shuffle"
+          ? t("player.modeShuffle")
+          : t("player.modeList");
+    onCyclePlayMode();
+    if (modeTipHideRef.current) clearTimeout(modeTipHideRef.current);
+    setModeTip({ label, token: Date.now() });
+    modeTipHideRef.current = setTimeout(() => setModeTip(null), 1400);
+  };
+
+  const renderModeTip = () =>
+    modeTip != null ? (
+      <span
+        key={modeTip.token}
+        className="pointer-events-none absolute bottom-[calc(100%+0.35rem)] left-1/2 z-30 -translate-x-1/2"
+        role="status"
+      >
+        <span className="relative block animate-play-mode-tip whitespace-nowrap rounded-full bg-zinc-100 px-2.5 py-1 text-[11px] font-medium text-zinc-900 shadow-[0_8px_24px_rgba(0,0,0,0.35)]">
+          {modeTip.label}
+          <span
+            className="absolute left-1/2 top-full h-0 w-0 -translate-x-1/2 border-x-[5px] border-t-[5px] border-x-transparent border-t-zinc-100"
+            aria-hidden
+          />
+        </span>
+      </span>
+    ) : null;
+
   const onMobileSwipeStart = (e: TouchEvent<HTMLDivElement>) => {
     if (e.touches.length !== 1) return;
     const target = e.target as HTMLElement | null;
@@ -194,7 +234,7 @@ export function MusicPlayerBar({
       <footer
         ref={footerRef}
         className={clsx(
-          "pointer-events-auto w-full max-w-5xl overflow-hidden transition-colors duration-300",
+          "pointer-events-auto w-full max-w-5xl overflow-visible transition-colors duration-300",
           "rounded-[32px] sm:rounded-full",
           "bg-zinc-900/85 shadow-[0_16px_48px_rgba(0,0,0,0.6),0_0_0_1px_rgba(255,255,255,0.08)_inset]",
           "backdrop-blur-3xl backdrop-saturate-200"
@@ -246,15 +286,18 @@ export function MusicPlayerBar({
 
             {/* 移动端专属控制区（整合在左侧面板右边缘） */}
             <div className="flex items-center gap-1 sm:hidden">
-              <button
-                type="button"
-                className="h-10 w-10 shrink-0 flex items-center justify-center rounded-full text-zinc-300 transition hover:bg-white/10"
-                onClick={onCyclePlayMode}
-                title={modeTitle}
-                aria-label={modeAriaLabel}
-              >
-                <ModeIcon className="h-4 w-4" />
-              </button>
+              <div className="relative">
+                {renderModeTip()}
+                <button
+                  type="button"
+                  className="h-10 w-10 shrink-0 flex items-center justify-center rounded-full text-zinc-300 transition hover:bg-white/10"
+                  onClick={handleCyclePlayMode}
+                  title={modeTitle}
+                  aria-label={modeAriaLabel}
+                >
+                  <ModeIcon className="h-4 w-4" />
+                </button>
+              </div>
               <button
                 type="button"
                 className="h-10 w-10 shrink-0 flex items-center justify-center rounded-full bg-white text-black shadow-lg transition active:scale-95 disabled:opacity-30 disabled:active:scale-100"
@@ -326,15 +369,18 @@ export function MusicPlayerBar({
 
           {/* 桌面端居中：播放控制区 */}
           <div className="hidden sm:flex items-center justify-center gap-2 shrink-0">
-            <button
-              type="button"
-              className="group rounded-full p-2.5 text-zinc-400 transition hover:bg-white/10 hover:text-zinc-100 active:scale-90"
-              onClick={onCyclePlayMode}
-              title={modeTitle}
-              aria-label={modeAriaLabel}
-            >
-              <ModeIcon className="h-5 w-5 transition group-hover:scale-110" />
-            </button>
+            <div className="relative">
+              {renderModeTip()}
+              <button
+                type="button"
+                className="group rounded-full p-2.5 text-zinc-400 transition hover:bg-white/10 hover:text-zinc-100 active:scale-90"
+                onClick={handleCyclePlayMode}
+                title={modeTitle}
+                aria-label={modeAriaLabel}
+              >
+                <ModeIcon className="h-5 w-5 transition group-hover:scale-110" />
+              </button>
+            </div>
             <button
               type="button"
               className="group rounded-full p-2.5 text-zinc-400 transition hover:bg-white/10 hover:text-zinc-100 active:scale-90 disabled:opacity-30 disabled:hover:bg-transparent"

@@ -33,7 +33,8 @@ function WallpaperRouteSync() {
   const loc = useLocation();
   const { setWallpaperDisplayUrl, setWallpaperTargetPlaylistId } = usePageAppearance();
   useEffect(() => {
-    if (loc.pathname !== "/music") {
+    const onMusic = loc.pathname === "/music" || loc.pathname.startsWith("/music/");
+    if (!onMusic) {
       setWallpaperDisplayUrl(null);
       setWallpaperTargetPlaylistId(null);
     }
@@ -135,7 +136,7 @@ export default function App() {
       />
       <Route path="/login" element={<LoginPage />} />
       <Route
-        path="/music"
+        path="/music/*"
         element={
           <Protected>
             <MusicPage />

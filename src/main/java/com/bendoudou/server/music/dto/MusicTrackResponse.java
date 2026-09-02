@@ -18,5 +18,9 @@ public record MusicTrackResponse(
         boolean hasCover,
         long playCount,
         /** 当前登录用户是否已红心 */
-        boolean hearted
+        boolean hearted,
+        /**
+         * 实际入库音质：standard / higher / exhigh / lossless / hires；非网易云导入可为空。
+         */
+        String audioQuality
 ) {}

@@ -13,9 +13,16 @@ module.exports = {
           },
           "100%": { transform: "scale(1)", opacity: "1", filter: "brightness(1) blur(0)" },
         },
+        playModeTip: {
+          "0%": { opacity: "0", transform: "translateY(6px) scale(0.92)" },
+          "14%": { opacity: "1", transform: "translateY(0) scale(1)" },
+          "72%": { opacity: "1", transform: "translateY(0) scale(1)" },
+          "100%": { opacity: "0", transform: "translateY(-8px) scale(0.96)" },
+        },
       },
       animation: {
         "vinyl-swap": "vinylSwap 0.72s cubic-bezier(0.4, 0, 0.2, 1) both",
+        "play-mode-tip": "playModeTip 1.35s cubic-bezier(0.22, 1, 0.36, 1) both",
       },
       fontFamily: {
         display: ['"ZCOOL XiaoWei"', "serif"],

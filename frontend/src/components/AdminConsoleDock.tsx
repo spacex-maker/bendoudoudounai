@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { LayoutDashboard } from "lucide-react";
 import { useAuth } from "../auth/AuthContext";
 import { userIsAdmin } from "../api/client";
+import { isMusicPath } from "../music/musicRoutes";
 
 /**
  * 管理员全局入口：固定左下角（z-40 低于播放条 z-50）。
@@ -12,7 +13,7 @@ export function AdminConsoleDock() {
   const { t } = useTranslation();
   const { pathname } = useLocation();
   const { state } = useAuth();
-  if (pathname === "/music") return null;
+  if (isMusicPath(pathname)) return null;
   if (pathname.startsWith("/admin")) return null;
   if (state.status !== "authed" || !userIsAdmin(state.user)) return null;
 

@@ -35,9 +35,16 @@ security:
 bendoudou:
   # 本地上传目录，相对 JAR 运行目录
   music-upload-dir: ${BENDOUDOU_MUSIC_UPLOAD:uploads/music}
-  # 腾讯云 COS
+  # 腾讯云 COS（密钥请用环境变量，勿把真实 AK/SK 写进仓库）
   cos:
     enabled: true
+    secret-id: ${TENCENTCLOUD_SECRET_ID:}
+    secret-key: ${TENCENTCLOUD_SECRET_KEY:}
     bucket: px-1258150206
     region: ap-nanjing
     path-prefix: bendoudou/music/
+  # 网易云（发现音乐）；Cookie 会过期，用环境变量注入
+  netease:
+    music-u: ${BENDOUDOU_NETEASE_MUSIC_U:}
+    csrf: ${BENDOUDOU_NETEASE_CSRF:}
+    user-agent: ${BENDOUDOU_NETEASE_UA:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36}

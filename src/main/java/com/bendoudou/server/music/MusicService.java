@@ -757,6 +757,14 @@ public class MusicService {
         return out;
     }
 
+    @Transactional(readOnly = true)
+    public MusicTrackResponse getAccessibleTrack(long userId, long trackId) {
+        MusicTrack t = musicTrackRepository.findById(trackId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "歌曲不存在"));
+        assertMember(t.getPlaylistId(), userId);
+        return toResponse(t, userTrackHeartRepository.existsByUserIdAndTrackId(userId, trackId));
+    }
+
     @Transactional
     public MusicTrackResponse addHeart(long userId, long trackId) {
         MusicTrack t = musicTrackRepository.findById(trackId)
@@ -780,6 +788,76 @@ public class MusicService {
         assertMember(t.getPlaylistId(), userId);
         userTrackHeartRepository.deleteByUserIdAndTrackId(userId, trackId);
         return toResponse(t, false);
+    }
+
+    /**
+     * 将已有曲目复制到目标歌单（复用 COS 对象，不重新上传）。
+     * 若目标歌单已有同 note / 同 sha 曲目，则直接返回已有记录。
+     */
+    @Transactional
+    public MusicTrackResponse addTrackToPlaylist(long userId, long trackId, long targetPlaylistId) {
+        MusicTrack source = musicTrackRepository.findById(trackId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "歌曲不存在"));
+        assertMember(source.getPlaylistId(), userId);
+        assertMember(targetPlaylistId, userId);
+
+        if (source.getPlaylistId() == targetPlaylistId) {
+            return toResponse(source, userTrackHeartRepository.existsByUserIdAndTrackId(userId, source.getId()));
+        }
+
+        if (StringUtils.hasText(source.getNote())) {
+            Optional<MusicTrack> byNote = musicTrackRepository
+                    .findFirstByPlaylistIdAndNoteOrderByIdAsc(targetPlaylistId, source.getNote());
+            if (byNote.isPresent()) {
+                MusicTrack existing = byNote.get();
+                return toResponse(existing, userTrackHeartRepository.existsByUserIdAndTrackId(userId, existing.getId()));
+            }
+        }
+        if (StringUtils.hasText(source.getFileSha256())) {
+            Optional<MusicTrack> bySha = musicTrackRepository
+                    .findFirstByPlaylistIdAndFileSha256OrderByIdAsc(targetPlaylistId, source.getFileSha256());
+            if (bySha.isPresent()) {
+                MusicTrack existing = bySha.get();
+                return toResponse(existing, userTrackHeartRepository.existsByUserIdAndTrackId(userId, existing.getId()));
+            }
+        }
+
+        String sha = source.getFileSha256();
+        String audioKey = source.getStoredRelpath();
+        if (!StringUtils.hasText(sha) || !StringUtils.hasText(audioKey)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "该歌曲缺少可复用的存储信息，无法加入歌单");
+        }
+        String ext = extFromObjectKey(audioKey);
+        CreateTrackFromCosRequest req = new CreateTrackFromCosRequest(
+                targetPlaylistId,
+                sha,
+                ext,
+                source.getTitle(),
+                source.getArtist(),
+                source.getAlbum(),
+                source.getNote(),
+                source.getDurationSeconds(),
+                source.getOriginalFilename(),
+                source.isMetadataFromFile(),
+                source.getFileSize(),
+                source.getMimeType(),
+                audioKey,
+                source.getLyricsStoredRelpath(),
+                source.getCoverStoredRelpath()
+        );
+        return createTrackFromCos(userId, req);
+    }
+
+    private static String extFromObjectKey(String objectKey) {
+        int dot = objectKey.lastIndexOf('.');
+        if (dot < 0 || dot == objectKey.length() - 1) {
+            return "mp3";
+        }
+        String ext = objectKey.substring(dot + 1).toLowerCase(Locale.ROOT);
+        if (!ALLOWED_EXT.contains(ext)) {
+            return "mp3";
+        }
+        return ext;
     }
 
     @Transactional
@@ -1718,8 +1796,29 @@ public class MusicService {
                 coverForClient,
                 hasCover,
                 t.getPlayCount(),
-                hearted
+                hearted,
+                parseAudioQualityFromNote(t.getNote())
         );
+    }
+
+    /** note 形如 netease:{id}:{quality} */
+    private static String parseAudioQualityFromNote(String note) {
+        if (!StringUtils.hasText(note)) {
+            return null;
+        }
+        String n = note.trim();
+        if (!n.startsWith("netease:")) {
+            return null;
+        }
+        String[] parts = n.split(":");
+        if (parts.length < 3) {
+            return null;
+        }
+        String q = parts[parts.length - 1].trim().toLowerCase(Locale.ROOT);
+        return switch (q) {
+            case "standard", "higher", "exhigh", "lossless", "hires" -> q;
+            default -> null;
+        };
     }
 
     private String validateExt(String original) {

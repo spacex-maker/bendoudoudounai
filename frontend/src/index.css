@@ -101,6 +101,23 @@
     margin-left: -10px;
     margin-right: -10px;
   }
+
+  /*
+   * 细滚动条贴在容器右缘：正文用内层 padding，滚动条不额外挤占布局宽度。
+   * （避免 scrollbar-gutter: stable 预留空白）
+   */
+  .scrollbar-overlay {
+    scrollbar-gutter: auto;
+    scrollbar-width: thin;
+  }
+
+  .scrollbar-overlay::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .scrollbar-overlay::-webkit-scrollbar-track {
+    background: transparent;
+  }
 }
 
 @keyframes themeGlowPulse {

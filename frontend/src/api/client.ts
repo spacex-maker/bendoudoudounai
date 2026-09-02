@@ -591,6 +591,26 @@ export interface MusicTrackDto {
   playCount?: number;
   /** 当前用户是否已红心 */
   hearted?: boolean;
+  /** 实际入库音质（网易云导入）：standard / higher / exhigh / lossless / hires */
+  audioQuality?: string | null;
+}
+
+export interface DiscoverSearchItemDto {
+  neteaseSongId: number;
+  title: string;
+  artist: string;
+  album: string;
+  durationSeconds: number;
+  coverUrl: string | null;
+  hearted?: boolean;
+}
+
+export interface DiscoverSearchPageDto {
+  items: DiscoverSearchItemDto[];
+  offset: number;
+  limit: number;
+  total: number;
+  hasMore: boolean;
 }
 
 export interface PlaylistListeningStatusItemDto {
@@ -1111,6 +1131,63 @@ export async function uploadPlaylistWallpaper(
   return authJson(res);
 }
 
+export async function discoverSearchNetease(
+  q: string,
+  offset = 0,
+  limit = 20
+): Promise<DiscoverSearchPageDto> {
+  const params = new URLSearchParams({
+    q,
+    offset: String(offset),
+    limit: String(limit),
+  });
+  const res = await fetch(apiPath(`/api/music/discover/search?${params.toString()}`), {
+    headers: { Authorization: `Bearer ${getStoredToken()}` },
+  });
+  const data = await authJson<DiscoverSearchPageDto | DiscoverSearchItemDto[]>(res);
+  // 兼容旧接口直接返回数组，以及新分页对象
+  if (Array.isArray(data)) {
+    const items = data;
+    return {
+      items,
+      offset,
+      limit,
+      total: items.length,
+      hasMore: false,
+    };
+  }
+  const items = Array.isArray(data?.items) ? data.items : [];
+  return {
+    items,
+    offset: typeof data?.offset === "number" ? data.offset : offset,
+    limit: typeof data?.limit === "number" ? data.limit : limit,
+    total: typeof data?.total === "number" ? data.total : items.length,
+    hasMore: Boolean(data?.hasMore),
+  };
+}
+
+export async function importNeteaseTrack(input: {
+  neteaseSongId: number;
+  playlistId?: number;
+  heart?: boolean;
+  quality?: "standard" | "higher" | "exhigh" | "lossless" | "hires";
+}): Promise<MusicTrackDto> {
+  const res = await fetch(apiPath("/api/music/discover/import"), {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${getStoredToken()}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      neteaseSongId: input.neteaseSongId,
+      playlistId: input.playlistId ?? null,
+      heart: input.heart === true,
+      quality: input.quality ?? "exhigh",
+    }),
+  });
+  return authJson(res);
+}
+
 export async function fetchMusicTracks(playlistId: number): Promise<MusicTrackDto[]> {
   const q = new URLSearchParams({ playlistId: String(playlistId) });
   const res = await fetch(apiPath(`/api/music/tracks?${q.toString()}`), {
@@ -1285,6 +1362,18 @@ export async function addHeartTrack(trackId: number): Promise<MusicTrackDto> {
   const res = await fetch(apiPath(`/api/music/tracks/${trackId}/heart`), {
     method: "POST",
     headers: { Authorization: `Bearer ${getStoredToken()}` },
+  });
+  return authJson(res);
+}
+
+export async function addTrackToPlaylist(trackId: number, playlistId: number): Promise<MusicTrackDto> {
+  const res = await fetch(apiPath(`/api/music/tracks/${trackId}/add-to-playlist`), {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${getStoredToken()}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ playlistId }),
   });
   return authJson(res);
 }

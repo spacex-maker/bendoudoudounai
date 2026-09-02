@@ -1,6 +1,6 @@
 import { useState } from "react";
 import clsx from "clsx";
-import { Download, Heart, Loader2, Music2, Pause, Play, Trash2, X } from "lucide-react";
+import { Download, Heart, ListPlus, Loader2, Music2, Pause, Play, Trash2, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import {
   coverDisplayUrl,
@@ -10,6 +10,19 @@ import {
   type PlaylistListeningStatusItemDto,
   type TrackPlayUserStatDto,
 } from "../api/client";
+import { isAudioQualityCode } from "../music/audioQuality";
+
+function QualityBadge({ quality, t }: { quality?: string | null; t: (k: string, o?: Record<string, string>) => string }) {
+  if (!quality) return null;
+  const label = isAudioQualityCode(quality)
+    ? t(`music.quality.${quality}`)
+    : quality;
+  return (
+    <span className="ml-1.5 inline-flex shrink-0 rounded px-1.5 py-px align-middle text-[9px] font-semibold tracking-wide text-emerald-200 ring-1 ring-emerald-400/30 bg-emerald-500/15">
+      {label}
+    </span>
+  );
+}
 
 type Props = {
   playlistName: string;
@@ -23,6 +36,7 @@ type Props = {
   onSetCurrentId: (id: number) => void;
   onToggleHeart: (track: MusicTrackDto) => void | Promise<void>;
   onRequestRemoveTrack: (track: MusicTrackDto) => void;
+  onRequestAddToPlaylist: (track: MusicTrackDto) => void;
   listeningByTrack?: Record<number, PlaylistListeningStatusItemDto[]>;
 };
 
@@ -45,6 +59,7 @@ export function MusicTrackTable({
   onSetCurrentId,
   onToggleHeart,
   onRequestRemoveTrack,
+  onRequestAddToPlaylist,
   listeningByTrack,
 }: Props) {
   const { t } = useTranslation();
@@ -128,7 +143,10 @@ export function MusicTrackTable({
                   )}
                 </div>
                 <div className="min-w-0 flex min-h-[3.5rem] flex-1 flex-col">
-                  <div className="truncate text-sm text-zinc-200">{tr.title}</div>
+                  <div className="flex min-w-0 items-center truncate text-sm text-zinc-200">
+                    <span className="truncate">{tr.title}</span>
+                    <QualityBadge quality={tr.audioQuality} t={t} />
+                  </div>
                   {listeners.length > 0 ? (
                     <div className="mt-0.5 truncate text-[11px] text-emerald-300/90">
                       {listeners[0]!.userLabel}
@@ -154,6 +172,17 @@ export function MusicTrackTable({
               <div className="flex shrink-0 items-center justify-center gap-1 self-center">
                 <button type="button" className="rounded-full p-2 hover:bg-white/10" onClick={(e) => { e.stopPropagation(); onSelectTrack(tr, true); }}>
                   {currentId === tr.id && playing ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                </button>
+                <button
+                  type="button"
+                  title={t("music.addToPlaylist")}
+                  className="rounded-full p-2 text-zinc-500 hover:bg-white/10 hover:text-zinc-200"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRequestAddToPlaylist(tr);
+                  }}
+                >
+                  <ListPlus className="h-4 w-4" />
                 </button>
                 {showRemoveTrack ? (
                   <button
@@ -191,6 +220,7 @@ export function MusicTrackTable({
               {tableDurationLabel === "music.tableDuration" ? "时长" : tableDurationLabel}
             </th>
             <th className="w-8 px-1 py-2" />
+            <th className="w-8 px-1 py-2" />
             {showRemoveTrack ? <th className="w-8 px-1 py-2" /> : null}
             <th className="w-8 px-1 py-2" />
             <th className="w-8 px-1 py-2" />
@@ -221,6 +251,9 @@ export function MusicTrackTable({
                   <td className="px-1 py-2">
                     <div className="h-5 w-5 animate-pulse rounded-full bg-zinc-800/85" />
                   </td>
+                  <td className="px-1 py-2">
+                    <div className="h-5 w-5 animate-pulse rounded-full bg-zinc-800/75" />
+                  </td>
                   {showRemoveTrack ? (
                     <td className="px-1 py-2">
                       <div className="h-5 w-5 animate-pulse rounded-full bg-zinc-800/75" />
@@ -237,7 +270,7 @@ export function MusicTrackTable({
             : null}
           {tracks.length === 0 && !listLoading && (
             <tr>
-              <td colSpan={showRemoveTrack ? 10 : 9} className="px-4 py-8 text-center text-zinc-500">
+              <td colSpan={showRemoveTrack ? 11 : 10} className="px-4 py-8 text-center text-zinc-500">
                 {t("music.emptyTracks")}
               </td>
             </tr>
@@ -278,12 +311,15 @@ export function MusicTrackTable({
                 <div className="min-w-0">
                 <span className="min-w-0 truncate block">
                   {tr.title}
+                  <QualityBadge quality={tr.audioQuality} t={t} />
                   {tr.metadataFromFile && (
                     <span className="ml-1 rounded-full bg-zinc-700/60 px-1.5 py-px text-[10px] text-zinc-400">
                       {t("music.autoTag")}
                     </span>
                   )}
-                  {tr.note && <span className="ml-1 text-zinc-500">· {tr.note}</span>}
+                  {tr.note && !tr.audioQuality && !tr.note.startsWith("netease:") ? (
+                    <span className="ml-1 text-zinc-500">· {tr.note}</span>
+                  ) : null}
                 </span>
                 {listeners.length > 0 ? (
                   <div className="truncate text-[11px] text-emerald-300/90">
@@ -322,6 +358,19 @@ export function MusicTrackTable({
                   ) : (
                     <Play className="h-3.5 w-3.5" />
                   )}
+                </button>
+              </td>
+              <td className="px-1 py-2 text-zinc-500">
+                <button
+                  type="button"
+                  title={t("music.addToPlaylist")}
+                  className="rounded-full p-1 text-zinc-500 hover:bg-white/10 hover:text-zinc-200"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRequestAddToPlaylist(tr);
+                  }}
+                >
+                  <ListPlus className="h-3.5 w-3.5" />
                 </button>
               </td>
               {showRemoveTrack ? (
@@ -375,14 +424,14 @@ export function MusicTrackTable({
       </table>
       {playStatsOpenFor ? (
         <div
-          className="fixed inset-0 z-[80] flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm"
+          className="fixed inset-0 z-[80] flex items-end justify-center bg-black/55 p-0 backdrop-blur-sm sm:items-center sm:p-4"
           onClick={() => setPlayStatsOpenFor(null)}
         >
           <section
-            className="w-full max-w-md rounded-2xl border border-zinc-700 bg-zinc-900 p-4 text-zinc-200 shadow-2xl"
+            className="flex max-h-[min(88dvh,100dvh-1rem)] w-full max-w-md flex-col overflow-hidden rounded-t-2xl border border-zinc-700 border-b-0 bg-zinc-900 text-zinc-200 shadow-2xl sm:rounded-2xl sm:border-b"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="mb-2 flex items-start justify-between gap-2">
+            <div className="mb-1 flex shrink-0 items-start justify-between gap-2 px-4 pb-2 pt-4">
               <div className="min-w-0">
                 <h3 className="truncate text-sm font-semibold">播放次数明细</h3>
                 <p className="truncate text-xs text-zinc-500">《{playStatsOpenFor.title}》</p>
@@ -395,25 +444,27 @@ export function MusicTrackTable({
                 <X className="h-4 w-4" />
               </button>
             </div>
-            {playStatsLoading ? (
-              <div className="flex items-center justify-center gap-2 py-8 text-sm text-zinc-500">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                加载中
-              </div>
-            ) : playStatsErr ? (
-              <p className="py-6 text-center text-sm text-red-400">{playStatsErr}</p>
-            ) : playStatsRows.length === 0 ? (
-              <p className="py-6 text-center text-sm text-zinc-500">暂无播放记录</p>
-            ) : (
-              <div className="max-h-72 space-y-1 overflow-auto pr-1">
-                {playStatsRows.map((row, idx) => (
-                  <div key={`${row.userId}-${idx}`} className="flex items-center justify-between rounded-lg px-2 py-1.5 hover:bg-white/5">
-                    <span className="truncate text-sm">{row.userLabel}</span>
-                    <span className="shrink-0 text-xs tabular-nums text-zinc-400">{row.playCount} 次</span>
-                  </div>
-                ))}
-              </div>
-            )}
+            <div className="custom-scrollbar scrollbar-overlay min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))]">
+              {playStatsLoading ? (
+                <div className="flex items-center justify-center gap-2 py-8 text-sm text-zinc-500">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  加载中
+                </div>
+              ) : playStatsErr ? (
+                <p className="py-6 text-center text-sm text-red-400">{playStatsErr}</p>
+              ) : playStatsRows.length === 0 ? (
+                <p className="py-6 text-center text-sm text-zinc-500">暂无播放记录</p>
+              ) : (
+                <div className="space-y-1">
+                  {playStatsRows.map((row, idx) => (
+                    <div key={`${row.userId}-${idx}`} className="flex items-center justify-between rounded-lg px-2 py-1.5 hover:bg-white/5">
+                      <span className="truncate text-sm">{row.userLabel}</span>
+                      <span className="shrink-0 text-xs tabular-nums text-zinc-400">{row.playCount} 次</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </section>
         </div>
       ) : null}

@@ -9,6 +9,7 @@ import { LanguageSwitch } from "./LanguageSwitch";
 import { UserAvatar } from "./UserAvatar";
 import { userIsAdmin } from "../api/client";
 import { FOR_NAME } from "../siteMeta";
+import { isMusicPath } from "../music/musicRoutes";
 
 function scrollToId(id: string) {
   document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -35,7 +36,7 @@ export function SiteHeader({ className }: Props) {
   const isHome = pathname === "/";
   const isMessages = pathname === "/messages";
   const isDevDiary = pathname.startsWith("/dev-diary");
-  const isMusic = pathname === "/music";
+  const isMusic = isMusicPath(pathname);
 
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);

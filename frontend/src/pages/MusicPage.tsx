@@ -15,12 +15,14 @@ import { CreatePlaylistModal } from "../components/CreatePlaylistModal";
 import { UserAvatar } from "../components/UserAvatar";
 import { UserProfileModal } from "../components/UserProfileModal";
 import { ConfirmModal } from "../components/ConfirmModal";
+import { AddToPlaylistModal } from "../components/AddToPlaylistModal";
 import { MusicTrackTable } from "../components/MusicTrackTable";
 import { MusicTrackComments } from "../components/MusicTrackComments";
+import { DiscoverMusicPanel } from "../components/DiscoverMusicPanel";
 import { MusicMentionList } from "../components/MusicMentionList";
-import { FOR_NAME } from "../siteMeta";
 import { useSyncedLyrics } from "../music/useSyncedLyrics";
 import { useMusicPlayer } from "../music/MusicPlayerContext";
+import { musicPathFor, navKindFromRoute, parseMusicPathname } from "../music/musicRoutes";
 import {
   type MusicTrackDto,
   type PlaylistItemDto,
@@ -45,6 +47,7 @@ import {
   addHeartTrack,
   removeHeartTrack,
   deleteTrackFromPlaylist,
+  addTrackToPlaylist,
 } from "../api/client";
 
 export function MusicPage() {
@@ -52,6 +55,7 @@ export function MusicPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const user = useAuthedUser();
+  const cloudOwnerName = user?.displayName?.trim() || user?.email || t("music.me");
   const {
     wallpaperActive,
     setWallpaperDisplayUrl,
@@ -71,10 +75,12 @@ export function MusicPage() {
     coverSrc: playerCoverSrc,
     setQueue,
   } = useMusicPlayer();
-  const [activeNav, setActiveNav] = useState("discover");
+  const musicRoute = useMemo(() => parseMusicPathname(location.pathname), [location.pathname]);
+  const activeNav = navKindFromRoute(musicRoute);
   const [search, setSearch] = useState("");
   const [tracks, setTracks] = useState<MusicTrackDto[]>([]);
   const [playlists, setPlaylists] = useState<PlaylistItemDto[]>([]);
+  const [playlistsReady, setPlaylistsReady] = useState(false);
   const [currentPlaylistId, setCurrentPlaylistId] = useState<number | null>(null);
   const [incomingInv, setIncomingInv] = useState<InvitationItemDto[]>([]);
   const [listLoading, setListLoading] = useState(true);
@@ -88,21 +94,35 @@ export function MusicPage() {
     kind: "liked" | "playlist";
     track: MusicTrackDto;
   } | null>(null);
+  const [addToPlaylistTrack, setAddToPlaylistTrack] = useState<MusicTrackDto | null>(null);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [mobileView, setMobileView] = useState<"list" | "player">("list");
   const [listeningByTrack, setListeningByTrack] = useState<Record<number, PlaylistListeningStatusItemDto[]>>({});
   const recordedPlayForTrackRef = useRef<number | null>(null);
 
+  const goMusic = useCallback(
+    (pathname: string, view: "list" | "player" = "list") => {
+      const params = new URLSearchParams();
+      if (view === "player") params.set("view", "player");
+      const searchText = params.toString();
+      navigate({ pathname, search: searchText ? `?${searchText}` : "" });
+    },
+    [navigate]
+  );
+
   const setMusicView = useCallback(
     (nextView: "list" | "player") => {
       setMobileView(nextView);
-      const params = new URLSearchParams(window.location.search);
+      const params = new URLSearchParams(location.search);
       if (nextView === "player") params.set("view", "player");
       else params.delete("view");
       const searchText = params.toString();
-      navigate({ pathname: "/music", search: searchText ? `?${searchText}` : "" }, { replace: true });
+      navigate(
+        { pathname: location.pathname, search: searchText ? `?${searchText}` : "" },
+        { replace: true }
+      );
     },
-    [navigate]
+    [navigate, location.pathname, location.search]
   );
 
   useEffect(() => {
@@ -111,28 +131,17 @@ export function MusicPage() {
   }, [location.search]);
 
   const loadList = useCallback(async () => {
-    setListLoading(true);
     setListErr(null);
     try {
       const [pls, inv] = await Promise.all([fetchVisiblePlaylists(), fetchIncomingInvitations()]);
       setPlaylists(pls);
       setIncomingInv(inv);
-      if (pls.length === 0) {
-        setCurrentPlaylistId(null);
-        setTracks([]);
-        return;
-      }
-      const saved = getStoredPlaylistId();
-      const pick =
-        saved && pls.some((p) => p.id === Number(saved)) ? Number(saved) : pls[0]!.id;
-      setCurrentPlaylistId(pick);
-      setStoredPlaylistId(pick);
-      const trackList = await fetchMusicTracks(pick);
-      setTracks(trackList);
+      setPlaylistsReady(true);
+      return pls;
     } catch (e) {
       setListErr(mapApiError(t, e));
-    } finally {
-      setListLoading(false);
+      setPlaylistsReady(true);
+      return [] as PlaylistItemDto[];
     }
   }, [t]);
 
@@ -141,16 +150,133 @@ export function MusicPage() {
   }, [loadList]);
 
   useEffect(() => {
-    registerPlaylistsRefresh(() => loadList());
+    registerPlaylistsRefresh(() => {
+      void loadList();
+    });
     return () => registerPlaylistsRefresh(null);
   }, [loadList, registerPlaylistsRefresh]);
+
+  /** /music 无分区时落到最近歌单（保留 ?view=） */
+  useEffect(() => {
+    if (musicRoute.kind !== "index" || !playlistsReady) return;
+    const saved = getStoredPlaylistId();
+    const pick =
+      saved && playlists.some((p) => p.id === Number(saved))
+        ? Number(saved)
+        : playlists[0]?.id ?? null;
+    if (pick != null) {
+      navigate(
+        {
+          pathname: musicPathFor("playlist", pick),
+          search: location.search,
+        },
+        { replace: true }
+      );
+      return;
+    }
+    navigate(
+      {
+        pathname: musicPathFor("discover"),
+        search: location.search,
+      },
+      { replace: true }
+    );
+  }, [musicRoute.kind, playlistsReady, playlists, navigate, location.search]);
+
+  /** 非法 / 过期歌单 id → 回默认歌单 */
+  useEffect(() => {
+    if (musicRoute.kind !== "playlist" || !playlistsReady) return;
+    if (playlists.some((p) => p.id === musicRoute.playlistId)) return;
+    const saved = getStoredPlaylistId();
+    const pick =
+      saved && playlists.some((p) => p.id === Number(saved))
+        ? Number(saved)
+        : playlists[0]?.id ?? null;
+    if (pick != null) {
+      navigate(
+        { pathname: musicPathFor("playlist", pick), search: location.search },
+        { replace: true }
+      );
+    } else {
+      navigate(
+        { pathname: musicPathFor("discover"), search: location.search },
+        { replace: true }
+      );
+    }
+  }, [musicRoute, playlistsReady, playlists, navigate, location.search]);
+
+  /** 按 URL 分区加载曲目 */
+  useEffect(() => {
+    if (musicRoute.kind === "index") return;
+    let cancelled = false;
+
+    const run = async () => {
+      if (musicRoute.kind === "discover" || musicRoute.kind === "fm") {
+        setCurrentPlaylistId(null);
+        setTracks([]);
+        setListErr(null);
+        setListLoading(false);
+        return;
+      }
+      if (musicRoute.kind === "liked") {
+        setListLoading(true);
+        setListErr(null);
+        setTracks([]);
+        try {
+          const list = await fetchHeartTracks();
+          if (!cancelled) setTracks(list);
+        } catch (e) {
+          if (!cancelled) setListErr(mapApiError(t, e));
+        } finally {
+          if (!cancelled) setListLoading(false);
+        }
+        return;
+      }
+      if (musicRoute.kind === "history") {
+        setListLoading(true);
+        setListErr(null);
+        setTracks([]);
+        try {
+          const list = await fetchPlayHistoryTracks();
+          if (!cancelled) setTracks(list);
+        } catch (e) {
+          if (!cancelled) setListErr(mapApiError(t, e));
+        } finally {
+          if (!cancelled) setListLoading(false);
+        }
+        return;
+      }
+      if (musicRoute.kind === "playlist") {
+        if (!playlistsReady) return;
+        if (!playlists.some((p) => p.id === musicRoute.playlistId)) return;
+        setCurrentPlaylistId(musicRoute.playlistId);
+        setStoredPlaylistId(musicRoute.playlistId);
+        setListLoading(true);
+        setListErr(null);
+        setTracks([]);
+        try {
+          const trackList = await fetchMusicTracks(musicRoute.playlistId);
+          if (!cancelled) setTracks(trackList);
+        } catch (e) {
+          if (!cancelled) setListErr(mapApiError(t, e));
+        } finally {
+          if (!cancelled) setListLoading(false);
+        }
+      }
+    };
+
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [musicRoute, playlistsReady, playlists, t]);
 
   useEffect(() => {
     if (currentPlaylistId == null) setPlaylistSettingsOpen(false);
   }, [currentPlaylistId]);
 
   useEffect(() => {
-    if (activeNav === "liked" || activeNav === "history") {
+    if (activeNav === "liked" || activeNav === "history" || activeNav === "discover" || activeNav === "fm") {
       setWallpaperTargetPlaylistId(null);
       return;
     }
@@ -198,7 +324,7 @@ export function MusicPage() {
   );
 
   useEffect(() => {
-    if (activeNav === "liked" || activeNav === "history") {
+    if (activeNav === "liked" || activeNav === "history" || activeNav === "discover" || activeNav === "fm") {
       setWallpaperDisplayUrl(null);
       return;
     }
@@ -213,39 +339,7 @@ export function MusicPage() {
         : (currentPl?.name ?? t("music.myPlaylist"));
 
   const showRemoveTrack =
-    activeNav === "liked" || (activeNav === "discover" && Boolean(currentPl?.iAmOwner));
-
-  const onPickLiked = useCallback(async () => {
-    setActiveNav("liked");
-    setMusicView("list");
-    setListLoading(true);
-    setListErr(null);
-    setTracks([]);
-    try {
-      const list = await fetchHeartTracks();
-      setTracks(list);
-    } catch (e) {
-      setListErr(mapApiError(t, e));
-    } finally {
-      setListLoading(false);
-    }
-  }, [setMusicView, t]);
-
-  const onPickHistory = useCallback(async () => {
-    setActiveNav("history");
-    setMusicView("list");
-    setListLoading(true);
-    setListErr(null);
-    setTracks([]);
-    try {
-      const list = await fetchPlayHistoryTracks();
-      setTracks(list);
-    } catch (e) {
-      setListErr(mapApiError(t, e));
-    } finally {
-      setListLoading(false);
-    }
-  }, [setMusicView, t]);
+    activeNav === "liked" || (activeNav === "playlist" && Boolean(currentPl?.iAmOwner));
 
   useEffect(() => {
     setMobileNavOpen(false);
@@ -267,12 +361,18 @@ export function MusicPage() {
     };
   }, [mobileNavOpen]);
 
+  const searchBootRef = useRef(true);
   useEffect(() => {
+    // 仅搜索词变化时回到列表；首轮挂载不要冲掉 ?view=player
+    if (searchBootRef.current) {
+      searchBootRef.current = false;
+      return;
+    }
     setMusicView("list");
-  }, [activeNav, currentPlaylistId, search, setMusicView]);
+  }, [search, setMusicView]);
 
   useEffect(() => {
-    if (activeNav !== "discover" || currentPlaylistId == null) {
+    if (activeNav !== "playlist" || currentPlaylistId == null) {
       setListeningByTrack({});
       return;
     }
@@ -388,38 +488,48 @@ export function MusicPage() {
     [activeNav, currentPl?.iAmOwner]
   );
 
-  const onPickPlaylist = useCallback(async (id: number): Promise<MusicTrackDto[]> => {
-    setCurrentPlaylistId(id);
-    setMusicView("list");
-    setStoredPlaylistId(id);
-    setListLoading(true);
-    setListErr(null);
-    setTracks([]);
-    try {
-      const trackList = await fetchMusicTracks(id);
-      setTracks(trackList);
-      return trackList;
-    } catch (e) {
-      setListErr(mapApiError(t, e));
-      return [];
-    } finally {
-      setListLoading(false);
-    }
-  }, [setMusicView, t]);
+  const onPickPlaylist = useCallback(
+    (id: number) => {
+      goMusic(musicPathFor("playlist", id), "list");
+    },
+    [goMusic]
+  );
 
   const onCreatedPlaylist = useCallback(
     async (id: number) => {
       setStoredPlaylistId(id);
-      setCurrentPlaylistId(id);
       await loadList();
+      goMusic(musicPathFor("playlist", id), "list");
     },
-    [loadList]
+    [loadList, goMusic]
   );
+
+  const isDiscoverCatalog = activeNav === "discover";
+
+  const onDiscoverImported = useCallback((track: MusicTrackDto) => {
+    setPlaylists((pls) =>
+      pls.map((p) =>
+        p.id === track.playlistId ? { ...p, trackCount: (p.trackCount ?? 0) + 1 } : p
+      )
+    );
+  }, []);
+
+  const onDiscoverPlay = useCallback(
+    (track: MusicTrackDto) => {
+      selectTrack(track, true);
+    },
+    [selectTrack]
+  );
+
+  const onDiscoverHeart = useCallback((_track: MusicTrackDto) => {
+    // 已入库并加入「我喜欢的音乐」；列表侧只需红心态
+  }, []);
 
   const current = useMemo(() => currentTrack, [currentTrack]);
   const listDuration = current?.durationSeconds ?? 0;
 
   const filtered = useMemo(() => {
+    if (isDiscoverCatalog) return tracks;
     const q = search.trim().toLowerCase();
     if (!q) return tracks;
     return tracks.filter(
@@ -429,7 +539,7 @@ export function MusicPage() {
         t.album.toLowerCase().includes(q) ||
         (t.note && t.note.toLowerCase().includes(q))
     );
-  }, [search, tracks]);
+  }, [search, tracks, isDiscoverCatalog]);
 
   useEffect(() => {
     if (currentId == null) return;
@@ -452,7 +562,8 @@ export function MusicPage() {
     playDur > 0 && Number.isFinite(playDur) ? playDur : listDuration > 0 ? listDuration : 0;
   const vinylProgress = barMax > 0 ? Math.min(1, Math.max(0, playPos / barMax)) : 0;
   const showPlayerModule = activeNav !== "fm" && mobileView === "player";
-  const showListModule = activeNav !== "fm" && mobileView === "list";
+  const showDiscoverPanel = isDiscoverCatalog && mobileView === "list";
+  const showListModule = !isDiscoverCatalog && activeNav !== "fm" && mobileView === "list";
 
   useEffect(() => {
     setQueue(filtered);
@@ -470,15 +581,12 @@ export function MusicPage() {
         <aside className="hidden w-[200px] shrink-0 flex-col border-r border-netease-line bg-[#1f1f1f] md:flex">
           <div className="flex h-12 items-center gap-2 border-b border-netease-line px-4 text-sm text-zinc-400">
             <Heart className="h-4 w-4 text-red-500/90" fill="currentColor" />
-            <span className="min-w-0 flex-1 truncate">{t("music.forNameCloud", { name: FOR_NAME })}</span>
+            <span className="min-w-0 flex-1 truncate">{t("music.forNameCloud", { name: cloudOwnerName })}</span>
           </div>
           <nav className="custom-scrollbar min-h-0 flex-1 space-y-0.5 overflow-y-auto p-2 pb-2 text-[13px]">
             <button
               type="button"
-              onClick={() => {
-                setActiveNav("discover");
-                setMusicView("list");
-              }}
+              onClick={() => goMusic(musicPathFor("discover"), "list")}
               className={clsx(
                 "flex w-full items-center gap-2 rounded-full px-3 py-2 text-left transition",
                 activeNav === "discover" ? "bg-white/10 text-white" : "text-zinc-400 hover:bg-white/5"
@@ -489,10 +597,7 @@ export function MusicPage() {
             </button>
             <button
               type="button"
-              onClick={() => {
-                setActiveNav("fm");
-                setMusicView("list");
-              }}
+              onClick={() => goMusic(musicPathFor("fm"), "list")}
               className={clsx(
                 "flex w-full items-center gap-2 rounded-full px-3 py-2 text-left transition",
                 activeNav === "fm" ? "bg-white/10 text-white" : "text-zinc-400 hover:bg-white/5"
@@ -503,7 +608,7 @@ export function MusicPage() {
             </button>
             <button
               type="button"
-              onClick={() => void onPickLiked()}
+              onClick={() => goMusic(musicPathFor("liked"), "list")}
               className={clsx(
                 "flex w-full items-center gap-2 rounded-full px-3 py-2 text-left transition",
                 activeNav === "liked" ? "bg-white/10 text-white" : "text-zinc-400 hover:bg-white/5"
@@ -519,7 +624,7 @@ export function MusicPage() {
             </button>
             <button
               type="button"
-              onClick={() => void onPickHistory()}
+              onClick={() => goMusic(musicPathFor("history"), "list")}
               className={clsx(
                 "flex w-full items-center gap-2 rounded-full px-3 py-2 text-left transition",
                 activeNav === "history" ? "bg-white/10 text-white" : "text-zinc-400 hover:bg-white/5"
@@ -539,13 +644,10 @@ export function MusicPage() {
               <button
                 key={p.id}
                 type="button"
-                onClick={() => {
-                  setActiveNav("discover");
-                  void onPickPlaylist(p.id);
-                }}
+                onClick={() => onPickPlaylist(p.id)}
                 className={clsx(
                   "flex w-full items-center gap-2 rounded-full px-3 py-2 text-left transition",
-                  currentPlaylistId === p.id && activeNav === "discover"
+                  currentPlaylistId === p.id && activeNav === "playlist"
                     ? "bg-white/10 text-white"
                     : "text-zinc-400 hover:bg-white/5"
                 )}
@@ -681,7 +783,7 @@ export function MusicPage() {
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder={t("music.searchPh")}
+                placeholder={isDiscoverCatalog ? t("music.discoverSearchPh") : t("music.searchPh")}
                 className="h-8 w-full rounded-full border border-netease-line bg-[#2a2a2a] pl-8 pr-3 text-xs text-zinc-200 placeholder:text-zinc-500 focus:border-red-900/50 focus:outline-none"
               />
             </div>
@@ -700,7 +802,7 @@ export function MusicPage() {
                 <Bell className="h-3.5 w-3.5" />
                 <span className="hidden sm:inline">{t("music.mentionsTitle", { defaultValue: "消息列表" })}</span>
               </button>
-              {activeNav === "discover" && currentPl != null && currentPlaylistId != null ? (
+              {activeNav === "playlist" && currentPl != null && currentPlaylistId != null ? (
                 <button
                   type="button"
                   onClick={() => setPlaylistSettingsOpen(true)}
@@ -727,7 +829,7 @@ export function MusicPage() {
                 <div className="mb-2 flex items-center justify-between">
                   <div className="flex items-center gap-2 text-sm text-zinc-300">
                     <Heart className="h-4 w-4 text-red-500/90" fill="currentColor" />
-                    <span className="truncate">{t("music.forNameCloud", { name: FOR_NAME })}</span>
+                    <span className="truncate">{t("music.forNameCloud", { name: cloudOwnerName })}</span>
                   </div>
                   <button
                     type="button"
@@ -741,17 +843,21 @@ export function MusicPage() {
 
                 <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto pr-1">
                   <div className="space-y-1 text-[13px]">
-                    <button type="button" onClick={() => { setActiveNav("discover"); setMusicView("list"); }} className={clsx("flex w-full items-center gap-2 rounded-full px-3 py-2 text-left", activeNav === "discover" ? "bg-white/10 text-white" : "text-zinc-400")}>
+                    <button
+                      type="button"
+                      onClick={() => goMusic(musicPathFor("discover"), "list")}
+                      className={clsx("flex w-full items-center gap-2 rounded-full px-3 py-2 text-left", activeNav === "discover" ? "bg-white/10 text-white" : "text-zinc-400")}
+                    >
                       <Home className="h-4 w-4 shrink-0" />{t("music.discover")}
                     </button>
-                    <button type="button" onClick={() => { setActiveNav("fm"); setMusicView("list"); }} className={clsx("flex w-full items-center gap-2 rounded-full px-3 py-2 text-left", activeNav === "fm" ? "bg-white/10 text-white" : "text-zinc-400")}>
+                    <button type="button" onClick={() => goMusic(musicPathFor("fm"), "list")} className={clsx("flex w-full items-center gap-2 rounded-full px-3 py-2 text-left", activeNav === "fm" ? "bg-white/10 text-white" : "text-zinc-400")}>
                       <Radio className="h-4 w-4 shrink-0" />{t("music.privateFm")}
                     </button>
-                    <button type="button" onClick={() => void onPickLiked()} className={clsx("flex w-full items-center gap-2 rounded-full px-3 py-2 text-left", activeNav === "liked" ? "bg-white/10 text-white" : "text-zinc-400")}>
+                    <button type="button" onClick={() => goMusic(musicPathFor("liked"), "list")} className={clsx("flex w-full items-center gap-2 rounded-full px-3 py-2 text-left", activeNav === "liked" ? "bg-white/10 text-white" : "text-zinc-400")}>
                       <Heart className={clsx("h-4 w-4 shrink-0", activeNav === "liked" ? "fill-red-500 text-red-500" : "text-red-400/80")} />
                       {t("music.likedPlaylist", { defaultValue: "我喜欢的音乐" })}
                     </button>
-                    <button type="button" onClick={() => void onPickHistory()} className={clsx("flex w-full items-center gap-2 rounded-full px-3 py-2 text-left", activeNav === "history" ? "bg-white/10 text-white" : "text-zinc-400")}>
+                    <button type="button" onClick={() => goMusic(musicPathFor("history"), "list")} className={clsx("flex w-full items-center gap-2 rounded-full px-3 py-2 text-left", activeNav === "history" ? "bg-white/10 text-white" : "text-zinc-400")}>
                       <History className="h-4 w-4 shrink-0" />{t("music.playHistory", { defaultValue: "播放历史" })}
                     </button>
                   </div>
@@ -763,11 +869,8 @@ export function MusicPage() {
                       <button
                         key={p.id}
                         type="button"
-                        onClick={() => {
-                          setActiveNav("discover");
-                          void onPickPlaylist(p.id);
-                        }}
-                        className={clsx("flex w-full items-center gap-2 rounded-full px-3 py-2 text-left transition", currentPlaylistId === p.id && activeNav === "discover" ? "bg-white/10 text-white" : "text-zinc-400")}
+                        onClick={() => onPickPlaylist(p.id)}
+                        className={clsx("flex w-full items-center gap-2 rounded-full px-3 py-2 text-left transition", currentPlaylistId === p.id && activeNav === "playlist" ? "bg-white/10 text-white" : "text-zinc-400")}
                       >
                         <ListMusic className="h-4 w-4 shrink-0 opacity-80" />
                         <span className="min-w-0 flex-1 truncate text-[12px]">{p.name}</span>
@@ -808,17 +911,8 @@ export function MusicPage() {
           <div className="custom-scrollbar scrollbar-no-gutter min-h-0 flex-1 overflow-y-auto p-3 pb-48 sm:p-4 sm:pb-48">
             {activeNav !== "fm" && (
               <>
-                {activeNav === "discover" && currentPlaylistId == null && (
-                  <div
-                    className="mb-4 flex min-h-[120px] flex-col items-center justify-center gap-1 rounded-2xl border border-dashed border-netease-line/70 bg-zinc-900/25 px-4 py-10 text-center"
-                    role="status"
-                    aria-label={t("music.discoverWip")}
-                  >
-                    <p className="text-sm font-medium text-zinc-400">{t("music.discoverWip")}</p>
-                    <p className="text-xs text-zinc-600">{t("music.discoverWipSub")}</p>
-                  </div>
-                )}
                 {showPlayerModule ? (
+                  <>
                   <div className="mx-auto mb-2 flex w-full max-w-6xl justify-start">
                     <button
                       type="button"
@@ -826,16 +920,15 @@ export function MusicPage() {
                       className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-netease-line/80 bg-[#262626]/95 px-2.5 text-[12px] font-medium text-zinc-300 transition hover:border-zinc-500/60 hover:bg-[#303030] hover:text-zinc-100"
                     >
                       <ArrowLeft className="h-3.5 w-3.5 shrink-0" />
-                      返回歌单
+                      {isDiscoverCatalog ? t("music.discover") : t("music.backToPlaylist", { defaultValue: "返回歌单" })}
                     </button>
                   </div>
-                ) : null}
                 <section
                   className={clsx(
                     "mx-auto mt-4 mb-4 grid w-full max-w-6xl grid-cols-1 grid-rows-[auto_1fr] gap-4 overflow-hidden p-2",
                     "h-[min(74dvh,820px)] md:mt-8",
                     "md:h-[min(56vh,560px)] md:grid-cols-[380px_minmax(0,1fr)] md:grid-rows-1 md:items-stretch md:gap-0 md:p-6",
-                    showPlayerModule ? "grid" : "hidden"
+                    "grid"
                   )}
                   aria-label="Player Module"
                 >
@@ -896,10 +989,18 @@ export function MusicPage() {
                   </div>
                 </section>
 
-                {showPlayerModule && currentId != null ? (
+                {currentId != null ? (
                   <MusicTrackComments trackId={currentId} />
                 ) : null}
-
+                  </>
+                ) : showDiscoverPanel ? (
+                  <DiscoverMusicPanel
+                    query={search}
+                    onPlayTrack={onDiscoverPlay}
+                    onHeartTrack={onDiscoverHeart}
+                    onTrackSynced={onDiscoverImported}
+                  />
+                ) : (
                 <section className={clsx(showListModule ? "block" : "hidden")} aria-label="List Module">
                   {listErr && <p className="mb-2 text-xs text-red-400/90">{listErr}</p>}
                   <MusicTrackTable
@@ -914,10 +1015,12 @@ export function MusicPage() {
                     onSetCurrentId={setCurrentTrackIdFromList}
                     onToggleHeart={onToggleHeart}
                     onRequestRemoveTrack={requestRemoveTrack}
+                    onRequestAddToPlaylist={setAddToPlaylistTrack}
                     listeningByTrack={listeningByTrack}
                   />
                   <p className="mt-3 hidden text-center text-[11px] text-zinc-600 md:block">{t("music.rowHint")}</p>
                 </section>
+                )}
               </>
             )}
 
@@ -981,6 +1084,34 @@ export function MusicPage() {
           </>
         ) : null}
       </ConfirmModal>
+
+      <AddToPlaylistModal
+        open={addToPlaylistTrack != null}
+        onClose={() => setAddToPlaylistTrack(null)}
+        songLabel={
+          addToPlaylistTrack
+            ? `${addToPlaylistTrack.title}${addToPlaylistTrack.artist ? ` · ${addToPlaylistTrack.artist}` : ""}`
+            : ""
+        }
+        excludePlaylistId={
+          activeNav === "playlist" ? addToPlaylistTrack?.playlistId ?? currentPlaylistId : null
+        }
+        onPick={async (playlistId) => {
+          const track = addToPlaylistTrack;
+          if (!track) return;
+          const created = await addTrackToPlaylist(track.id, playlistId);
+          setPlaylists((pls) =>
+            pls.map((p) =>
+              p.id === playlistId && created.id !== track.id
+                ? { ...p, trackCount: (p.trackCount ?? 0) + 1 }
+                : p
+            )
+          );
+          if (activeNav === "playlist" && currentPlaylistId === playlistId) {
+            setTracks((prev) => (prev.some((x) => x.id === created.id) ? prev : [created, ...prev]));
+          }
+        }}
+      />
 
       <UploadTrackModal
         open={uploadOpen}
@@ -1054,21 +1185,20 @@ export function MusicPage() {
                 embedded
                 hideHeader
                 onOpenMention={async (item: MusicMentionNotificationDto) => {
-                  let playlistTracks = tracks;
-                  if (activeNav !== "discover") {
-                    setActiveNav("discover");
+                  try {
+                    const playlistTracks = await fetchMusicTracks(item.playlistId);
+                    setStoredPlaylistId(item.playlistId);
+                    goMusic(musicPathFor("playlist", item.playlistId), "player");
+                    const target = playlistTracks.find((x) => x.id === item.trackId);
+                    if (target) {
+                      setCurrentTrackIdFromList(item.trackId);
+                      selectTrack(target);
+                    } else {
+                      setCurrentId(item.trackId);
+                    }
+                  } catch (e) {
+                    alert(mapApiError(t, e));
                   }
-                  if (currentPlaylistId !== item.playlistId) {
-                    playlistTracks = await onPickPlaylist(item.playlistId);
-                  }
-                  const target = playlistTracks.find((x) => x.id === item.trackId);
-                  if (target) {
-                    setCurrentTrackIdFromList(item.trackId);
-                    selectTrack(target);
-                  } else {
-                    setCurrentId(item.trackId);
-                  }
-                  setMusicView("player");
                   setMentionsOpen(false);
                 }}
               />
