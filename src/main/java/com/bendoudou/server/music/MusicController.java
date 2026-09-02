@@ -13,6 +13,7 @@ import com.bendoudou.server.music.dto.InviteToPlaylistRequest;
 import com.bendoudou.server.music.dto.MusicPreviewResponse;
 import com.bendoudou.server.music.dto.MusicMentionNotificationResponse;
 import com.bendoudou.server.music.dto.MusicTrackCommentResponse;
+import com.bendoudou.server.music.dto.MusicTrackPageResponse;
 import com.bendoudou.server.music.dto.MusicTrackResponse;
 import com.bendoudou.server.music.dto.PlaylistItemResponse;
 import com.bendoudou.server.music.dto.PlaylistListeningStatusResponse;
@@ -315,11 +316,28 @@ public class MusicController {
     }
 
     @GetMapping("/tracks")
-    public List<MusicTrackResponse> list(
+    public MusicTrackPageResponse list(
             @RequestParam("playlistId") long playlistId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "40") int size,
+            @RequestParam(required = false) String q,
             Authentication authentication
     ) {
-        return musicService.listTracksForPlaylist(parseUserId(authentication), playlistId);
+        return musicService.listTracksForPlaylistPage(
+                parseUserId(authentication),
+                playlistId,
+                page,
+                size,
+                q
+        );
+    }
+
+    @GetMapping("/tracks/{id}/meta")
+    public MusicTrackResponse getTrackMeta(
+            @PathVariable("id") long id,
+            Authentication authentication
+    ) {
+        return musicService.getAccessibleTrack(parseUserId(authentication), id);
     }
 
     @GetMapping("/hearts/tracks")

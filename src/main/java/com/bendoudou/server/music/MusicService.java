@@ -13,6 +13,7 @@ import com.bendoudou.server.music.dto.InviteToPlaylistRequest;
 import com.bendoudou.server.music.dto.MusicMentionNotificationResponse;
 import com.bendoudou.server.music.dto.MusicPreviewResponse;
 import com.bendoudou.server.music.dto.MusicTrackCommentResponse;
+import com.bendoudou.server.music.dto.MusicTrackPageResponse;
 import com.bendoudou.server.music.dto.MusicTrackResponse;
 import com.bendoudou.server.music.dto.PlaylistMemberItemResponse;
 import com.bendoudou.server.music.dto.PlaylistItemResponse;
@@ -737,6 +738,37 @@ public class MusicService {
         return list.stream()
                 .map(t -> toResponse(t, hearted.contains(t.getId())))
                 .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public MusicTrackPageResponse listTracksForPlaylistPage(
+            long userId,
+            long playlistId,
+            int page,
+            int size,
+            String q
+    ) {
+        assertMember(playlistId, userId);
+        int p = Math.max(0, page);
+        int s = Math.min(100, Math.max(1, size));
+        Pageable pageable = PageRequest.of(p, s);
+        String query = q == null ? "" : q.trim();
+        Page<MusicTrack> result = StringUtils.hasText(query)
+                ? musicTrackRepository.searchByPlaylistId(playlistId, query, pageable)
+                : musicTrackRepository.findByPlaylistIdOrderByCreatedAtDesc(playlistId, pageable);
+        List<MusicTrack> list = result.getContent();
+        List<Long> ids = list.stream().map(MusicTrack::getId).collect(Collectors.toList());
+        Set<Long> hearted = heartedTrackIdsForUser(userId, ids);
+        List<MusicTrackResponse> items = list.stream()
+                .map(t -> toResponse(t, hearted.contains(t.getId())))
+                .collect(Collectors.toList());
+        return new MusicTrackPageResponse(
+                items,
+                result.getNumber(),
+                result.getSize(),
+                result.getTotalElements(),
+                result.hasNext()
+        );
     }
 
     @Transactional(readOnly = true)

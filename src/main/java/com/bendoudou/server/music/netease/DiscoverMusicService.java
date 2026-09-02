@@ -164,12 +164,12 @@ public class DiscoverMusicService {
 
         String preferredQuality = normalizeQuality(qualityRaw);
 
-        // 当前用户已导入过「同曲 + 任意音质」时，若恰好命中目标或更高，可在下载前先按偏好查
+        // 当前用户已导入过「同曲 + 偏好音质」时，复用本地曲目；若指定了歌单则确保加入该歌单
         Optional<MusicTrack> minePreferred = musicTrackRepository
                 .findFirstByUserIdAndNoteOrderByIdAsc(userId, neteaseNote(neteaseSongId, preferredQuality));
         if (minePreferred.isPresent() && StringUtils.hasText(minePreferred.get().getAudioUrl())) {
             MusicTrackResponse existing = musicService.getAccessibleTrack(userId, minePreferred.get().getId());
-            return heart ? musicService.addHeart(userId, existing.id()) : existing;
+            return finishExistingImport(userId, playlistId, heart, existing);
         }
 
         Optional<MusicTrack> cachedPreferred = musicTrackRepository
@@ -240,7 +240,7 @@ public class DiscoverMusicService {
             Optional<MusicTrack> mineActual = musicTrackRepository.findFirstByUserIdAndNoteOrderByIdAsc(userId, note);
             if (mineActual.isPresent() && StringUtils.hasText(mineActual.get().getAudioUrl())) {
                 MusicTrackResponse existing = musicService.getAccessibleTrack(userId, mineActual.get().getId());
-                return heart ? musicService.addHeart(userId, existing.id()) : existing;
+                return finishExistingImport(userId, playlistId, heart, existing);
             }
             Optional<MusicTrack> cachedActual = musicTrackRepository.findFirstByNoteOrderByIdAsc(note)
                     .filter(t -> StringUtils.hasText(t.getAudioUrl()) && StringUtils.hasText(t.getFileSha256()));
@@ -386,6 +386,25 @@ public class DiscoverMusicService {
         } catch (IOException e) {
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "下载或上传失败: " + e.getMessage());
         }
+    }
+
+    /**
+     * 已有本地曲目时：按需复制到目标歌单，再按需红心。
+     */
+    private MusicTrackResponse finishExistingImport(
+            long userId,
+            Long playlistId,
+            boolean heart,
+            MusicTrackResponse existing
+    ) {
+        MusicTrackResponse result = existing;
+        if (playlistId != null && playlistId > 0 && existing.playlistId() != playlistId) {
+            result = musicService.addTrackToPlaylist(userId, existing.id(), playlistId);
+        }
+        if (heart) {
+            result = musicService.addHeart(userId, result.id());
+        }
+        return result;
     }
 
     private MusicTrackResponse cloneFromExisting(long userId, Long playlistId, MusicTrack source) {

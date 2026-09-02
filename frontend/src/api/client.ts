@@ -1433,9 +1433,39 @@ export async function importNeteaseTrack(input: {
   return authJson(res);
 }
 
+export interface MusicTrackPageDto {
+  items: MusicTrackDto[];
+  page: number;
+  size: number;
+  total: number;
+  hasMore: boolean;
+}
+
+export async function fetchMusicTracksPage(
+  playlistId: number,
+  opts?: { page?: number; size?: number; q?: string }
+): Promise<MusicTrackPageDto> {
+  const params = new URLSearchParams({
+    playlistId: String(playlistId),
+    page: String(opts?.page ?? 0),
+    size: String(opts?.size ?? 40),
+  });
+  const q = opts?.q?.trim();
+  if (q) params.set("q", q);
+  const res = await fetch(apiPath(`/api/music/tracks?${params.toString()}`), {
+    headers: { Authorization: `Bearer ${getStoredToken()}` },
+  });
+  return authJson(res);
+}
+
+/** @deprecated 使用 fetchMusicTracksPage；保留兼容时仅取第一页 */
 export async function fetchMusicTracks(playlistId: number): Promise<MusicTrackDto[]> {
-  const q = new URLSearchParams({ playlistId: String(playlistId) });
-  const res = await fetch(apiPath(`/api/music/tracks?${q.toString()}`), {
+  const page = await fetchMusicTracksPage(playlistId, { page: 0, size: 40 });
+  return page.items;
+}
+
+export async function fetchMusicTrackMeta(trackId: number): Promise<MusicTrackDto> {
+  const res = await fetch(apiPath(`/api/music/tracks/${trackId}/meta`), {
     headers: { Authorization: `Bearer ${getStoredToken()}` },
   });
   return authJson(res);
