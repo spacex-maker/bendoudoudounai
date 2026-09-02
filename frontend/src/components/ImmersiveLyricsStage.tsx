@@ -97,7 +97,7 @@ export function ImmersiveLyricsStage({ onOpenHistoryPanel }: Props) {
 
   const rootRef = useRef<HTMLDivElement>(null);
   const lyricsStageRef = useRef<HTMLDivElement>(null);
-  const lineRefs = useRef<(HTMLParagraphElement | null)[]>([]);
+  const lineRefs = useRef<(HTMLDivElement | null)[]>([]);
   const [isFs, setIsFs] = useState(false);
   const [fontScale, setFontScale] = useState(FONT_SCALE_DEFAULT);
   const [dockExpanded, setDockExpanded] = useState(false);
@@ -107,9 +107,9 @@ export function ImmersiveLyricsStage({ onOpenHistoryPanel }: Props) {
   const hideChromeTimerRef = useRef<number | null>(null);
   /** 按沉浸区实际宽度计算的单行缩放（1 = 不缩） */
   const [fitScales, setFitScales] = useState<number[]>([]);
-  const { lines, loading, loadError, mode, setMode, availableModes } = useSyncedLyrics(currentTrack);
+  const { displayLines, loading, loadError, mode, setMode, availableModes } = useSyncedLyrics(currentTrack);
   const timeMs = Math.max(0, playPos * 1000);
-  const activeIndex = useMemo(() => findActiveIndex(lines, timeMs), [lines, timeMs]);
+  const activeIndex = useMemo(() => findActiveIndex(displayLines, timeMs), [displayLines, timeMs]);
   const playlistEmpty = queue.length === 0;
   const hasTrack = currentTrack != null;
 
@@ -294,11 +294,11 @@ export function ImmersiveLyricsStage({ onOpenHistoryPanel }: Props) {
     if (!immersiveLyricsOpen || activeIndex < 0) return;
     const el = lineRefs.current[activeIndex];
     el?.scrollIntoView({ block: "center", behavior: "smooth" });
-  }, [activeIndex, immersiveLyricsOpen, lines.length]);
+  }, [activeIndex, immersiveLyricsOpen, displayLines.length]);
 
   /** 以沉浸滚动区实际可用宽度为准：单行不换行，过长用 transform 缩进容器 */
   useLayoutEffect(() => {
-    if (!immersiveLyricsOpen || lines.length === 0) {
+    if (!immersiveLyricsOpen || displayLines.length === 0) {
       setFitScales([]);
       return;
     }
@@ -312,8 +312,8 @@ export function ImmersiveLyricsStage({ onOpenHistoryPanel }: Props) {
       const padX = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
       const avail = Math.max(0, scroll.clientWidth - padX);
       if (avail <= 0) return;
-      const next: number[] = new Array(lines.length);
-      for (let i = 0; i < lines.length; i++) {
+      const next: number[] = new Array(displayLines.length);
+      for (let i = 0; i < displayLines.length; i++) {
         const el = lineRefs.current[i];
         if (!el) {
           next[i] = 1;
@@ -353,9 +353,9 @@ export function ImmersiveLyricsStage({ onOpenHistoryPanel }: Props) {
       ro.disconnect();
       window.removeEventListener("resize", measure);
     };
-  }, [immersiveLyricsOpen, lines, fontScale, activeIndex]);
+  }, [immersiveLyricsOpen, displayLines, fontScale, activeIndex]);
 
-  lineRefs.current.length = lines.length;
+  lineRefs.current.length = displayLines.length;
 
   if (!immersiveLyricsOpen) return null;
 
@@ -465,7 +465,7 @@ export function ImmersiveLyricsStage({ onOpenHistoryPanel }: Props) {
           <p className="m-auto text-sm text-white/45">{t("lyrics.loading")}</p>
         ) : loadError ? (
           <p className="m-auto text-sm text-rose-300/90">{loadError}</p>
-        ) : lines.length === 0 ? (
+        ) : displayLines.length === 0 ? (
           <p className="m-auto text-sm text-white/45">{t("lyrics.empty")}</p>
         ) : (
           <div className="immersive-lyrics-scroll min-h-0 w-full flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-2 sm:px-5 md:px-8">
@@ -473,7 +473,7 @@ export function ImmersiveLyricsStage({ onOpenHistoryPanel }: Props) {
               ref={lyricsStageRef}
               className="mx-auto flex min-h-full w-full flex-col justify-center py-[22vh] pb-[18vh]"
             >
-              {lines.map((line, i) => {
+              {displayLines.map((line, i) => {
                 const dist = activeIndex < 0 ? i : Math.abs(i - activeIndex);
                 const isActive = activeIndex >= 0 && i === activeIndex;
                 const isNear = dist === 1;
@@ -482,23 +482,26 @@ export function ImmersiveLyricsStage({ onOpenHistoryPanel }: Props) {
                   : isNear
                     ? "clamp(1.05rem, 2.8vw, 1.75rem)"
                     : "clamp(0.85rem, 2vw, 1.2rem)";
+                const secondarySize = isActive
+                  ? "clamp(0.95rem, 2.6vw, 1.55rem)"
+                  : isNear
+                    ? "clamp(0.78rem, 1.8vw, 1.05rem)"
+                    : "clamp(0.7rem, 1.4vw, 0.9rem)";
                 const fit = fitScales[i] ?? 1;
                 const depthScale = isActive ? 1 : Math.max(0.92, 1 - dist * 0.03);
                 return (
-                  <p
-                    key={`${line.timeMs}-${i}-${line.text.slice(0, 20)}`}
+                  <div
+                    key={`${mode}-${line.timeMs}-${i}-${line.primary.slice(0, 20)}`}
                     ref={(node) => {
                       lineRefs.current[i] = node;
                     }}
                     className={clsx(
-                      "immersive-lyric-line flex w-full justify-center overflow-visible px-0 text-center font-semibold tracking-tight transition-[opacity,filter] duration-500 ease-out",
+                      "immersive-lyric-line flex w-full flex-col items-center justify-center overflow-visible px-0 text-center font-semibold tracking-tight transition-[opacity,filter] duration-500 ease-out",
                       isActive && "immersive-lyric-active my-5 sm:my-7",
                       isNear && "my-3 text-white/55 sm:my-4",
                       !isActive && !isNear && "my-2 text-white/22"
                     )}
                     style={{
-                      fontSize: `calc(${baseSize} * ${fontScale})`,
-                      lineHeight: 1.35,
                       filter: isActive ? "none" : dist > 2 ? "blur(1.5px)" : dist > 1 ? "blur(0.6px)" : "none",
                       opacity: isActive ? 1 : Math.max(0.12, 0.55 - dist * 0.12),
                     }}
@@ -510,13 +513,30 @@ export function ImmersiveLyricsStage({ onOpenHistoryPanel }: Props) {
                         isActive && "immersive-lyric-sheen"
                       )}
                       style={{
+                        fontSize: `calc(${baseSize} * ${fontScale})`,
+                        lineHeight: 1.3,
                         transform: `scale(${fit * depthScale})`,
                         transformOrigin: "center center",
                       }}
                     >
-                      {line.text || " "}
+                      {line.primary || " "}
                     </span>
-                  </p>
+                    {line.secondary ? (
+                      <span
+                        className={clsx(
+                          "mt-1 inline-block max-w-[92vw] px-2 font-medium leading-snug",
+                          isActive ? "text-white/70" : "text-inherit"
+                        )}
+                        style={{
+                          fontSize: `calc(${secondarySize} * ${fontScale})`,
+                          transform: `scale(${fit * depthScale})`,
+                          transformOrigin: "center top",
+                        }}
+                      >
+                        {line.secondary}
+                      </span>
+                    ) : null}
+                  </div>
                 );
               })}
             </div>

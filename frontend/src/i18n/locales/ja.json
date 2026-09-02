@@ -547,7 +547,9 @@
     "modeLabel": "歌詞バージョン",
     "modeOriginal": "原文",
     "modeTranslated": "翻訳",
-    "modeRoma": "ローマ字"
+    "modeRoma": "ローマ字",
+    "modeBilingualTranslated": "原文+訳",
+    "modeBilingualRoma": "原文+ローマ字"
   },
   "vinyl": {
     "play": "再生",

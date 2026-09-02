@@ -1,17 +1,22 @@
 import type { MusicTrackDto } from "../api/client";
 
-export type LyricDisplayMode = "original" | "translated" | "roma";
+/** original=仅原文；bilingual_*=原文+副行上下贴合 */
+export type LyricDisplayMode = "original" | "bilingual_translated" | "bilingual_roma";
 
 const LYRIC_MODE_KEY = "aimatex_lyric_mode";
 
 export function readLyricDisplayMode(): LyricDisplayMode {
   try {
     const raw = localStorage.getItem(LYRIC_MODE_KEY);
-    if (raw === "translated" || raw === "roma" || raw === "original") return raw;
+    if (raw === "bilingual_translated" || raw === "bilingual_roma" || raw === "original") return raw;
+    // 兼容旧单行模式
+    if (raw === "translated") return "bilingual_translated";
+    if (raw === "roma") return "bilingual_roma";
   } catch {
     /* ignore */
   }
-  return "original";
+  // 有翻译时会更有用；不可用时由 availableModes 回退
+  return "bilingual_translated";
 }
 
 export function writeLyricDisplayMode(mode: LyricDisplayMode) {
@@ -68,10 +73,11 @@ export function availableLyricModes(
   > | null
 ): LyricDisplayMode[] {
   if (track == null) return [];
-  const modes: LyricDisplayMode[] = [];
-  if (track.hasLyrics && track.lyricsUrl) modes.push("original");
-  if (track.hasTranslatedLyrics && track.translatedLyricsUrl) modes.push("translated");
-  if (track.hasRomaLyrics && track.romaLyricsUrl) modes.push("roma");
+  const hasOriginal = Boolean(track.hasLyrics && track.lyricsUrl);
+  if (!hasOriginal) return [];
+  const modes: LyricDisplayMode[] = ["original"];
+  if (track.hasTranslatedLyrics && track.translatedLyricsUrl) modes.push("bilingual_translated");
+  if (track.hasRomaLyrics && track.romaLyricsUrl) modes.push("bilingual_roma");
   return modes;
 }
 
@@ -86,12 +92,12 @@ export function resolveLyricSource(
     | "hasRomaLyrics"
     | "romaLyricsUrl"
   >,
-  mode: LyricDisplayMode
+  kind: "original" | "translated" | "roma"
 ): { id: number; lyricsUrl: string | null; hasLyrics: boolean } {
-  if (mode === "translated" && track.hasTranslatedLyrics && track.translatedLyricsUrl) {
+  if (kind === "translated" && track.hasTranslatedLyrics && track.translatedLyricsUrl) {
     return { id: track.id, lyricsUrl: track.translatedLyricsUrl, hasLyrics: true };
   }
-  if (mode === "roma" && track.hasRomaLyrics && track.romaLyricsUrl) {
+  if (kind === "roma" && track.hasRomaLyrics && track.romaLyricsUrl) {
     return { id: track.id, lyricsUrl: track.romaLyricsUrl, hasLyrics: true };
   }
   return {

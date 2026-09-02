@@ -547,7 +547,9 @@
     "modeLabel": "歌词版本",
     "modeOriginal": "原文",
     "modeTranslated": "翻译",
-    "modeRoma": "罗马音"
+    "modeRoma": "罗马音",
+    "modeBilingualTranslated": "原文+译",
+    "modeBilingualRoma": "原文+罗马音"
   },
   "vinyl": {
     "play": "播放",

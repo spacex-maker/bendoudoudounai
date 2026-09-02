@@ -17,10 +17,10 @@ export function LyricModeSwitcher({ mode, availableModes, onChange, className, t
 
   const label = (m: LyricDisplayMode) => {
     switch (m) {
-      case "translated":
-        return t("lyrics.modeTranslated");
-      case "roma":
-        return t("lyrics.modeRoma");
+      case "bilingual_translated":
+        return t("lyrics.modeBilingualTranslated");
+      case "bilingual_roma":
+        return t("lyrics.modeBilingualRoma");
       default:
         return t("lyrics.modeOriginal");
     }
@@ -30,7 +30,9 @@ export function LyricModeSwitcher({ mode, availableModes, onChange, className, t
     <div
       className={clsx(
         "inline-flex flex-wrap items-center gap-1",
-        tone === "immersive" ? "rounded-full border border-white/15 bg-black/25 p-0.5" : "rounded-lg border border-white/10 bg-white/[0.04] p-0.5",
+        tone === "immersive"
+          ? "rounded-full border border-white/15 bg-black/25 p-0.5"
+          : "rounded-lg border border-white/10 bg-white/[0.04] p-0.5",
         className
       )}
       role="tablist"
