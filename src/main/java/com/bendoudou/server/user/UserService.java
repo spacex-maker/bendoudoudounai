@@ -16,6 +16,8 @@ import com.bendoudou.server.user.dto.AdminUserCreateRequest;
 import com.bendoudou.server.user.dto.AdminUserListItem;
 import com.bendoudou.server.user.dto.AdminUserPatchRequest;
 import com.bendoudou.server.user.dto.ChangePasswordRequest;
+import com.bendoudou.server.user.dto.InviteCodeItemResponse;
+import com.bendoudou.server.user.dto.MyInvitesResponse;
 import com.bendoudou.server.user.dto.UpdateMyProfileRequest;
 import com.bendoudou.server.user.dto.UserDirectoryItem;
 import com.bendoudou.server.user.dto.UserEmailLookupResponse;
@@ -37,6 +39,7 @@ import java.time.temporal.ChronoUnit;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -51,6 +54,7 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final EmailVerificationCodeRepository emailVerificationCodeRepository;
+    private final InviteCodeRepository inviteCodeRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenService jwtTokenService;
     private final AccountRoleService accountRoleService;
@@ -62,6 +66,7 @@ public class UserService {
     public UserService(
             UserRepository userRepository,
             EmailVerificationCodeRepository emailVerificationCodeRepository,
+            InviteCodeRepository inviteCodeRepository,
             PasswordEncoder passwordEncoder,
             JwtTokenService jwtTokenService,
             AccountRoleService accountRoleService,
@@ -72,6 +77,7 @@ public class UserService {
     ) {
         this.userRepository = userRepository;
         this.emailVerificationCodeRepository = emailVerificationCodeRepository;
+        this.inviteCodeRepository = inviteCodeRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtTokenService = jwtTokenService;
         this.accountRoleService = accountRoleService;
@@ -116,12 +122,19 @@ public class UserService {
         var roleNames = eff.stream().map(UserRole::name).sorted().collect(Collectors.toList());
         var primary = AccountRoleService.primaryRoleName(eff);
         long beanBalance = beanService.queryBalance(u.getId());
-        String inviteeLabel = null;
-        if (u.isInviteCodeUsed()) {
-            inviteeLabel = userRepository.findFirstByInvitedByUserId(u.getId())
-                    .map(x -> StringUtils.hasText(x.getDisplayName()) ? x.getDisplayName().trim() : x.getEmail())
-                    .orElse(null);
-        }
+        long total = inviteCodeRepository.countByOwnerUserId(u.getId());
+        long unused = inviteCodeRepository.countByOwnerUserIdAndInviteeUserIdIsNull(u.getId());
+        String firstUnused = inviteCodeRepository.findByOwnerUserIdOrderByCreatedAtDesc(u.getId()).stream()
+                .filter(c -> !c.isUsed())
+                .map(InviteCode::getCode)
+                .findFirst()
+                .orElse(null);
+        String inviteeLabel = inviteCodeRepository
+                .findByOwnerUserIdAndInviteeUserIdIsNotNullOrderByUsedAtDesc(u.getId())
+                .stream()
+                .findFirst()
+                .map(c -> userLabel(c.getInviteeUserId()))
+                .orElse(null);
         return new MeResponse(
                 u.getId(),
                 u.getEmail(),
@@ -133,24 +146,247 @@ public class UserService {
                 beanBalance,
                 beanService.resolveLevelCode(beanBalance),
                 beanService.resolveLevelName(beanBalance),
-                u.getInviteCode(),
-                u.isInviteCodeUsed(),
-                inviteeLabel
+                firstUnused,
+                unused == 0 && total > 0,
+                inviteeLabel,
+                total,
+                unused
         );
     }
 
+    private String userLabel(Long userId) {
+        if (userId == null) return null;
+        return userRepository.findById(userId)
+                .map(x -> StringUtils.hasText(x.getDisplayName()) ? x.getDisplayName().trim() : x.getEmail())
+                .orElse(null);
+    }
+
+    /**
+     * 保证用户至少有一枚邀请码（写入 invite_codes；并同步 User.invite_code 兼容字段）。
+     */
     @Transactional
     public void ensureInviteCode(User u) {
-        if (StringUtils.hasText(u.getInviteCode())) return;
-        for (int i = 0; i < 12; i++) {
-            String code = InviteCodeGenerator.generate();
-            if (!userRepository.existsByInviteCode(code)) {
-                u.setInviteCode(code);
-                userRepository.save(u);
-                return;
+        if (u.getId() == null) {
+            // 注册流程里尚未 save：先落库再发码
+            u = userRepository.save(u);
+        }
+        migrateLegacyInviteIfNeeded(u);
+        if (inviteCodeRepository.countByOwnerUserId(u.getId()) > 0) {
+            syncLegacyInviteFields(u);
+            return;
+        }
+        InviteCode created = createInviteCodeForOwner(u.getId(), InviteCode.SOURCE_INITIAL);
+        u.setInviteCode(created.getCode());
+        u.setInviteCodeUsed(false);
+        userRepository.save(u);
+    }
+
+    /** 把旧版 User.invite_code 迁到 invite_codes 表（幂等） */
+    @Transactional
+    public void migrateLegacyInviteIfNeeded(User u) {
+        if (!StringUtils.hasText(u.getInviteCode())) return;
+        String code = InviteCodeGenerator.normalize(u.getInviteCode());
+        if (inviteCodeRepository.existsByCode(code)) return;
+        InviteCode row = new InviteCode();
+        row.setCode(code);
+        row.setOwnerUserId(u.getId());
+        row.setSource(InviteCode.SOURCE_INITIAL);
+        row.setCreatedAt(Instant.now());
+        if (u.isInviteCodeUsed()) {
+            userRepository.findFirstByInvitedByUserId(u.getId()).ifPresent(invitee -> {
+                row.setInviteeUserId(invitee.getId());
+                row.setUsedAt(invitee.getCreatedAt() != null ? invitee.getCreatedAt() : Instant.now());
+            });
+        }
+        inviteCodeRepository.save(row);
+    }
+
+    private void syncLegacyInviteFields(User u) {
+        List<InviteCode> all = inviteCodeRepository.findByOwnerUserIdOrderByCreatedAtDesc(u.getId());
+        String unused = all.stream().filter(c -> !c.isUsed()).map(InviteCode::getCode).findFirst().orElse(null);
+        boolean changed = false;
+        if (unused != null) {
+            if (!unused.equals(u.getInviteCode()) || u.isInviteCodeUsed()) {
+                u.setInviteCode(unused);
+                u.setInviteCodeUsed(false);
+                changed = true;
+            }
+        } else if (!all.isEmpty()) {
+            String last = all.get(0).getCode();
+            if (!last.equals(u.getInviteCode()) || !u.isInviteCodeUsed()) {
+                u.setInviteCode(last);
+                u.setInviteCodeUsed(true);
+                changed = true;
             }
         }
+        if (changed) userRepository.save(u);
+    }
+
+    private InviteCode createInviteCodeForOwner(long ownerUserId, String source) {
+        for (int i = 0; i < 16; i++) {
+            String code = InviteCodeGenerator.generate();
+            if (inviteCodeRepository.existsByCode(code) || userRepository.existsByInviteCode(code)) {
+                continue;
+            }
+            InviteCode row = new InviteCode();
+            row.setCode(code);
+            row.setOwnerUserId(ownerUserId);
+            row.setSource(source);
+            row.setCreatedAt(Instant.now());
+            return inviteCodeRepository.save(row);
+        }
         throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "邀请码生成失败");
+    }
+
+    @Transactional(readOnly = true)
+    public MyInvitesResponse listMyInvites(long userId) {
+        User u = requireUser(userId);
+        ensureInviteCode(u);
+        List<InviteCode> all = inviteCodeRepository.findByOwnerUserIdOrderByCreatedAtDesc(userId);
+        List<InviteCodeItemResponse> codes = all.stream().map(this::toInviteItem).collect(Collectors.toList());
+        List<InviteCodeItemResponse> records = all.stream()
+                .filter(InviteCode::isUsed)
+                .map(this::toInviteItem)
+                .collect(Collectors.toList());
+        long unused = all.stream().filter(c -> !c.isUsed()).count();
+        return new MyInvitesResponse(all.size(), unused, codes, records);
+    }
+
+    private InviteCodeItemResponse toInviteItem(InviteCode c) {
+        return new InviteCodeItemResponse(
+                c.getId(),
+                c.getCode(),
+                c.isUsed(),
+                c.getSource(),
+                c.isUsed() ? userLabel(c.getInviteeUserId()) : null,
+                c.getCreatedAt() == null ? null : c.getCreatedAt().toString(),
+                c.getUsedAt() == null ? null : c.getUsedAt().toString()
+        );
+    }
+
+    /** 管理员批量生成邀请码（归属于自己，便于活动发放；后期可再扩展发放给指定用户） */
+    @Transactional
+    public List<InviteCodeItemResponse> generateInviteCodesAsAdmin(long adminUserId, int count) {
+        if (!accountRoleService.hasRole(adminUserId, UserRole.ADMIN)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "需要管理员权限");
+        }
+        if (count < 1 || count > 50) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "一次可生成 1～50 枚");
+        }
+        requireUser(adminUserId);
+        List<InviteCodeItemResponse> out = new ArrayList<>(count);
+        for (int i = 0; i < count; i++) {
+            InviteCode created = createInviteCodeForOwner(adminUserId, InviteCode.SOURCE_ADMIN);
+            out.add(toInviteItem(created));
+        }
+        syncLegacyInviteFields(requireUser(adminUserId));
+        return out;
+    }
+
+    @Transactional(readOnly = true)
+    public InviteCodeValidateResponse validateInviteCode(String raw) {
+        String code = InviteCodeGenerator.normalize(raw);
+        if (!StringUtils.hasText(code)) {
+            return new InviteCodeValidateResponse(false, "请填写邀请码");
+        }
+        InviteCode row = inviteCodeRepository.findByCode(code).orElse(null);
+        if (row == null) {
+            // 兼容尚未迁移的旧 User.invite_code
+            User inviter = userRepository.findByInviteCode(code).orElse(null);
+            if (inviter == null || !inviter.isAccountEnabled()) {
+                return new InviteCodeValidateResponse(false, "邀请码无效");
+            }
+            if (inviter.isInviteCodeUsed()) {
+                return new InviteCodeValidateResponse(false, "该邀请码已被使用");
+            }
+            return new InviteCodeValidateResponse(true, "邀请码有效");
+        }
+        if (row.isUsed()) {
+            return new InviteCodeValidateResponse(false, "该邀请码已被使用");
+        }
+        User owner = userRepository.findById(row.getOwnerUserId()).orElse(null);
+        if (owner == null || !owner.isAccountEnabled()) {
+            return new InviteCodeValidateResponse(false, "邀请码无效");
+        }
+        return new InviteCodeValidateResponse(true, "邀请码有效");
+    }
+
+    @Transactional
+    public AuthResponse register(RegisterRequest req, String clientIp) {
+        String email = req.email().trim().toLowerCase(Locale.ROOT);
+        if (userRepository.findByEmail(email).isPresent()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "该邮箱已注册");
+        }
+        String inviteNorm = InviteCodeGenerator.normalize(req.inviteCode());
+        InviteCode inviteRow = inviteCodeRepository.findByCode(inviteNorm).orElse(null);
+        User inviter;
+        if (inviteRow != null) {
+            if (inviteRow.isUsed()) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "该邀请码已被使用");
+            }
+            inviter = userRepository.findById(inviteRow.getOwnerUserId())
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "邀请码无效"));
+        } else {
+            inviter = userRepository.findByInviteCode(inviteNorm)
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "邀请码无效"));
+            if (inviter.isInviteCodeUsed()) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "该邀请码已被使用");
+            }
+        }
+        if (!inviter.isAccountEnabled()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "邀请码无效");
+        }
+
+        EmailVerificationCode stored = emailVerificationCodeRepository
+                .findFirstByEmailAndPurposeOrderByCreatedAtDesc(email, EmailVerificationCode.PURPOSE_REGISTER)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "请先获取邮箱验证码"));
+        if (stored.getExpiresAt() == null || stored.getExpiresAt().isBefore(Instant.now())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "验证码已过期，请重新获取");
+        }
+        if (!req.code().trim().equals(stored.getCode())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "验证码错误");
+        }
+
+        User u = new User();
+        u.setEmail(email);
+        u.setPasswordHash(passwordEncoder.encode(req.password()));
+        if (StringUtils.hasText(req.displayName())) {
+            u.setDisplayName(req.displayName().trim());
+        }
+        u.setRole(UserRole.USER);
+        u.setAccountEnabled(true);
+        u.setInvitedByUserId(inviter.getId());
+        u = userRepository.save(u);
+        accountRoleService.assignOnUserCreatedIfEmpty(u.getId(), UserRole.USER);
+        ensureInviteCode(u);
+
+        if (inviteRow != null) {
+            inviteRow.setInviteeUserId(u.getId());
+            inviteRow.setUsedAt(Instant.now());
+            inviteCodeRepository.save(inviteRow);
+        } else {
+            // 旧字段路径：迁并占用
+            InviteCode migrated = new InviteCode();
+            migrated.setCode(inviteNorm);
+            migrated.setOwnerUserId(inviter.getId());
+            migrated.setSource(InviteCode.SOURCE_INITIAL);
+            migrated.setCreatedAt(Instant.now());
+            migrated.setInviteeUserId(u.getId());
+            migrated.setUsedAt(Instant.now());
+            inviteCodeRepository.save(migrated);
+        }
+        if (inviteNorm.equals(InviteCodeGenerator.normalize(inviter.getInviteCode()))) {
+            inviter.setInviteCodeUsed(true);
+            userRepository.save(inviter);
+        }
+        syncLegacyInviteFields(inviter);
+
+        emailVerificationCodeRepository.deleteByEmailAndPurpose(email, EmailVerificationCode.PURPOSE_REGISTER);
+
+        userPrivacyService.recordLogin(u.getId(), clientIp);
+        u.setLastActiveAt(Instant.now());
+        userRepository.save(u);
+        return buildAuthResponse(u);
     }
 
     @Transactional
@@ -177,71 +413,6 @@ public class UserService {
         row.setExpiresAt(Instant.now().plus(5, ChronoUnit.MINUTES));
         emailVerificationCodeRepository.save(row);
         mailService.sendRegisterCode(email, code, req.locale());
-    }
-
-    @Transactional(readOnly = true)
-    public InviteCodeValidateResponse validateInviteCode(String raw) {
-        String code = InviteCodeGenerator.normalize(raw);
-        if (!StringUtils.hasText(code)) {
-            return new InviteCodeValidateResponse(false, "请填写邀请码");
-        }
-        User inviter = userRepository.findByInviteCode(code).orElse(null);
-        if (inviter == null || !inviter.isAccountEnabled()) {
-            return new InviteCodeValidateResponse(false, "邀请码无效");
-        }
-        if (inviter.isInviteCodeUsed()) {
-            return new InviteCodeValidateResponse(false, "该邀请码已被使用");
-        }
-        return new InviteCodeValidateResponse(true, "邀请码有效");
-    }
-
-    @Transactional
-    public AuthResponse register(RegisterRequest req, String clientIp) {
-        String email = req.email().trim().toLowerCase(Locale.ROOT);
-        if (userRepository.findByEmail(email).isPresent()) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "该邮箱已注册");
-        }
-        String inviteNorm = InviteCodeGenerator.normalize(req.inviteCode());
-        User inviter = userRepository.findByInviteCode(inviteNorm)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "邀请码无效"));
-        if (!inviter.isAccountEnabled()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "邀请码无效");
-        }
-        if (inviter.isInviteCodeUsed()) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "该邀请码已被使用");
-        }
-
-        EmailVerificationCode stored = emailVerificationCodeRepository
-                .findFirstByEmailAndPurposeOrderByCreatedAtDesc(email, EmailVerificationCode.PURPOSE_REGISTER)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "请先获取邮箱验证码"));
-        if (stored.getExpiresAt() == null || stored.getExpiresAt().isBefore(Instant.now())) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "验证码已过期，请重新获取");
-        }
-        if (!req.code().trim().equals(stored.getCode())) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "验证码错误");
-        }
-
-        User u = new User();
-        u.setEmail(email);
-        u.setPasswordHash(passwordEncoder.encode(req.password()));
-        if (StringUtils.hasText(req.displayName())) {
-            u.setDisplayName(req.displayName().trim());
-        }
-        u.setRole(UserRole.USER);
-        u.setAccountEnabled(true);
-        u.setInvitedByUserId(inviter.getId());
-        ensureInviteCode(u);
-        u = userRepository.save(u);
-        accountRoleService.assignOnUserCreatedIfEmpty(u.getId(), UserRole.USER);
-
-        inviter.setInviteCodeUsed(true);
-        userRepository.save(inviter);
-        emailVerificationCodeRepository.deleteByEmailAndPurpose(email, EmailVerificationCode.PURPOSE_REGISTER);
-
-        userPrivacyService.recordLogin(u.getId(), clientIp);
-        u.setLastActiveAt(Instant.now());
-        userRepository.save(u);
-        return buildAuthResponse(u);
     }
 
     @Transactional

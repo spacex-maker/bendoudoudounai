@@ -50,11 +50,11 @@ public class User {
     @Column(name = "gender", nullable = false, length = 16)
     private UserGender gender = UserGender.UNKNOWN;
 
-    /** 专属邀请码（随机字母）；每人一个，仅可被使用一次 */
+    /** 兼容字段：同步自 invite_codes 中一枚未使用码（多码以 invite_codes 为准） */
     @Column(name = "invite_code", unique = true, length = 16)
     private String inviteCode;
 
-    /** 该邀请码是否已被他人注册使用 */
+    /** 兼容字段：当前是否已无可用邀请码 */
     @Column(name = "invite_code_used", nullable = false)
     private boolean inviteCodeUsed = false;
 

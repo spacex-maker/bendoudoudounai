@@ -105,4 +105,61 @@ public class MailService {
                   """.formatted(code, personal);
         sendPlain(to, subject, body);
     }
+
+    public void sendRegistrationRejected(String to, String reason, String locale) {
+        boolean ja = locale != null && locale.toLowerCase().startsWith("ja");
+        String subject = ja
+                ? "【" + personal + "】登録申請が却下されました"
+                : "【" + personal + "】注册申请未通过";
+        String safeReason = reason == null || reason.isBlank() ? (ja ? "（理由なし）" : "（未填写）") : reason;
+        String body = ja
+                ? """
+                  こんにちは。
+
+                  残念ながら、あなたの登録申請は承認されませんでした。
+
+                  却下理由：
+                  %s
+
+                  内容を修正のうえ、再度お申し込みいただけます。
+
+                  — %s
+                  """.formatted(safeReason, personal)
+                : """
+                  你好，
+
+                  很抱歉，你的注册申请未通过审核。
+
+                  拒绝原因：
+                  %s
+
+                  你可以根据原因修改资料后重新提交申请。
+
+                  — %s
+                  """.formatted(safeReason, personal);
+        sendPlain(to, subject, body);
+    }
+
+    public void sendRegistrationApproved(String to, String locale) {
+        boolean ja = locale != null && locale.toLowerCase().startsWith("ja");
+        String subject = ja
+                ? "【" + personal + "】登録申請が承認されました"
+                : "【" + personal + "】注册申请已通过";
+        String body = ja
+                ? """
+                  こんにちは。
+
+                  登録申請が承認されました。申請時のメールとパスワードでログインしてください。
+
+                  — %s
+                  """.formatted(personal)
+                : """
+                  你好，
+
+                  你的注册申请已通过审核。请使用申请时填写的邮箱和密码登录。
+
+                  — %s
+                  """.formatted(personal);
+        sendPlain(to, subject, body);
+    }
 }

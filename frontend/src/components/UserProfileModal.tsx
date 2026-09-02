@@ -12,16 +12,19 @@ import {
   Copy,
   Check,
 } from "lucide-react";
-import type { MeResponse } from "../api/client";
+import type { InviteCodeItemDto, MeResponse, MyInvitesDto } from "../api/client";
 import {
   changeMyPassword,
+  fetchMyInvites,
   fetchMyPrivacySettings,
+  generateInviteCodes,
   updateMyPrivacySettings,
   uploadUserAvatar,
   userIsAdmin,
 } from "../api/client";
 import { mapApiError } from "../i18n/mapApiError";
 import { useAuth } from "../auth/AuthContext";
+import { useDateLocale } from "../i18n/useDateLocale";
 import { UserAvatar } from "./UserAvatar";
 
 type Props = {
@@ -68,6 +71,7 @@ function Toggle({
 
 export function UserProfileModal({ open, onClose, user }: Props) {
   const { t } = useTranslation();
+  const dateLocale = useDateLocale();
   const { refreshMe, logout } = useAuth();
   const navigate = useNavigate();
   const fileId = useId();
@@ -83,7 +87,23 @@ export function UserProfileModal({ open, onClose, user }: Props) {
   const [privacyLoading, setPrivacyLoading] = useState(false);
   const [recordLoginActivity, setRecordLoginActivity] = useState(true);
   const [recordPlayActivity, setRecordPlayActivity] = useState(true);
-  const [inviteCopied, setInviteCopied] = useState(false);
+  const [copiedCode, setCopiedCode] = useState<string | null>(null);
+  const [invites, setInvites] = useState<MyInvitesDto | null>(null);
+  const [invitesLoading, setInvitesLoading] = useState(false);
+  const [genCount, setGenCount] = useState(5);
+  const [genBusy, setGenBusy] = useState(false);
+  const isAdmin = userIsAdmin(user);
+
+  const reloadInvites = async () => {
+    setInvitesLoading(true);
+    try {
+      setInvites(await fetchMyInvites());
+    } catch (ex) {
+      setErr(mapApiError(t, ex));
+    } finally {
+      setInvitesLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -93,7 +113,8 @@ export function UserProfileModal({ open, onClose, user }: Props) {
     setPwdOld("");
     setPwdNew("");
     setTab("invite");
-    setInviteCopied(false);
+    setCopiedCode(null);
+    setGenCount(5);
     setPrivacyLoading(true);
     void (async () => {
       try {
@@ -106,6 +127,8 @@ export function UserProfileModal({ open, onClose, user }: Props) {
         setPrivacyLoading(false);
       }
     })();
+    void reloadInvites();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅打开弹窗时刷新
   }, [open]);
 
   if (!open) return null;
@@ -291,55 +314,151 @@ export function UserProfileModal({ open, onClose, user }: Props) {
           role="tabpanel"
         >
           {tab === "invite" ? (
-            <div className="space-y-3">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-[13px] font-medium text-zinc-100">{t("userProfile.inviteTitle")}</p>
-                  <p className="mt-1 text-[11px] leading-relaxed text-zinc-500">{t("userProfile.inviteHint")}</p>
-                </div>
-                <span
-                  className={clsx(
-                    "shrink-0 rounded-md px-2 py-0.5 text-[10px] font-medium",
-                    user.inviteCodeUsed
-                      ? "bg-amber-500/15 text-amber-200/90"
-                      : "bg-emerald-500/15 text-emerald-300/90"
-                  )}
-                >
-                  {user.inviteCodeUsed ? t("userProfile.inviteStatusUsed") : t("userProfile.inviteStatusOpen")}
-                </span>
+            <div className="space-y-4">
+              <div>
+                <p className="text-[13px] font-medium text-zinc-100">{t("userProfile.inviteTitle")}</p>
+                <p className="mt-1 text-[11px] leading-relaxed text-zinc-500">{t("userProfile.inviteHint")}</p>
+                <p className="mt-2 text-[11px] text-zinc-400">
+                  {t("userProfile.inviteStats", {
+                    unused: invites?.unusedCount ?? user.inviteUnusedCount ?? 0,
+                    total: invites?.totalCount ?? user.inviteTotalCount ?? 0,
+                  })}
+                </p>
               </div>
 
-              <div className="flex items-center gap-2 rounded-2xl border border-dashed border-white/10 bg-black/25 px-3 py-2.5">
-                <div className="min-w-0 flex-1">
-                  <p className="text-[10px] uppercase tracking-[0.12em] text-zinc-600">
-                    {t("userProfile.inviteCodeLabel")}
+              {isAdmin ? (
+                <div className="rounded-2xl border border-white/[0.07] bg-black/20 p-3">
+                  <p className="text-[12px] font-medium text-zinc-200">{t("userProfile.inviteAdminGenerate")}</p>
+                  <p className="mt-1 text-[10px] leading-relaxed text-zinc-500">
+                    {t("userProfile.inviteAdminGenerateHint")}
                   </p>
-                  <code className="mt-0.5 block truncate font-mono text-[15px] font-semibold tracking-[0.18em] text-zinc-100">
-                    {user.inviteCode || "—"}
-                  </code>
+                  <div className="mt-2.5 flex items-center gap-2">
+                    <input
+                      type="number"
+                      min={1}
+                      max={50}
+                      value={genCount}
+                      onChange={(e) => setGenCount(Math.min(50, Math.max(1, Number(e.target.value) || 1)))}
+                      className="w-16 rounded-lg border border-white/10 bg-black/30 px-2 py-1.5 text-center text-[12px] text-zinc-100 outline-none focus:border-music-accent/40"
+                      aria-label={t("userProfile.inviteGenCount")}
+                    />
+                    <button
+                      type="button"
+                      disabled={genBusy}
+                      onClick={() => {
+                        setGenBusy(true);
+                        setErr(null);
+                        void (async () => {
+                          try {
+                            await generateInviteCodes(genCount);
+                            await reloadInvites();
+                            await refreshMe();
+                          } catch (ex) {
+                            setErr(mapApiError(t, ex));
+                          } finally {
+                            setGenBusy(false);
+                          }
+                        })();
+                      }}
+                      className="rounded-lg bg-white/[0.08] px-3 py-1.5 text-[11px] font-medium text-zinc-100 transition hover:bg-white/[0.12] disabled:opacity-40"
+                    >
+                      {genBusy ? t("common.loading") : t("userProfile.inviteGenSubmit")}
+                    </button>
+                  </div>
                 </div>
-                <button
-                  type="button"
-                  disabled={!user.inviteCode}
-                  onClick={() => {
-                    if (!user.inviteCode) return;
-                    void navigator.clipboard.writeText(user.inviteCode).then(() => {
-                      setInviteCopied(true);
-                      window.setTimeout(() => setInviteCopied(false), 1600);
-                    });
-                  }}
-                  className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-white/10 bg-white/[0.06] px-2.5 py-2 text-[11px] font-medium text-zinc-200 transition hover:bg-white/10 disabled:opacity-40"
-                >
-                  {inviteCopied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
-                  {inviteCopied ? t("userProfile.inviteCopied") : t("userProfile.inviteCopy")}
-                </button>
+              ) : null}
+
+              <div>
+                <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.12em] text-zinc-500">
+                  {t("userProfile.inviteCodesTitle")}
+                </p>
+                {invitesLoading && !invites ? (
+                  <p className="text-[11px] text-zinc-500">{t("common.loading")}</p>
+                ) : (invites?.codes.filter((c) => !c.used) ?? []).length === 0 ? (
+                  <p className="rounded-xl border border-dashed border-white/10 px-3 py-3 text-[11px] text-zinc-500">
+                    {t("userProfile.inviteCodesEmpty")}
+                  </p>
+                ) : (
+                  <ul className="space-y-2">
+                    {(invites?.codes.filter((c) => !c.used) ?? []).map((c) => (
+                      <li
+                        key={c.id}
+                        className="flex items-center gap-2 rounded-xl border border-dashed border-white/10 bg-black/25 px-3 py-2"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <code className="block truncate font-mono text-[14px] font-semibold tracking-[0.16em] text-zinc-100">
+                            {c.code}
+                          </code>
+                          <p className="mt-0.5 text-[10px] text-zinc-600">
+                            {t(`userProfile.inviteSource.${c.source}`, {
+                              defaultValue: c.source,
+                            })}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void navigator.clipboard.writeText(c.code).then(() => {
+                              setCopiedCode(c.code);
+                              window.setTimeout(() => setCopiedCode(null), 1600);
+                            });
+                          }}
+                          className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-white/10 bg-white/[0.06] px-2.5 py-1.5 text-[11px] font-medium text-zinc-200 transition hover:bg-white/10"
+                        >
+                          {copiedCode === c.code ? (
+                            <Check className="h-3.5 w-3.5 text-emerald-400" />
+                          ) : (
+                            <Copy className="h-3.5 w-3.5" />
+                          )}
+                          {copiedCode === c.code ? t("userProfile.inviteCopied") : t("userProfile.inviteCopy")}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
 
-              <p className="text-[11px] text-zinc-500">
-                {user.inviteCodeUsed
-                  ? t("userProfile.inviteUsed", { name: user.inviteeLabel || "—" })
-                  : t("userProfile.inviteUnused")}
-              </p>
+              <div>
+                <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.12em] text-zinc-500">
+                  {t("userProfile.inviteRecordsTitle")}
+                </p>
+                {(invites?.records ?? []).length === 0 ? (
+                  <p className="rounded-xl border border-dashed border-white/10 px-3 py-3 text-[11px] text-zinc-500">
+                    {t("userProfile.inviteRecordsEmpty")}
+                  </p>
+                ) : (
+                  <ul className="space-y-2">
+                    {(invites?.records ?? []).map((c: InviteCodeItemDto) => {
+                      const when = c.usedAt
+                        ? new Date(c.usedAt).toLocaleString(dateLocale, {
+                            month: "short",
+                            day: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })
+                        : "—";
+                      return (
+                        <li
+                          key={c.id}
+                          className="rounded-xl border border-white/[0.06] bg-black/15 px-3 py-2.5"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <p className="truncate text-[12px] font-medium text-zinc-200">
+                                {c.inviteeLabel || "—"}
+                              </p>
+                              <code className="mt-0.5 block truncate font-mono text-[10px] tracking-wider text-zinc-500">
+                                {c.code}
+                              </code>
+                            </div>
+                            <span className="shrink-0 text-[10px] text-zinc-500">{when}</span>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
             </div>
           ) : null}
 

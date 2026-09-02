@@ -6,10 +6,13 @@ import clsx from "clsx";
 import {
   login,
   registerWithEmail,
+  applyForRegistration,
+  fetchRegisterApplyStatus,
   resetPasswordWithEmail,
   sendRegisterEmailCode,
   sendResetPasswordEmailCode,
   validateInviteCode,
+  type RegisterApplyStatusDto,
 } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { usePageAppearance } from "../pageAppearance/PageAppearanceContext";
@@ -21,6 +24,7 @@ import i18n from "../i18n/config";
 const REMEMBER_LOGIN_KEY = "bendoudou_login_remember";
 
 type Mode = "login" | "register" | "reset";
+type RegisterPath = "invite" | "apply";
 
 export function LoginPage() {
   const { t } = useTranslation();
@@ -31,11 +35,14 @@ export function LoginPage() {
   const from = (loc.state as { from?: string } | null)?.from;
 
   const [mode, setMode] = useState<Mode>("login");
+  const [registerPath, setRegisterPath] = useState<RegisterPath>("invite");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [code, setCode] = useState("");
   const [inviteCode, setInviteCode] = useState("");
+  const [applyMessage, setApplyMessage] = useState("");
+  const [applyStatus, setApplyStatus] = useState<RegisterApplyStatusDto | null>(null);
   const [inviteHint, setInviteHint] = useState<string | null>(null);
   const [inviteValid, setInviteValid] = useState(false);
   const [rememberPassword, setRememberPassword] = useState(false);
@@ -73,6 +80,11 @@ export function LoginPage() {
 
   useEffect(() => {
     if (mode !== "register") return;
+    if (registerPath !== "invite") {
+      setInviteHint(null);
+      setInviteValid(false);
+      return;
+    }
     const raw = inviteCode.trim();
     if (raw.length < 4) {
       setInviteHint(null);
@@ -91,7 +103,25 @@ export function LoginPage() {
         });
     }, 350);
     return () => window.clearTimeout(timer);
-  }, [inviteCode, mode, t]);
+  }, [inviteCode, mode, registerPath, t]);
+
+  useEffect(() => {
+    if (mode !== "register" || registerPath !== "apply") {
+      setApplyStatus(null);
+      return;
+    }
+    const em = email.trim();
+    if (!em.includes("@")) {
+      setApplyStatus(null);
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      void fetchRegisterApplyStatus(em)
+        .then((r) => setApplyStatus(r))
+        .catch(() => setApplyStatus(null));
+    }, 400);
+    return () => window.clearTimeout(timer);
+  }, [email, mode, registerPath]);
 
   if (authState.status === "loading") {
     return (
@@ -112,6 +142,7 @@ export function LoginPage() {
     setOkMsg(null);
     setInviteHint(null);
     setInviteValid(false);
+    setApplyStatus(null);
     setCode("");
     if (next !== "login") setPassword("");
     setCodeCooldown(0);
@@ -162,15 +193,35 @@ export function LoginPage() {
           setErr(t("auth.passwordPh"));
           return;
         }
-        const res = await registerWithEmail({
-          email,
-          password,
-          code,
-          inviteCode,
-          displayName: displayName || undefined,
-        });
-        await loginWithToken(res.token);
-        nav(from && from !== "/login" ? from : "/music", { replace: true });
+        if (registerPath === "apply") {
+          if (applyStatus?.status === "PENDING") {
+            setErr(t("auth.applyPending"));
+            return;
+          }
+          const r = await applyForRegistration({
+            email,
+            password,
+            code,
+            displayName: displayName || undefined,
+            message: applyMessage || undefined,
+            locale: i18n.language,
+          });
+          setApplyStatus(r);
+          setOkMsg(r.message || t("auth.applySubmitted"));
+          setPassword("");
+          setCode("");
+          setApplyMessage("");
+        } else {
+          const res = await registerWithEmail({
+            email,
+            password,
+            code,
+            inviteCode,
+            displayName: displayName || undefined,
+          });
+          await loginWithToken(res.token);
+          nav(from && from !== "/login" ? from : "/music", { replace: true });
+        }
       } else {
         if (password.length < 6) {
           setErr(t("auth.passwordPh"));
@@ -254,7 +305,13 @@ export function LoginPage() {
             <h1 className="font-display text-[2rem] font-extrabold tracking-[-0.04em] text-white sm:text-[2.15rem]">
               {title}
             </h1>
-            <p className="mt-2 max-w-[34ch] text-sm leading-relaxed text-white/55">{subtitle}</p>
+            <p className="mt-2 max-w-[34ch] text-sm leading-relaxed text-white/55">
+              {mode === "register"
+                ? registerPath === "apply"
+                  ? t("auth.subRegisterApply")
+                  : t("auth.subRegister")
+                : subtitle}
+            </p>
             {mode !== "reset" ? (
               <div className="mt-4 flex rounded-xl border border-white/10 bg-white/[0.04] p-1 text-xs">
                 <button
@@ -287,6 +344,38 @@ export function LoginPage() {
                 ← {t("auth.backToLogin")}
               </button>
             )}
+            {mode === "register" ? (
+              <div className="mt-3 flex rounded-xl border border-white/10 bg-black/20 p-1 text-[11px]">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRegisterPath("invite");
+                    setErr(null);
+                    setOkMsg(null);
+                  }}
+                  className={clsx(
+                    "flex-1 rounded-lg py-1.5 font-medium transition",
+                    registerPath === "invite" ? "bg-white/12 text-white" : "text-white/40 hover:text-white/65"
+                  )}
+                >
+                  {t("auth.registerPathInvite")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRegisterPath("apply");
+                    setErr(null);
+                    setOkMsg(null);
+                  }}
+                  className={clsx(
+                    "flex-1 rounded-lg py-1.5 font-medium transition",
+                    registerPath === "apply" ? "bg-white/12 text-white" : "text-white/40 hover:text-white/65"
+                  )}
+                >
+                  {t("auth.registerPathApply")}
+                </button>
+              </div>
+            ) : null}
           </div>
 
           <form onSubmit={(e) => void onSubmit(e)} className="relative z-10 space-y-3.5">
@@ -388,33 +477,69 @@ export function LoginPage() {
             </div>
 
             {mode === "register" ? (
-              <div>
-                <label className="mb-1.5 block text-xs font-medium text-white/50">{t("auth.inviteCode")}</label>
-                <div className="relative">
-                  <Ticket className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-music-accent/80" />
-                  <input
-                    type="text"
-                    required
-                    autoComplete="off"
-                    className="w-full rounded-xl border border-white/10 bg-white/[0.06] py-3 pl-11 pr-3 text-sm uppercase tracking-wider text-white placeholder:text-white/30 outline-none transition focus:border-music-accent/50 focus:ring-2 focus:ring-music-accent/25"
-                    placeholder={t("auth.inviteCodePh")}
-                    value={inviteCode}
-                    onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
-                  />
+              registerPath === "invite" ? (
+                <div>
+                  <label className="mb-1.5 block text-xs font-medium text-white/50">{t("auth.inviteCode")}</label>
+                  <div className="relative">
+                    <Ticket className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-music-accent/80" />
+                    <input
+                      type="text"
+                      required
+                      autoComplete="off"
+                      className="w-full rounded-xl border border-white/10 bg-white/[0.06] py-3 pl-11 pr-3 text-sm uppercase tracking-wider text-white placeholder:text-white/30 outline-none transition focus:border-music-accent/50 focus:ring-2 focus:ring-music-accent/25"
+                      placeholder={t("auth.inviteCodePh")}
+                      value={inviteCode}
+                      onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
+                    />
+                  </div>
+                  {inviteHint ? (
+                    <p
+                      className={clsx(
+                        "mt-1.5 text-[11px]",
+                        inviteValid ? "text-emerald-300/90" : "text-amber-300/90"
+                      )}
+                    >
+                      {inviteHint}
+                    </p>
+                  ) : (
+                    <p className="mt-1.5 text-[11px] text-white/35">{t("auth.inviteRequiredHint")}</p>
+                  )}
                 </div>
-                {inviteHint ? (
-                  <p
-                    className={clsx(
-                      "mt-1.5 text-[11px]",
-                      inviteValid ? "text-emerald-300/90" : "text-amber-300/90"
-                    )}
-                  >
-                    {inviteHint}
-                  </p>
-                ) : (
-                  <p className="mt-1.5 text-[11px] text-white/35">{t("auth.inviteRequiredHint")}</p>
-                )}
-              </div>
+              ) : (
+                <div className="space-y-3">
+                  {applyStatus?.status === "PENDING" ? (
+                    <p className="rounded-xl border border-amber-400/25 bg-amber-500/10 px-3 py-2.5 text-[12px] leading-relaxed text-amber-100/90">
+                      {t("auth.applyPending")}
+                    </p>
+                  ) : null}
+                  {applyStatus?.status === "REJECTED" ? (
+                    <div className="rounded-xl border border-rose-400/25 bg-rose-500/10 px-3 py-2.5 text-[12px] leading-relaxed text-rose-100/90">
+                      <p className="font-medium">{t("auth.applyRejectedTitle")}</p>
+                      <p className="mt-1 whitespace-pre-wrap text-rose-100/75">
+                        {applyStatus.rejectionReason || t("auth.applyRejectedNoReason")}
+                      </p>
+                      <p className="mt-1.5 text-[11px] text-rose-100/55">{t("auth.applyRejectedHint")}</p>
+                    </div>
+                  ) : null}
+                  {applyStatus?.status === "APPROVED" || applyStatus?.status === "REGISTERED" ? (
+                    <p className="rounded-xl border border-emerald-400/25 bg-emerald-500/10 px-3 py-2.5 text-[12px] text-emerald-100/90">
+                      {applyStatus.message || t("auth.applyApprovedLogin")}
+                    </p>
+                  ) : null}
+                  <div>
+                    <label className="mb-1.5 block text-xs font-medium text-white/50">{t("auth.applyMessage")}</label>
+                    <textarea
+                      rows={3}
+                      maxLength={1000}
+                      disabled={applyStatus?.status === "PENDING"}
+                      className="w-full resize-none rounded-xl border border-white/10 bg-white/[0.06] px-3 py-2.5 text-sm text-white placeholder:text-white/30 outline-none transition focus:border-music-accent/50 focus:ring-2 focus:ring-music-accent/25 disabled:opacity-50"
+                      placeholder={t("auth.applyMessagePh")}
+                      value={applyMessage}
+                      onChange={(e) => setApplyMessage(e.target.value)}
+                    />
+                  </div>
+                </div>
+              )
             ) : mode === "login" ? (
               <label className="flex cursor-pointer items-center gap-2.5 text-xs text-white/50">
                 <input
@@ -443,7 +568,14 @@ export function LoginPage() {
 
             <button
               type="submit"
-              disabled={submitting}
+              disabled={
+                submitting ||
+                (mode === "register" &&
+                  registerPath === "apply" &&
+                  (applyStatus?.status === "PENDING" ||
+                    applyStatus?.status === "APPROVED" ||
+                    applyStatus?.status === "REGISTERED"))
+              }
               className="group relative w-full overflow-hidden rounded-xl bg-gradient-to-r from-music-accent to-[#9f1f1f] py-3.5 text-sm font-semibold text-white shadow-[0_12px_28px_rgba(198,47,47,0.35)] transition hover:brightness-110 disabled:opacity-60"
             >
               <span className="relative z-10">
@@ -452,7 +584,9 @@ export function LoginPage() {
                   : mode === "login"
                     ? t("auth.loginBtn")
                     : mode === "register"
-                      ? t("auth.registerBtn")
+                      ? registerPath === "apply"
+                        ? t("auth.applyBtn")
+                        : t("auth.registerBtn")
                       : t("auth.resetBtn")}
               </span>
             </button>

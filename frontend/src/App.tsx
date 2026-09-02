@@ -9,6 +9,7 @@ import { AdminDeveloperApplicationPanel } from "./components/AdminDeveloperAppli
 import { AdminDevelopersPage } from "./components/AdminDevelopersPage";
 import { AdminDeveloperListPanel } from "./components/AdminDeveloperListPanel";
 import { AdminBeanPanel } from "./components/AdminBeanPanel";
+import { AdminRegistrationApplicationPanel } from "./components/AdminRegistrationApplicationPanel";
 import { userIsAdmin } from "./api/client";
 import { useAuth } from "./auth/AuthContext";
 import { AdminConsoleDock } from "./components/AdminConsoleDock";
@@ -156,6 +157,7 @@ export default function App() {
         <Route path="guestbook" element={<AdminGuestbookPanel />} />
         <Route path="wishlist" element={<AdminWishlistPanel />} />
         <Route path="beans" element={<AdminBeanPanel />} />
+        <Route path="registration-applications" element={<AdminRegistrationApplicationPanel />} />
         <Route path="developers" element={<AdminDevelopersPage />}>
           <Route index element={<Navigate to="list" replace />} />
           <Route path="list" element={<AdminDeveloperListPanel />} />

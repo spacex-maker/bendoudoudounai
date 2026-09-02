@@ -3,6 +3,9 @@ package com.bendoudou.server.user;
 import com.bendoudou.server.auth.dto.MeResponse;
 import com.bendoudou.server.bean.BeanService;
 import com.bendoudou.server.user.dto.ChangePasswordRequest;
+import com.bendoudou.server.user.dto.GenerateInviteCodesRequest;
+import com.bendoudou.server.user.dto.InviteCodeItemResponse;
+import com.bendoudou.server.user.dto.MyInvitesResponse;
 import com.bendoudou.server.user.dto.UpdateUserPrivacySettingsRequest;
 import com.bendoudou.server.user.dto.UpdateMyProfileRequest;
 import com.bendoudou.server.user.dto.UserPrivacySettingsResponse;
@@ -117,6 +120,21 @@ public class UserController {
     ) {
         long id = parseUserId(auth);
         userService.changeOwnPassword(id, body);
+    }
+
+    /** 我的邀请码列表 + 邀请记录 */
+    @GetMapping("/me/invites")
+    public MyInvitesResponse myInvites(Authentication auth) {
+        return userService.listMyInvites(parseUserId(auth));
+    }
+
+    /** 管理员：为自己批量生成邀请码（后期活动可再扩展发放给普通用户） */
+    @PostMapping("/me/invites/generate")
+    public List<InviteCodeItemResponse> generateInvites(
+            @Valid @RequestBody GenerateInviteCodesRequest body,
+            Authentication auth
+    ) {
+        return userService.generateInviteCodesAsAdmin(parseUserId(auth), body.count());
     }
 
     @PostMapping("/me/profile")

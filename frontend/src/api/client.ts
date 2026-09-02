@@ -136,6 +136,25 @@ export interface MeResponse {
   inviteCode?: string | null;
   inviteCodeUsed?: boolean;
   inviteeLabel?: string | null;
+  inviteTotalCount?: number;
+  inviteUnusedCount?: number;
+}
+
+export interface InviteCodeItemDto {
+  id: number;
+  code: string;
+  used: boolean;
+  source: string;
+  inviteeLabel: string | null;
+  createdAt: string | null;
+  usedAt: string | null;
+}
+
+export interface MyInvitesDto {
+  totalCount: number;
+  unusedCount: number;
+  codes: InviteCodeItemDto[];
+  records: InviteCodeItemDto[];
 }
 
 export interface UserPrivacySettingsDto {
@@ -200,6 +219,95 @@ export async function validateInviteCode(code: string): Promise<{ valid: boolean
   const { data } = await api.get<{ valid: boolean; message: string }>("/api/auth/invite/validate", {
     params: { code: code.trim() },
   });
+  return data;
+}
+
+export interface RegisterApplyStatusDto {
+  status: "NONE" | "PENDING" | "REJECTED" | "APPROVED" | "REGISTERED" | string;
+  rejectionReason: string | null;
+  message: string | null;
+}
+
+export async function fetchRegisterApplyStatus(email: string): Promise<RegisterApplyStatusDto> {
+  const { data } = await api.get<RegisterApplyStatusDto>("/api/auth/register-apply/status", {
+    params: { email: email.trim() },
+  });
+  return data;
+}
+
+export async function applyForRegistration(input: {
+  email: string;
+  password: string;
+  code: string;
+  displayName?: string;
+  message?: string;
+  locale?: string;
+}): Promise<RegisterApplyStatusDto> {
+  const { data } = await api.post<RegisterApplyStatusDto>("/api/auth/register-apply", {
+    email: input.email.trim(),
+    password: input.password,
+    code: input.code.trim(),
+    displayName: input.displayName?.trim() || undefined,
+    message: input.message?.trim() || undefined,
+    locale: input.locale,
+  });
+  return data;
+}
+
+export interface RegistrationApplicationDto {
+  id: number;
+  email: string;
+  displayName: string | null;
+  message: string | null;
+  status: string;
+  createdAt: number;
+  resolvedAt: number | null;
+  resolutionNote: string | null;
+}
+
+export async function fetchAdminRegistrationApplications(
+  status?: "PENDING" | "APPROVED" | "REJECTED"
+): Promise<RegistrationApplicationDto[]> {
+  const q = status ? `?status=${status}` : "";
+  const res = await fetch(apiPath(`/api/admin/registration-applications${q}`), {
+    headers: { Authorization: `Bearer ${getStoredToken()}` },
+  });
+  return authJson(res);
+}
+
+export async function approveRegistrationApplication(id: number): Promise<void> {
+  const res = await fetch(apiPath(`/api/admin/registration-applications/${id}/approve`), {
+    method: "POST",
+    headers: { Authorization: `Bearer ${getStoredToken()}` },
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || res.statusText);
+  }
+}
+
+export async function rejectRegistrationApplication(id: number, reason: string): Promise<void> {
+  const res = await fetch(apiPath(`/api/admin/registration-applications/${id}/reject`), {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${getStoredToken()}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ reason: reason.trim() }),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || res.statusText);
+  }
+}
+
+export async function fetchMyInvites(): Promise<MyInvitesDto> {
+  const { data } = await api.get<MyInvitesDto>("/api/users/me/invites");
+  return data;
+}
+
+export async function generateInviteCodes(count: number): Promise<InviteCodeItemDto[]> {
+  const { data } = await api.post<InviteCodeItemDto[]>("/api/users/me/invites/generate", { count });
   return data;
 }
 

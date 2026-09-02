@@ -6,6 +6,9 @@ import com.bendoudou.server.auth.dto.RegisterRequest;
 import com.bendoudou.server.auth.dto.RegisterSendEmailRequest;
 import com.bendoudou.server.auth.dto.ResetPasswordRequest;
 import com.bendoudou.server.auth.dto.ResetPasswordSendEmailRequest;
+import com.bendoudou.server.auth.registration.RegistrationApplicationService;
+import com.bendoudou.server.auth.registration.dto.RegisterApplyRequest;
+import com.bendoudou.server.auth.registration.dto.RegisterApplyStatusResponse;
 import com.bendoudou.server.user.UserService;
 import com.bendoudou.server.util.ClientIp;
 import jakarta.servlet.http.HttpServletRequest;
@@ -24,9 +27,14 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthController {
 
     private final UserService userService;
+    private final RegistrationApplicationService registrationApplicationService;
 
-    public AuthController(UserService userService) {
+    public AuthController(
+            UserService userService,
+            RegistrationApplicationService registrationApplicationService
+    ) {
         this.userService = userService;
+        this.registrationApplicationService = registrationApplicationService;
     }
 
     @PostMapping("/login")
@@ -53,6 +61,18 @@ public class AuthController {
             HttpServletRequest httpServletRequest
     ) {
         return ResponseEntity.ok(userService.register(request, ClientIp.of(httpServletRequest)));
+    }
+
+    /** 无邀请码：提交注册申请 */
+    @PostMapping("/register-apply")
+    public RegisterApplyStatusResponse registerApply(@Valid @RequestBody RegisterApplyRequest request) {
+        return registrationApplicationService.apply(request);
+    }
+
+    /** 查询某邮箱最近一次注册申请状态（含拒绝原因） */
+    @GetMapping("/register-apply/status")
+    public RegisterApplyStatusResponse registerApplyStatus(@RequestParam("email") String email) {
+        return registrationApplicationService.statusByEmail(email);
     }
 
     @PostMapping("/reset-password/send-email")

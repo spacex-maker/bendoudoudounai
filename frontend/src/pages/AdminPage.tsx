@@ -1,18 +1,23 @@
 import { useEffect, useState } from "react";
-import { Link, NavLink, Outlet, useLocation, useMatch } from "react-router-dom";
+import { Link, NavLink, Outlet, useLocation, useMatch, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
   Code2,
   Coins,
   Heart,
+  Home,
   LayoutDashboard,
+  LogOut,
   Menu,
   MessageSquareText,
   Music2,
   Users,
+  UserPlus,
   X,
 } from "lucide-react";
 import clsx from "clsx";
+import { useAuth } from "../auth/AuthContext";
+import { UserAvatar } from "../components/UserAvatar";
 
 /**
  * 管理后台：左侧菜单 + 右侧内容，无官网顶栏。
@@ -21,6 +26,9 @@ import clsx from "clsx";
 export function AdminPage() {
   const { t } = useTranslation();
   const { pathname } = useLocation();
+  const navigate = useNavigate();
+  const { state: authState, logout } = useAuth();
+  const user = authState.status === "authed" ? authState.user : null;
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   useEffect(() => {
@@ -48,10 +56,13 @@ export function AdminPage() {
   const isGuestbook = useMatch({ path: "/admin/guestbook", end: true });
   const isWishlist = useMatch({ path: "/admin/wishlist", end: true });
   const isBeans = useMatch({ path: "/admin/beans", end: true });
+  const isRegApps = useMatch({ path: "/admin/registration-applications", end: true });
   const inDevSection = pathname.startsWith("/admin/developers");
   const isDevApps = pathname.includes("/admin/developers/applications");
   const sectionTitle = inDevSection
     ? t("admin.navDevelopers")
+    : isRegApps
+      ? t("admin.navRegApps")
     : isGuestbook
       ? t("admin.guestbookTitle")
       : isWishlist
@@ -65,6 +76,8 @@ export function AdminPage() {
     ? isDevApps
       ? t("admin.devAppTabSub")
       : t("admin.devListSub")
+    : isRegApps
+      ? t("admin.regAppSub")
     : isGuestbook
       ? t("admin.guestbookSub")
       : isWishlist
@@ -163,6 +176,14 @@ export function AdminPage() {
             豆值管理
           </NavLink>
           <NavLink
+            to="registration-applications"
+            className={({ isActive }) => sideNavItemCls(isActive)}
+            {...navLinkProps}
+          >
+            <UserPlus className="h-4 w-4 shrink-0 opacity-90" />
+            {t("admin.navRegApps")}
+          </NavLink>
+          <NavLink
             to="developers/list"
             className={({ isActive }) => sideNavItemCls(isActive || inDevSection)}
             {...navLinkProps}
@@ -172,27 +193,55 @@ export function AdminPage() {
           </NavLink>
         </nav>
 
-        <div className="mt-auto border-t border-zinc-800/80 p-2.5 md:p-3">
-          <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-zinc-600">
-            {t("admin.siteSection")}
-          </p>
-          <div className="flex flex-wrap gap-2">
-            <Link
-              to="/"
-              className="inline-flex items-center gap-1 rounded-md border border-zinc-700/80 bg-zinc-950/50 px-2.5 py-1.5 text-xs text-zinc-300 transition hover:border-zinc-500/50 hover:text-zinc-100"
-              onClick={closeMobileNav}
-            >
-              {t("admin.linkOfficial")}
-            </Link>
-            <Link
-              to="/music"
-              className="inline-flex items-center gap-1 rounded-md border border-zinc-700/80 bg-zinc-950/50 px-2.5 py-1.5 text-xs text-zinc-300 transition hover:border-rose-500/30 hover:text-rose-200/90"
-              onClick={closeMobileNav}
-            >
-              <Music2 className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden />
-              {t("admin.linkMusicCorner")}
-            </Link>
-          </div>
+        <div className="mt-auto shrink-0 border-t border-zinc-800/80 p-2.5 md:p-3">
+          {user ? (
+            <div className="rounded-xl border border-zinc-800/90 bg-zinc-950/50 p-2.5">
+              <div className="flex items-center gap-2.5">
+                <UserAvatar
+                  user={user}
+                  className="h-9 w-9 text-sm ring-1 ring-white/10"
+                  showLevelBadge={false}
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[13px] font-semibold text-zinc-100">
+                    {user.displayName?.trim() || t("userProfile.noName")}
+                  </p>
+                  <p className="truncate text-[10px] text-zinc-500" title={user.email}>
+                    {user.email}
+                  </p>
+                </div>
+              </div>
+              <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                {(user.roles?.length ? user.roles : user.role ? [user.role] : ["ADMIN"]).map((role) => (
+                  <span
+                    key={role}
+                    className="rounded-md bg-violet-500/15 px-1.5 py-0.5 text-[9px] font-medium tracking-wide text-violet-200/90 ring-1 ring-violet-500/25"
+                  >
+                    {t(`admin.role.${role}`, { defaultValue: role })}
+                  </span>
+                ))}
+                {user.beanBalance != null ? (
+                  <span className="inline-flex items-center gap-0.5 rounded-md bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-medium text-amber-200/85 ring-1 ring-amber-500/20">
+                    <Coins className="h-2.5 w-2.5" />
+                    {user.beanBalance}
+                    {user.beanLevelName ? ` · ${user.beanLevelName}` : null}
+                  </span>
+                ) : null}
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  logout();
+                  closeMobileNav();
+                  navigate("/login", { replace: true });
+                }}
+                className="mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-lg border border-zinc-700/70 bg-zinc-900/60 py-1.5 text-[11px] font-medium text-zinc-400 transition hover:border-rose-500/30 hover:bg-rose-500/10 hover:text-rose-200"
+              >
+                <LogOut className="h-3 w-3" />
+                {t("userProfile.logout")}
+              </button>
+            </div>
+          ) : null}
         </div>
       </aside>
 
@@ -211,6 +260,28 @@ export function AdminPage() {
           <div className="min-w-0 flex-1 pt-0.5 md:pt-0">
             <h1 className="text-sm font-semibold text-zinc-100 md:text-base">{sectionTitle}</h1>
             <p className="mt-0.5 line-clamp-2 text-[11px] text-zinc-500 md:text-xs">{sectionSub}</p>
+          </div>
+          {/* 站点快捷入口：放在内容顶栏右侧，离开后台时更顺手 */}
+          <div
+            className="flex shrink-0 items-center gap-1.5 pt-0.5"
+            aria-label={t("admin.siteSection")}
+          >
+            <Link
+              to="/"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-700/70 bg-zinc-950/40 px-2.5 py-1.5 text-[11px] font-medium text-zinc-400 transition hover:border-zinc-500/50 hover:bg-zinc-800/60 hover:text-zinc-100 sm:px-3 sm:text-xs"
+              title={t("admin.linkOfficial")}
+            >
+              <Home className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden />
+              <span className="hidden sm:inline">{t("admin.linkOfficial")}</span>
+            </Link>
+            <Link
+              to="/music"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-700/70 bg-zinc-950/40 px-2.5 py-1.5 text-[11px] font-medium text-zinc-400 transition hover:border-rose-500/35 hover:bg-rose-500/10 hover:text-rose-200/90 sm:px-3 sm:text-xs"
+              title={t("admin.linkMusicCorner")}
+            >
+              <Music2 className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden />
+              <span className="hidden sm:inline">{t("admin.linkMusicCorner")}</span>
+            </Link>
           </div>
         </header>
         <main className="min-h-0 flex-1 overflow-y-auto p-3 sm:p-4 md:p-5">

@@ -13,10 +13,12 @@ public record MeResponse(
         long beanBalance,
         String beanLevelCode,
         String beanLevelName,
-        /** 我的邀请码 */
+        /** 一枚未使用邀请码（兼容旧前端；完整列表见 /api/users/me/invites） */
         String inviteCode,
-        /** 邀请码是否已被使用（每人仅可邀请一人） */
+        /** 是否已无可用邀请码 */
         boolean inviteCodeUsed,
-        /** 若已邀请成功，被邀请人展示名 */
-        String inviteeLabel
+        /** 最近一次成功邀请的被邀请人展示名 */
+        String inviteeLabel,
+        long inviteTotalCount,
+        long inviteUnusedCount
 ) {}
