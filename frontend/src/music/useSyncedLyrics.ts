@@ -1,16 +1,67 @@
 import { useEffect, useMemo, useState } from "react";
 import { fetchTrackLyricsTextCached, type MusicTrackDto } from "../api/client";
 import { linesFromRaw, type LyricLine } from "./lyricsUtils";
+import {
+  availableLyricModes,
+  readLyricDisplayMode,
+  resolveLyricSource,
+  writeLyricDisplayMode,
+  type LyricDisplayMode,
+} from "./trackMeta";
+
+type TrackLyricsFields = Pick<
+  MusicTrackDto,
+  | "id"
+  | "durationSeconds"
+  | "hasLyrics"
+  | "lyricsUrl"
+  | "hasTranslatedLyrics"
+  | "translatedLyricsUrl"
+  | "hasRomaLyrics"
+  | "romaLyricsUrl"
+>;
 
 export function useSyncedLyrics(
-  track: Pick<MusicTrackDto, "id" | "lyricsUrl" | "hasLyrics" | "durationSeconds"> | null
-): { lines: LyricLine[]; loading: boolean; loadError: string | null } {
+  track: TrackLyricsFields | null,
+  modeOverride?: LyricDisplayMode
+): {
+  lines: LyricLine[];
+  loading: boolean;
+  loadError: string | null;
+  mode: LyricDisplayMode;
+  setMode: (m: LyricDisplayMode) => void;
+  availableModes: LyricDisplayMode[];
+} {
+  const [mode, setModeState] = useState<LyricDisplayMode>(() => modeOverride ?? readLyricDisplayMode());
+  const availableModes = useMemo(() => availableLyricModes(track), [track]);
+
+  useEffect(() => {
+    if (modeOverride) {
+      setModeState(modeOverride);
+      return;
+    }
+    setModeState(readLyricDisplayMode());
+  }, [track?.id, modeOverride]);
+
+  useEffect(() => {
+    if (availableModes.length === 0) return;
+    if (!availableModes.includes(mode)) {
+      setModeState(availableModes[0]!);
+    }
+  }, [availableModes, mode]);
+
+  const setMode = (m: LyricDisplayMode) => {
+    setModeState(m);
+    writeLyricDisplayMode(m);
+  };
+
+  const source = track ? resolveLyricSource(track, mode) : null;
   const [raw, setRaw] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (track == null || !track.hasLyrics) {
+    if (source == null || !source.hasLyrics) {
       setRaw(null);
       setLoadError(null);
       setLoading(false);
@@ -20,7 +71,7 @@ export function useSyncedLyrics(
     setLoading(true);
     setLoadError(null);
     setRaw(null);
-    void fetchTrackLyricsTextCached(track).then((text) => {
+    void fetchTrackLyricsTextCached(source).then((text) => {
       if (cancelled) return;
       setLoading(false);
       if (text == null) {
@@ -32,12 +83,12 @@ export function useSyncedLyrics(
     return () => {
       cancelled = true;
     };
-  }, [track?.id, track?.hasLyrics, track?.lyricsUrl]);
+  }, [source?.id, source?.hasLyrics, source?.lyricsUrl, mode]);
 
   const lines = useMemo(
     () => linesFromRaw(raw, track?.durationSeconds ?? 0),
     [raw, track?.durationSeconds]
   );
 
-  return { lines, loading, loadError };
+  return { lines, loading, loadError, mode, setMode, availableModes };
 }

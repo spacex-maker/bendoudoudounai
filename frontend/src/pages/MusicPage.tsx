@@ -20,9 +20,10 @@ import { MusicTrackTable } from "../components/MusicTrackTable";
 import { MusicTrackComments } from "../components/MusicTrackComments";
 import { DiscoverMusicPanel } from "../components/DiscoverMusicPanel";
 import { MusicMentionList } from "../components/MusicMentionList";
-import { useSyncedLyrics } from "../music/useSyncedLyrics";
 import { useMusicPlayer } from "../music/MusicPlayerContext";
 import { musicPathFor, navKindFromRoute, parseMusicPathname } from "../music/musicRoutes";
+import { isAudioQualityCode } from "../music/audioQuality";
+import { trackAlbumLine, trackTitleSecondary } from "../music/trackMeta";
 import {
   type MusicTrackDto,
   type PlaylistItemDto,
@@ -545,7 +546,11 @@ export function MusicPage() {
         t.title.toLowerCase().includes(q) ||
         t.artist.toLowerCase().includes(q) ||
         t.album.toLowerCase().includes(q) ||
-        (t.note && t.note.toLowerCase().includes(q))
+        (t.note && t.note.toLowerCase().includes(q)) ||
+        (t.titleAlias && t.titleAlias.toLowerCase().includes(q)) ||
+        (t.titleTranslated && t.titleTranslated.toLowerCase().includes(q)) ||
+        (t.albumArtist && t.albumArtist.toLowerCase().includes(q)) ||
+        (t.releaseYear != null && String(t.releaseYear).includes(q))
     );
   }, [search, tracks, isDiscoverCatalog]);
 
@@ -555,8 +560,6 @@ export function MusicPage() {
     if (!matched) return;
     setCurrentTrack((prev) => (prev?.id === matched.id ? { ...prev, ...matched } : matched));
   }, [tracks, currentId]);
-
-  const syncedLyrics = useSyncedLyrics(current);
 
   const setCurrentTrackIdFromList = useCallback((id: number) => {
     setCurrentId(id);
@@ -972,11 +975,23 @@ export function MusicPage() {
                     >
                       <div className="line-clamp-2 text-sm font-semibold leading-snug text-zinc-100">
                         {current?.title ?? t("music.pickTrack")}
+                        {current?.audioQuality && isAudioQualityCode(current.audioQuality) ? (
+                          <span className="ml-1.5 inline-flex align-middle rounded px-1.5 py-px text-[9px] font-semibold tracking-wide text-emerald-200 ring-1 ring-emerald-400/30 bg-emerald-500/15">
+                            {t(`music.quality.${current.audioQuality}`)}
+                          </span>
+                        ) : null}
                       </div>
+                      {current && trackTitleSecondary(current) ? (
+                        <div className="mt-0.5 truncate text-[11px] text-zinc-400">
+                          {trackTitleSecondary(current)}
+                        </div>
+                      ) : null}
                       <div className="mt-1 truncate text-xs text-zinc-500">
                         {current?.artist ?? t("music.unknownArtist")}
                       </div>
-                      {current?.album ? (
+                      {current && trackAlbumLine(current) ? (
+                        <div className="mt-1 truncate text-[11px] text-zinc-600">{trackAlbumLine(current)}</div>
+                      ) : current?.album ? (
                         <div className="mt-1 truncate text-[11px] text-zinc-600">{current.album}</div>
                       ) : null}
                     </div>

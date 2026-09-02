@@ -178,14 +178,24 @@ cd aimatex-music
 
 默认分支为 **`main`**（当前产品主线）。
 
-### 2. 后端
+### 2. 密钥（必做，迁仓后容易漏）
+
+密钥不进 Git。新仓首次请执行：
 
 ```bash
-# 准备密钥（见下一节）
-cp scripts/bendoudou.env.example secrets/bendoudou.env
-# 编辑 secrets/bendoudou.env，填入真实值
+py -3 scripts/ensure_local_secrets.py
+```
 
-# 按需修改 application.yml 中的数据源，或改用环境变量覆盖：
+会生成/修复 `secrets/bendoudou.env`（含 COS、网易云 Cookie、邮件），并去掉 UTF-8 BOM（BOM 会导致第一行 `TENCENTCLOUD_SECRET_ID` 读不到，表现为「COS 配置不可用」）。
+
+**必须从仓库根目录启动后端**，`application.yml` 才会加载 `./secrets/bendoudou.env`。启动日志应出现：
+
+`Integration config: COS=READY ... NetEase MUSIC_U=READY`
+
+### 3. 后端
+
+```bash
+# 按需可用环境变量覆盖数据源：
 #   SPRING_DATASOURCE_URL / USERNAME / PASSWORD
 
 mvn -DskipTests package

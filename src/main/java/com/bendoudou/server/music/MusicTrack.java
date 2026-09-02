@@ -80,24 +80,24 @@ public class MusicTrack {
     private String coverStoredRelpath;
 
     /** 翻译歌词（tlyric）COS 公网地址，可空 */
-    @Column(name = "translated_lyrics_url", length = 1024)
+    @Column(name = "translated_lyrics_url", columnDefinition = "text")
     private String translatedLyricsUrl;
 
-    @Column(name = "translated_lyrics_stored_relpath", length = 1024)
+    @Column(name = "translated_lyrics_stored_relpath", columnDefinition = "text")
     private String translatedLyricsStoredRelpath;
 
     /** 罗马音歌词（romalrc） */
-    @Column(name = "roma_lyrics_url", length = 1024)
+    @Column(name = "roma_lyrics_url", columnDefinition = "text")
     private String romaLyricsUrl;
 
-    @Column(name = "roma_lyrics_stored_relpath", length = 1024)
+    @Column(name = "roma_lyrics_stored_relpath", columnDefinition = "text")
     private String romaLyricsStoredRelpath;
 
     /** 逐字歌词（yrc） */
-    @Column(name = "yrc_lyrics_url", length = 1024)
+    @Column(name = "yrc_lyrics_url", columnDefinition = "text")
     private String yrcLyricsUrl;
 
-    @Column(name = "yrc_lyrics_stored_relpath", length = 1024)
+    @Column(name = "yrc_lyrics_stored_relpath", columnDefinition = "text")
     private String yrcLyricsStoredRelpath;
 
     @Column(name = "file_size", nullable = false)
@@ -129,11 +129,11 @@ public class MusicTrack {
     private String artistsJson;
 
     /** 别名 alia，多个用 " / " 拼接 */
-    @Column(name = "title_alias", length = 1024)
+    @Column(name = "title_alias", columnDefinition = "text")
     private String titleAlias;
 
     /** 译名 tns */
-    @Column(name = "title_translated", length = 1024)
+    @Column(name = "title_translated", columnDefinition = "text")
     private String titleTranslated;
 
     /** 专辑艺人 */

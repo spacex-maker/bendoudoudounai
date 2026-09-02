@@ -23,6 +23,9 @@ import clsx from "clsx";
 import { findActiveIndex } from "../music/lyricsUtils";
 import { useMusicPlayer } from "../music/MusicPlayerContext";
 import { useSyncedLyrics } from "../music/useSyncedLyrics";
+import { trackTitleSecondary } from "../music/trackMeta";
+import { LyricModeSwitcher } from "./LyricModeSwitcher";
+import { isAudioQualityCode } from "../music/audioQuality";
 
 const FONT_SCALE_KEY = "bendoudou_immersive_lyric_font_scale";
 const DOCK_EXPANDED_KEY = "bendoudou_immersive_dock_expanded";
@@ -104,7 +107,7 @@ export function ImmersiveLyricsStage({ onOpenHistoryPanel }: Props) {
   const hideChromeTimerRef = useRef<number | null>(null);
   /** 按沉浸区实际宽度计算的单行缩放（1 = 不缩） */
   const [fitScales, setFitScales] = useState<number[]>([]);
-  const { lines, loading, loadError } = useSyncedLyrics(currentTrack);
+  const { lines, loading, loadError, mode, setMode, availableModes } = useSyncedLyrics(currentTrack);
   const timeMs = Math.max(0, playPos * 1000);
   const activeIndex = useMemo(() => findActiveIndex(lines, timeMs), [lines, timeMs]);
   const playlistEmpty = queue.length === 0;
@@ -358,6 +361,11 @@ export function ImmersiveLyricsStage({ onOpenHistoryPanel }: Props) {
 
   const title = currentTrack?.title ?? t("music.pickTrack");
   const artist = currentTrack?.artist ?? t("music.unknownArtist");
+  const titleSecondary = currentTrack ? trackTitleSecondary(currentTrack) : null;
+  const qualityLabel =
+    currentTrack?.audioQuality && isAudioQualityCode(currentTrack.audioQuality)
+      ? t(`music.quality.${currentTrack.audioQuality}`)
+      : currentTrack?.audioQuality ?? null;
   const scalePct = Math.round(fontScale * 100);
 
   return createPortal(
@@ -399,7 +407,24 @@ export function ImmersiveLyricsStage({ onOpenHistoryPanel }: Props) {
             {t("lyrics.immersiveTitle")}
           </p>
           <h2 className="mt-1 truncate text-base font-semibold tracking-tight text-white/90 sm:text-lg">{title}</h2>
-          <p className="truncate text-xs text-white/45">{artist}</p>
+          {titleSecondary ? (
+            <p className="truncate text-[11px] text-white/40">{titleSecondary}</p>
+          ) : null}
+          <p className="truncate text-xs text-white/45">
+            {artist}
+            {qualityLabel ? ` · ${qualityLabel}` : ""}
+            {currentTrack?.releaseYear != null ? ` · ${currentTrack.releaseYear}` : ""}
+          </p>
+          {availableModes.length > 1 ? (
+            <div className="mt-2">
+              <LyricModeSwitcher
+                mode={mode}
+                availableModes={availableModes}
+                onChange={setMode}
+                tone="immersive"
+              />
+            </div>
+          ) : null}
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <button
@@ -431,7 +456,7 @@ export function ImmersiveLyricsStage({ onOpenHistoryPanel }: Props) {
       <div className="relative z-10 flex min-h-0 flex-1 flex-col pt-16 sm:pt-20">
         {currentTrack == null ? (
           <p className="m-auto px-6 text-center text-sm text-white/45">{t("lyrics.selectTrack")}</p>
-        ) : !currentTrack.hasLyrics ? (
+        ) : availableModes.length === 0 ? (
           <div className="m-auto px-6 text-center">
             <p className="text-lg text-white/70">{t("lyrics.noLyrics")}</p>
             <p className="mt-2 text-xs text-white/35">{t("lyrics.noLyricsHint")}</p>

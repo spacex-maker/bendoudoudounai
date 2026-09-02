@@ -543,7 +543,11 @@
     "immersiveHint": "移动鼠标或点按唤出控制 · 空格暂停 / Esc 退出",
     "immersiveFontSize": "歌词字号",
     "immersiveDockExpand": "展开控制台",
-    "immersiveDockCollapse": "收起控制台"
+    "immersiveDockCollapse": "收起控制台",
+    "modeLabel": "歌词版本",
+    "modeOriginal": "原文",
+    "modeTranslated": "翻译",
+    "modeRoma": "罗马音"
   },
   "vinyl": {
     "play": "播放",

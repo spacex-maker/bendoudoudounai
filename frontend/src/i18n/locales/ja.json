@@ -543,7 +543,11 @@
     "immersiveHint": "マウス移動 / タップで操作表示 · スペースで一時停止 / Esc で終了",
     "immersiveFontSize": "歌詞の文字サイズ",
     "immersiveDockExpand": "操作パネルを展開",
-    "immersiveDockCollapse": "操作パネルを閉じる"
+    "immersiveDockCollapse": "操作パネルを閉じる",
+    "modeLabel": "歌詞バージョン",
+    "modeOriginal": "原文",
+    "modeTranslated": "翻訳",
+    "modeRoma": "ローマ字"
   },
   "vinyl": {
     "play": "再生",

@@ -11,6 +11,7 @@ import {
   type TrackPlayUserStatDto,
 } from "../api/client";
 import { isAudioQualityCode } from "../music/audioQuality";
+import { trackAlbumLine, trackArtistAlbumLine, trackTitleSecondary } from "../music/trackMeta";
 
 function QualityBadge({ quality, t }: { quality?: string | null; t: (k: string, o?: Record<string, string>) => string }) {
   if (!quality) return null;
@@ -149,13 +150,16 @@ export function MusicTrackTable({
                     <span className="truncate">{tr.title}</span>
                     <QualityBadge quality={tr.audioQuality} t={t} />
                   </div>
+                  {trackTitleSecondary(tr) ? (
+                    <div className="mt-0.5 truncate text-[11px] text-zinc-400">{trackTitleSecondary(tr)}</div>
+                  ) : null}
                   {listeners.length > 0 ? (
                     <div className="mt-0.5 truncate text-[11px] text-emerald-300/90">
                       {listeners[0]!.userLabel}
                       {listeners.length > 1 ? ` 等 ${listeners.length} 位协作者` : ""} 正在听
                     </div>
                   ) : null}
-                  <div className="mt-0.5 truncate text-xs text-zinc-500">{tr.artist}{tr.album ? ` · ${tr.album}` : ""}</div>
+                  <div className="mt-0.5 truncate text-xs text-zinc-500">{trackArtistAlbumLine(tr)}</div>
                   <div className="mt-auto pt-1 text-[11px] text-zinc-500">
                     {formatDuration(tr.durationSeconds)} ·{" "}
                     <button
@@ -323,6 +327,9 @@ export function MusicTrackTable({
                     <span className="ml-1 text-zinc-500">· {tr.note}</span>
                   ) : null}
                 </span>
+                {trackTitleSecondary(tr) ? (
+                  <div className="truncate text-[11px] text-zinc-500">{trackTitleSecondary(tr)}</div>
+                ) : null}
                 {listeners.length > 0 ? (
                   <div className="truncate text-[11px] text-emerald-300/90">
                     {listeners[0]!.userLabel}
@@ -332,7 +339,9 @@ export function MusicTrackTable({
                 </div>
               </td>
               <td className="max-w-[1px] truncate px-2 py-2 text-zinc-400">{tr.artist}</td>
-              <td className="hidden max-w-[1px] truncate px-2 py-2 text-zinc-500 sm:table-cell">{tr.album}</td>
+              <td className="hidden max-w-[1px] truncate px-2 py-2 text-zinc-500 sm:table-cell">
+                {trackAlbumLine(tr) ?? tr.album}
+              </td>
               <td className="px-2 py-2 text-right tabular-nums text-zinc-500">
                 <button
                   type="button"
@@ -437,6 +446,13 @@ export function MusicTrackTable({
               <div className="min-w-0">
                 <h3 className="truncate text-sm font-semibold">播放次数明细</h3>
                 <p className="truncate text-xs text-zinc-500">《{playStatsOpenFor.title}》</p>
+                {trackTitleSecondary(playStatsOpenFor) ? (
+                  <p className="truncate text-[11px] text-zinc-600">{trackTitleSecondary(playStatsOpenFor)}</p>
+                ) : null}
+                <p className="mt-0.5 truncate text-[11px] text-zinc-600">
+                  {trackArtistAlbumLine(playStatsOpenFor)}
+                  {playStatsOpenFor.audioQuality ? ` · ${playStatsOpenFor.audioQuality}` : ""}
+                </p>
               </div>
               <button
                 type="button"
