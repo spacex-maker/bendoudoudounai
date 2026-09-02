@@ -526,6 +526,48 @@ public class MusicService {
             if (!hasLyricsUpload) {
                 track.setLyricsUrl(previous.getLyricsUrl());
                 track.setLyricsStoredRelpath(previous.getLyricsStoredRelpath());
+                if (!StringUtils.hasText(track.getTranslatedLyricsUrl())
+                        && !StringUtils.hasText(track.getTranslatedLyricsStoredRelpath())) {
+                    track.setTranslatedLyricsUrl(previous.getTranslatedLyricsUrl());
+                    track.setTranslatedLyricsStoredRelpath(previous.getTranslatedLyricsStoredRelpath());
+                }
+                if (!StringUtils.hasText(track.getRomaLyricsUrl())
+                        && !StringUtils.hasText(track.getRomaLyricsStoredRelpath())) {
+                    track.setRomaLyricsUrl(previous.getRomaLyricsUrl());
+                    track.setRomaLyricsStoredRelpath(previous.getRomaLyricsStoredRelpath());
+                }
+                if (!StringUtils.hasText(track.getYrcLyricsUrl())
+                        && !StringUtils.hasText(track.getYrcLyricsStoredRelpath())) {
+                    track.setYrcLyricsUrl(previous.getYrcLyricsUrl());
+                    track.setYrcLyricsStoredRelpath(previous.getYrcLyricsStoredRelpath());
+                }
+            }
+            if (!StringUtils.hasText(track.getAudioQuality())) {
+                track.setAudioQuality(previous.getAudioQuality());
+            }
+            if (track.getNeteaseSongId() == null) {
+                track.setNeteaseSongId(previous.getNeteaseSongId());
+            }
+            if (track.getAlbumId() == null) {
+                track.setAlbumId(previous.getAlbumId());
+            }
+            if (!StringUtils.hasText(track.getArtistsJson())) {
+                track.setArtistsJson(previous.getArtistsJson());
+            }
+            if (!StringUtils.hasText(track.getTitleAlias())) {
+                track.setTitleAlias(previous.getTitleAlias());
+            }
+            if (!StringUtils.hasText(track.getTitleTranslated())) {
+                track.setTitleTranslated(previous.getTitleTranslated());
+            }
+            if (!StringUtils.hasText(track.getAlbumArtist())) {
+                track.setAlbumArtist(previous.getAlbumArtist());
+            }
+            if (track.getReleaseYear() == null) {
+                track.setReleaseYear(previous.getReleaseYear());
+            }
+            if (!StringUtils.hasText(track.getSourceDetailJson())) {
+                track.setSourceDetailJson(previous.getSourceDetailJson());
             }
             return true;
         }
@@ -874,7 +916,19 @@ public class MusicService {
                 source.getMimeType(),
                 audioKey,
                 source.getLyricsStoredRelpath(),
-                source.getCoverStoredRelpath()
+                source.getCoverStoredRelpath(),
+                source.getTranslatedLyricsStoredRelpath(),
+                source.getRomaLyricsStoredRelpath(),
+                source.getYrcLyricsStoredRelpath(),
+                source.getAudioQuality(),
+                source.getNeteaseSongId(),
+                source.getAlbumId(),
+                source.getArtistsJson(),
+                source.getTitleAlias(),
+                source.getTitleTranslated(),
+                source.getAlbumArtist(),
+                source.getReleaseYear(),
+                source.getSourceDetailJson()
         );
         return createTrackFromCos(userId, req);
     }
@@ -1329,11 +1383,16 @@ public class MusicService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "audioObjectKey 与摘要或扩展名不匹配");
         }
         if (StringUtils.hasText(req.lyricsObjectKey())) {
-            String expectedLyricsPrefix = cosStorageService.buildLyricsObjectKey(sha, "lrc")
-                    .replaceAll("\\.lrc$", ".");
-            if (!req.lyricsObjectKey().startsWith(expectedLyricsPrefix)) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "lyricsObjectKey 与摘要不匹配");
-            }
+            assertLyricsObjectKeyMatchesSha(sha, req.lyricsObjectKey());
+        }
+        if (StringUtils.hasText(req.translatedLyricsObjectKey())) {
+            assertLyricsObjectKeyMatchesSha(sha, req.translatedLyricsObjectKey());
+        }
+        if (StringUtils.hasText(req.romaLyricsObjectKey())) {
+            assertLyricsObjectKeyMatchesSha(sha, req.romaLyricsObjectKey());
+        }
+        if (StringUtils.hasText(req.yrcLyricsObjectKey())) {
+            assertLyricsObjectKeyMatchesSha(sha, req.yrcLyricsObjectKey());
         }
         if (StringUtils.hasText(req.coverObjectKey())) {
             String expectedCoverPrefix = cosStorageService.buildCoverObjectKey(sha, "jpg")
@@ -1365,6 +1424,31 @@ public class MusicService {
             track.setCoverStoredRelpath(req.coverObjectKey());
             track.setCoverUrl(cosStorageService.publicObjectUrl(req.coverObjectKey()));
         }
+        if (StringUtils.hasText(req.translatedLyricsObjectKey())) {
+            track.setTranslatedLyricsStoredRelpath(req.translatedLyricsObjectKey());
+            track.setTranslatedLyricsUrl(cosStorageService.publicObjectUrl(req.translatedLyricsObjectKey()));
+        }
+        if (StringUtils.hasText(req.romaLyricsObjectKey())) {
+            track.setRomaLyricsStoredRelpath(req.romaLyricsObjectKey());
+            track.setRomaLyricsUrl(cosStorageService.publicObjectUrl(req.romaLyricsObjectKey()));
+        }
+        if (StringUtils.hasText(req.yrcLyricsObjectKey())) {
+            track.setYrcLyricsStoredRelpath(req.yrcLyricsObjectKey());
+            track.setYrcLyricsUrl(cosStorageService.publicObjectUrl(req.yrcLyricsObjectKey()));
+        }
+        if (StringUtils.hasText(req.audioQuality())) {
+            track.setAudioQuality(req.audioQuality().trim().toLowerCase(Locale.ROOT));
+        } else {
+            track.setAudioQuality(parseAudioQualityFromNote(track.getNote()));
+        }
+        track.setNeteaseSongId(req.neteaseSongId());
+        track.setAlbumId(req.albumId());
+        track.setArtistsJson(firstNonBlank(req.artistsJson()));
+        track.setTitleAlias(firstNonBlank(req.titleAlias()));
+        track.setTitleTranslated(firstNonBlank(req.titleTranslated()));
+        track.setAlbumArtist(firstNonBlank(req.albumArtist()));
+        track.setReleaseYear(req.releaseYear());
+        track.setSourceDetailJson(firstNonBlank(req.sourceDetailJson()));
         boolean storageReused = applyStorageDeduplication(track, track.getFileSize(), StringUtils.hasText(req.lyricsObjectKey()));
         if (!StringUtils.hasText(track.getCoverUrl()) && !StringUtils.hasText(track.getCoverStoredRelpath())) {
             processEmbeddedCoverFromCos(track, ext, storageReused);
@@ -1372,6 +1456,14 @@ public class MusicService {
         track = musicTrackRepository.save(track);
         backfillCoverToSiblingTracks(track);
         return toResponse(track, userTrackHeartRepository.existsByUserIdAndTrackId(userId, track.getId()));
+    }
+
+    private void assertLyricsObjectKeyMatchesSha(String sha, String objectKey) {
+        String expectedPrefix = cosStorageService.buildLyricsObjectKey(sha, "lrc")
+                .replaceAll("\\.lrc$", ".");
+        if (!objectKey.startsWith(expectedPrefix)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "lyricsObjectKey 与摘要不匹配");
+        }
     }
 
     /**
@@ -1811,8 +1903,14 @@ public class MusicService {
         String audioForClient = resolveCosPublicUrl(t.getAudioUrl(), t.getStoredRelpath());
         String lyricsForClient = resolveCosPublicUrl(t.getLyricsUrl(), t.getLyricsStoredRelpath());
         String coverForClient = resolveCosPublicUrl(t.getCoverUrl(), t.getCoverStoredRelpath());
+        String translatedLyrics = resolveCosPublicUrl(t.getTranslatedLyricsUrl(), t.getTranslatedLyricsStoredRelpath());
+        String romaLyrics = resolveCosPublicUrl(t.getRomaLyricsUrl(), t.getRomaLyricsStoredRelpath());
+        String yrcLyrics = resolveCosPublicUrl(t.getYrcLyricsUrl(), t.getYrcLyricsStoredRelpath());
         boolean hasLyrics = StringUtils.hasText(lyricsForClient);
         boolean hasCover = StringUtils.hasText(coverForClient);
+        String quality = StringUtils.hasText(t.getAudioQuality())
+                ? t.getAudioQuality()
+                : parseAudioQualityFromNote(t.getNote());
         return new MusicTrackResponse(
                 t.getId(),
                 t.getPlaylistId(),
@@ -1831,7 +1929,21 @@ public class MusicService {
                 hasCover,
                 t.getPlayCount(),
                 hearted,
-                parseAudioQualityFromNote(t.getNote())
+                quality,
+                translatedLyrics,
+                StringUtils.hasText(translatedLyrics),
+                romaLyrics,
+                StringUtils.hasText(romaLyrics),
+                yrcLyrics,
+                StringUtils.hasText(yrcLyrics),
+                t.getNeteaseSongId(),
+                t.getAlbumId(),
+                t.getArtistsJson(),
+                t.getTitleAlias(),
+                t.getTitleTranslated(),
+                t.getAlbumArtist(),
+                t.getReleaseYear(),
+                t.getSourceDetailJson()
         );
     }
 

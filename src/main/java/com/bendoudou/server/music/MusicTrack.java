@@ -79,6 +79,27 @@ public class MusicTrack {
     @Column(name = "cover_stored_relpath", length = 1024)
     private String coverStoredRelpath;
 
+    /** 翻译歌词（tlyric）COS 公网地址，可空 */
+    @Column(name = "translated_lyrics_url", length = 1024)
+    private String translatedLyricsUrl;
+
+    @Column(name = "translated_lyrics_stored_relpath", length = 1024)
+    private String translatedLyricsStoredRelpath;
+
+    /** 罗马音歌词（romalrc） */
+    @Column(name = "roma_lyrics_url", length = 1024)
+    private String romaLyricsUrl;
+
+    @Column(name = "roma_lyrics_stored_relpath", length = 1024)
+    private String romaLyricsStoredRelpath;
+
+    /** 逐字歌词（yrc） */
+    @Column(name = "yrc_lyrics_url", length = 1024)
+    private String yrcLyricsUrl;
+
+    @Column(name = "yrc_lyrics_stored_relpath", length = 1024)
+    private String yrcLyricsStoredRelpath;
+
     @Column(name = "file_size", nullable = false)
     private long fileSize;
 
@@ -90,6 +111,42 @@ public class MusicTrack {
      */
     @Column(name = "metadata_from_file", nullable = false)
     private boolean metadataFromFile;
+
+    /** 实际入库音质：standard / higher / exhigh / lossless / hires；非网易云可空 */
+    @Column(name = "audio_quality", length = 32)
+    private String audioQuality;
+
+    /** 网易云歌曲 id（导入曲） */
+    @Column(name = "netease_song_id")
+    private Long neteaseSongId;
+
+    /** 网易云专辑 id */
+    @Column(name = "album_id")
+    private Long albumId;
+
+    /** 歌手列表 JSON：[{"id":1,"name":"..."}] */
+    @Column(name = "artists_json", columnDefinition = "text")
+    private String artistsJson;
+
+    /** 别名 alia，多个用 " / " 拼接 */
+    @Column(name = "title_alias", length = 1024)
+    private String titleAlias;
+
+    /** 译名 tns */
+    @Column(name = "title_translated", length = 1024)
+    private String titleTranslated;
+
+    /** 专辑艺人 */
+    @Column(name = "album_artist", length = 512)
+    private String albumArtist;
+
+    /** 发行年（由 publishTime 推算） */
+    @Column(name = "release_year")
+    private Integer releaseYear;
+
+    /** 网易云 song detail 原始 JSON（单曲节点），便于日后补字段 */
+    @Column(name = "source_detail_json", columnDefinition = "LONGTEXT")
+    private String sourceDetailJson;
 
     /** 累计播放次数（每次开始播放计一次，由前端配合去重） */
     @Column(name = "play_count", nullable = false, columnDefinition = "bigint default 0")
@@ -224,6 +281,126 @@ public class MusicTrack {
 
     public void setCoverStoredRelpath(String coverStoredRelpath) {
         this.coverStoredRelpath = coverStoredRelpath;
+    }
+
+    public String getTranslatedLyricsUrl() {
+        return translatedLyricsUrl;
+    }
+
+    public void setTranslatedLyricsUrl(String translatedLyricsUrl) {
+        this.translatedLyricsUrl = translatedLyricsUrl;
+    }
+
+    public String getTranslatedLyricsStoredRelpath() {
+        return translatedLyricsStoredRelpath;
+    }
+
+    public void setTranslatedLyricsStoredRelpath(String translatedLyricsStoredRelpath) {
+        this.translatedLyricsStoredRelpath = translatedLyricsStoredRelpath;
+    }
+
+    public String getRomaLyricsUrl() {
+        return romaLyricsUrl;
+    }
+
+    public void setRomaLyricsUrl(String romaLyricsUrl) {
+        this.romaLyricsUrl = romaLyricsUrl;
+    }
+
+    public String getRomaLyricsStoredRelpath() {
+        return romaLyricsStoredRelpath;
+    }
+
+    public void setRomaLyricsStoredRelpath(String romaLyricsStoredRelpath) {
+        this.romaLyricsStoredRelpath = romaLyricsStoredRelpath;
+    }
+
+    public String getYrcLyricsUrl() {
+        return yrcLyricsUrl;
+    }
+
+    public void setYrcLyricsUrl(String yrcLyricsUrl) {
+        this.yrcLyricsUrl = yrcLyricsUrl;
+    }
+
+    public String getYrcLyricsStoredRelpath() {
+        return yrcLyricsStoredRelpath;
+    }
+
+    public void setYrcLyricsStoredRelpath(String yrcLyricsStoredRelpath) {
+        this.yrcLyricsStoredRelpath = yrcLyricsStoredRelpath;
+    }
+
+    public String getAudioQuality() {
+        return audioQuality;
+    }
+
+    public void setAudioQuality(String audioQuality) {
+        this.audioQuality = audioQuality;
+    }
+
+    public Long getNeteaseSongId() {
+        return neteaseSongId;
+    }
+
+    public void setNeteaseSongId(Long neteaseSongId) {
+        this.neteaseSongId = neteaseSongId;
+    }
+
+    public Long getAlbumId() {
+        return albumId;
+    }
+
+    public void setAlbumId(Long albumId) {
+        this.albumId = albumId;
+    }
+
+    public String getArtistsJson() {
+        return artistsJson;
+    }
+
+    public void setArtistsJson(String artistsJson) {
+        this.artistsJson = artistsJson;
+    }
+
+    public String getTitleAlias() {
+        return titleAlias;
+    }
+
+    public void setTitleAlias(String titleAlias) {
+        this.titleAlias = titleAlias;
+    }
+
+    public String getTitleTranslated() {
+        return titleTranslated;
+    }
+
+    public void setTitleTranslated(String titleTranslated) {
+        this.titleTranslated = titleTranslated;
+    }
+
+    public String getAlbumArtist() {
+        return albumArtist;
+    }
+
+    public void setAlbumArtist(String albumArtist) {
+        this.albumArtist = albumArtist;
+    }
+
+    public Integer getReleaseYear() {
+        return releaseYear;
+    }
+
+    public void setReleaseYear(Integer releaseYear) {
+        this.releaseYear = releaseYear;
+    }
+
+    public String getSourceDetailJson() {
+        return sourceDetailJson;
+    }
+
+    public void setSourceDetailJson(String sourceDetailJson) {
+        this.sourceDetailJson = sourceDetailJson;
     }
 
     public long getFileSize() {

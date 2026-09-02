@@ -751,6 +751,22 @@ export interface MusicTrackDto {
   hearted?: boolean;
   /** 实际入库音质（网易云导入）：standard / higher / exhigh / lossless / hires */
   audioQuality?: string | null;
+  translatedLyricsUrl?: string | null;
+  hasTranslatedLyrics?: boolean;
+  romaLyricsUrl?: string | null;
+  hasRomaLyrics?: boolean;
+  yrcLyricsUrl?: string | null;
+  hasYrcLyrics?: boolean;
+  neteaseSongId?: number | null;
+  albumId?: number | null;
+  /** [{"id":1,"name":"..."}] */
+  artistsJson?: string | null;
+  titleAlias?: string | null;
+  titleTranslated?: string | null;
+  albumArtist?: string | null;
+  releaseYear?: number | null;
+  /** 网易云详情原始 JSON */
+  sourceDetailJson?: string | null;
 }
 
 export interface DiscoverSearchItemDto {

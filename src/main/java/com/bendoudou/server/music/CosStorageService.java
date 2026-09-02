@@ -64,6 +64,13 @@ public class CosStorageService {
     }
 
     public String buildLyricsObjectKey(String songContentSha256Hex, String extWithoutDot) {
+        return buildLyricsVariantObjectKey(songContentSha256Hex, null, extWithoutDot);
+    }
+
+    /**
+     * 歌词变体：原文 {@code .lrc}、翻译 {@code .tlyric.lrc}、罗马音 {@code .roma.lrc}、逐字 {@code .yrc}。
+     */
+    public String buildLyricsVariantObjectKey(String songContentSha256Hex, String variant, String extWithoutDot) {
         String p = props.getPathPrefix() == null ? "" : props.getPathPrefix();
         if (!p.isEmpty() && !p.endsWith("/")) {
             p = p + "/";
@@ -78,8 +85,13 @@ public class CosStorageService {
         if (e == null || e.isEmpty()) {
             e = "lrc";
         }
+        e = e.toLowerCase();
+        String mid = "";
+        if (variant != null && !variant.isBlank()) {
+            mid = "." + variant.trim().toLowerCase().replaceAll("[^a-z0-9_-]", "");
+        }
         return p + "lyrics/" + songContentSha256Hex.substring(0, 2) + "/"
-                + songContentSha256Hex + "." + e.toLowerCase();
+                + songContentSha256Hex + mid + "." + e;
     }
 
     /**

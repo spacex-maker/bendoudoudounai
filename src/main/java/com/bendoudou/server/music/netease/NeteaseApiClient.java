@@ -77,6 +77,8 @@ public class NeteaseApiClient {
         body.put("id", songId);
         body.put("lv", -1);
         body.put("tv", -1);
+        body.put("rv", -1);
+        body.put("yv", -1);
         body.put("csrf_token", csrf());
         return postWeapi("/weapi/song/lyric", objectMapper.writeValueAsString(body));
     }
