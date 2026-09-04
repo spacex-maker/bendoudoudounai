@@ -83,6 +83,7 @@ export function MusicTrackTable({
   const tableCoverLabel = t("music.tableCover");
   const tableDurationLabel = t("music.tableDuration");
   const loadingPlaceholders = [1, 2, 3, 4, 5];
+  const safeTracks = Array.isArray(tracks) ? tracks : [];
   const [playStatsOpenFor, setPlayStatsOpenFor] = useState<MusicTrackDto | null>(null);
   const [playStatsRows, setPlayStatsRows] = useState<TrackPlayUserStatDto[]>([]);
   const [playStatsLoading, setPlayStatsLoading] = useState(false);
@@ -103,7 +104,7 @@ export function MusicTrackTable({
     );
     observer.observe(el);
     return () => observer.disconnect();
-  }, [hasMore, onLoadMore, loadingMore, listLoading, tracks.length]);
+  }, [hasMore, onLoadMore, loadingMore, listLoading, safeTracks.length]);
 
   const openPlayStats = async (tr: MusicTrackDto) => {
     setPlayStatsOpenFor(tr);
@@ -127,7 +128,7 @@ export function MusicTrackTable({
           {typeof totalCount === "number" && totalCount > 0 ? (
             <p className="mt-0.5 text-[10px] text-zinc-500">
               {t("music.tracksShownOfTotal", {
-                shown: tracks.length,
+                shown: safeTracks.length,
                 total: totalCount,
               })}
             </p>
@@ -188,10 +189,10 @@ export function MusicTrackTable({
               </div>
             ))
           : null}
-        {tracks.length === 0 && !listLoading ? (
+        {safeTracks.length === 0 && !listLoading ? (
           <div className="px-4 py-8 text-center text-xs text-zinc-500">{t("music.emptyTracks")}</div>
         ) : null}
-        {tracks.map((tr) => {
+        {safeTracks.map((tr) => {
           const listeners = listeningByTrack?.[tr.id] ?? [];
           return (
           <div
@@ -333,14 +334,14 @@ export function MusicTrackTable({
                 </tr>
               ))
             : null}
-          {tracks.length === 0 && !listLoading && (
+          {safeTracks.length === 0 && !listLoading && (
             <tr>
               <td colSpan={7} className="px-4 py-8 text-center text-zinc-500">
                 {t("music.emptyTracks")}
               </td>
             </tr>
           )}
-          {tracks.map((tr) => {
+          {safeTracks.map((tr) => {
             const listeners = listeningByTrack?.[tr.id] ?? [];
             return (
             <tr

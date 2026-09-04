@@ -1445,17 +1445,37 @@ export async function fetchMusicTracksPage(
   playlistId: number,
   opts?: { page?: number; size?: number; q?: string }
 ): Promise<MusicTrackPageDto> {
+  const page = opts?.page ?? 0;
+  const size = opts?.size ?? 40;
   const params = new URLSearchParams({
     playlistId: String(playlistId),
-    page: String(opts?.page ?? 0),
-    size: String(opts?.size ?? 40),
+    page: String(page),
+    size: String(size),
   });
   const q = opts?.q?.trim();
   if (q) params.set("q", q);
   const res = await fetch(apiPath(`/api/music/tracks?${params.toString()}`), {
     headers: { Authorization: `Bearer ${getStoredToken()}` },
   });
-  return authJson(res);
+  const data = await authJson<MusicTrackPageDto | MusicTrackDto[]>(res);
+  // 兼容旧后端直接返回数组，避免 page.items 为 undefined 导致列表崩溃
+  if (Array.isArray(data)) {
+    return {
+      items: data,
+      page,
+      size,
+      total: data.length,
+      hasMore: false,
+    };
+  }
+  const items = Array.isArray(data?.items) ? data.items : [];
+  return {
+    items,
+    page: typeof data?.page === "number" ? data.page : page,
+    size: typeof data?.size === "number" ? data.size : size,
+    total: typeof data?.total === "number" ? data.total : items.length,
+    hasMore: Boolean(data?.hasMore),
+  };
 }
 
 /** @deprecated 使用 fetchMusicTracksPage；保留兼容时仅取第一页 */
