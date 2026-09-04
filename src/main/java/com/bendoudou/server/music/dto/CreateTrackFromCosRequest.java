@@ -23,5 +23,20 @@ public record CreateTrackFromCosRequest(
         @Size(max = 128) String mimeType,
         @NotBlank String audioObjectKey,
         String lyricsObjectKey,
-        String coverObjectKey
+        String coverObjectKey,
+        /** 翻译歌词 COS key，可空 */
+        String translatedLyricsObjectKey,
+        /** 罗马音歌词 COS key，可空 */
+        String romaLyricsObjectKey,
+        /** 逐字 yrc COS key，可空 */
+        String yrcLyricsObjectKey,
+        @Size(max = 32) String audioQuality,
+        Long neteaseSongId,
+        Long albumId,
+        String artistsJson,
+        @Size(max = 1024) String titleAlias,
+        @Size(max = 1024) String titleTranslated,
+        @Size(max = 512) String albumArtist,
+        Integer releaseYear,
+        String sourceDetailJson
 ) {}

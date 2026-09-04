@@ -2,7 +2,8 @@ spring:
   application:
     name: bendoudou-server
   config:
-    # 本地/共享密钥（gitignored）：与线上 bendoudou.env 同源，改一处两边共用
+    # 本地密钥（gitignored）。必须从仓库根目录启动，才能解析到 ./secrets/
+    # 也可用 scripts/ensure_local_secrets.py 从旧仓同步并去掉 UTF-8 BOM
     import: optional:file:./secrets/bendoudou.env[.properties]
   datasource:
     # 库名: bendoudoudounai，首次可在服务端执行: CREATE DATABASE bendoudoudounai CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;

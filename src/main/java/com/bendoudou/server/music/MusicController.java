@@ -13,6 +13,7 @@ import com.bendoudou.server.music.dto.InviteToPlaylistRequest;
 import com.bendoudou.server.music.dto.MusicPreviewResponse;
 import com.bendoudou.server.music.dto.MusicMentionNotificationResponse;
 import com.bendoudou.server.music.dto.MusicTrackCommentResponse;
+import com.bendoudou.server.music.dto.MusicTrackPageResponse;
 import com.bendoudou.server.music.dto.MusicTrackResponse;
 import com.bendoudou.server.music.dto.PlaylistItemResponse;
 import com.bendoudou.server.music.dto.PlaylistListeningStatusResponse;
@@ -24,6 +25,8 @@ import com.bendoudou.server.music.dto.UpdatePlaylistListeningStateRequest;
 import com.bendoudou.server.music.dto.UpdatePlaylistNameRequest;
 import com.bendoudou.server.music.dto.UpdatePlaylistWallpaperRequest;
 import com.bendoudou.server.music.dto.TrackPlayUserStatResponse;
+import com.bendoudou.server.activity.UserActivityActions;
+import com.bendoudou.server.activity.UserActivityService;
 import com.bendoudou.server.bean.BeanService;
 import com.bendoudou.server.music.netease.DiscoverMusicService;
 import jakarta.validation.Valid;
@@ -62,15 +65,18 @@ public class MusicController {
     private final MusicService musicService;
     private final BeanService beanService;
     private final DiscoverMusicService discoverMusicService;
+    private final UserActivityService userActivityService;
 
     public MusicController(
             MusicService musicService,
             BeanService beanService,
-            DiscoverMusicService discoverMusicService
+            DiscoverMusicService discoverMusicService,
+            UserActivityService userActivityService
     ) {
         this.musicService = musicService;
         this.beanService = beanService;
         this.discoverMusicService = discoverMusicService;
+        this.userActivityService = userActivityService;
     }
 
     @GetMapping("/playlists")
@@ -263,8 +269,22 @@ public class MusicController {
             @RequestParam(value = "limit", defaultValue = "20") int limit,
             Authentication authentication
     ) {
-        beanService.awardDailyUsage(parseUserId(authentication));
-        return discoverMusicService.search(parseUserId(authentication), q, offset, limit);
+        long userId = parseUserId(authentication);
+        beanService.awardDailyUsage(userId);
+        DiscoverSearchPageResponse page = discoverMusicService.search(userId, q, offset, limit);
+        // 仅记首页搜索，避免翻页刷屏
+        if (offset <= 0 && q != null && q.trim().length() >= 2) {
+            userActivityService.recordQuietly(
+                    userId,
+                    UserActivityActions.SEARCH_DISCOVER,
+                    "discover",
+                    q.trim(),
+                    null,
+                    null,
+                    "{\"total\":" + page.total() + ",\"shown\":" + page.items().size() + "}"
+            );
+        }
+        return page;
     }
 
     @PostMapping("/discover/import")
@@ -272,21 +292,52 @@ public class MusicController {
             @Valid @RequestBody ImportNeteaseTrackRequest request,
             Authentication authentication
     ) {
-        return discoverMusicService.importSong(
-                parseUserId(authentication),
+        long userId = parseUserId(authentication);
+        MusicTrackResponse track = discoverMusicService.importSong(
+                userId,
                 request.neteaseSongId(),
                 request.playlistId(),
                 Boolean.TRUE.equals(request.heart()),
                 request.quality()
         );
+        userActivityService.recordQuietly(
+                userId,
+                UserActivityActions.IMPORT_NETEASE,
+                "discover",
+                null,
+                "netease_song",
+                request.neteaseSongId(),
+                "{\"trackId\":" + track.id()
+                        + ",\"playlistId\":" + track.playlistId()
+                        + ",\"quality\":\"" + (track.audioQuality() == null ? "" : track.audioQuality()) + "\""
+                        + ",\"heart\":" + Boolean.TRUE.equals(request.heart()) + "}"
+        );
+        return track;
     }
 
     @GetMapping("/tracks")
-    public List<MusicTrackResponse> list(
+    public MusicTrackPageResponse list(
             @RequestParam("playlistId") long playlistId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "40") int size,
+            @RequestParam(required = false) String q,
             Authentication authentication
     ) {
-        return musicService.listTracksForPlaylist(parseUserId(authentication), playlistId);
+        return musicService.listTracksForPlaylistPage(
+                parseUserId(authentication),
+                playlistId,
+                page,
+                size,
+                q
+        );
+    }
+
+    @GetMapping("/tracks/{id}/meta")
+    public MusicTrackResponse getTrackMeta(
+            @PathVariable("id") long id,
+            Authentication authentication
+    ) {
+        return musicService.getAccessibleTrack(parseUserId(authentication), id);
     }
 
     @GetMapping("/hearts/tracks")
@@ -313,7 +364,12 @@ public class MusicController {
 
     @PostMapping("/tracks/{id}/heart")
     public MusicTrackResponse addHeart(@PathVariable long id, Authentication authentication) {
-        return musicService.addHeart(parseUserId(authentication), id);
+        long userId = parseUserId(authentication);
+        MusicTrackResponse track = musicService.addHeart(userId, id);
+        userActivityService.recordQuietly(
+                userId, UserActivityActions.HEART_TRACK, "music", null, "track", id, null
+        );
+        return track;
     }
 
     @PostMapping("/tracks/{id}/add-to-playlist")
@@ -322,12 +378,28 @@ public class MusicController {
             @Valid @RequestBody AddTrackToPlaylistRequest request,
             Authentication authentication
     ) {
-        return musicService.addTrackToPlaylist(parseUserId(authentication), id, request.playlistId());
+        long userId = parseUserId(authentication);
+        MusicTrackResponse track = musicService.addTrackToPlaylist(userId, id, request.playlistId());
+        userActivityService.recordQuietly(
+                userId,
+                UserActivityActions.ADD_TO_PLAYLIST,
+                "music",
+                null,
+                "track",
+                id,
+                "{\"playlistId\":" + request.playlistId() + "}"
+        );
+        return track;
     }
 
     @DeleteMapping("/tracks/{id}/heart")
     public MusicTrackResponse removeHeart(@PathVariable long id, Authentication authentication) {
-        return musicService.removeHeart(parseUserId(authentication), id);
+        long userId = parseUserId(authentication);
+        MusicTrackResponse track = musicService.removeHeart(userId, id);
+        userActivityService.recordQuietly(
+                userId, UserActivityActions.UNHEART_TRACK, "music", null, "track", id, null
+        );
+        return track;
     }
 
     @DeleteMapping("/tracks/{id}")
@@ -349,7 +421,12 @@ public class MusicController {
             @PathVariable long id,
             Authentication authentication
     ) {
-        return musicService.recordTrackPlay(parseUserId(authentication), id);
+        long userId = parseUserId(authentication);
+        MusicTrackResponse track = musicService.recordTrackPlay(userId, id);
+        userActivityService.recordQuietly(
+                userId, UserActivityActions.PLAY_TRACK, "music", null, "track", id, null
+        );
+        return track;
     }
 
     @GetMapping("/tracks/{id}/play-stats")

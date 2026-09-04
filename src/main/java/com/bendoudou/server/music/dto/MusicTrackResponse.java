@@ -22,5 +22,20 @@ public record MusicTrackResponse(
         /**
          * 实际入库音质：standard / higher / exhigh / lossless / hires；非网易云导入可为空。
          */
-        String audioQuality
+        String audioQuality,
+        String translatedLyricsUrl,
+        boolean hasTranslatedLyrics,
+        String romaLyricsUrl,
+        boolean hasRomaLyrics,
+        String yrcLyricsUrl,
+        boolean hasYrcLyrics,
+        Long neteaseSongId,
+        Long albumId,
+        String artistsJson,
+        String titleAlias,
+        String titleTranslated,
+        String albumArtist,
+        Integer releaseYear,
+        /** 网易云详情原始 JSON；体积较大，列表也会返回（小站可接受） */
+        String sourceDetailJson
 ) {}

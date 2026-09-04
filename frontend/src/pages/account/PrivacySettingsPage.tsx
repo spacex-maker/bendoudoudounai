@@ -1,10 +1,14 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import clsx from "clsx";
-import { ShieldCheck } from "lucide-react";
+import { ArrowLeft, ShieldCheck } from "lucide-react";
 import { fetchMyPrivacySettings, updateMyPrivacySettings } from "../../api/client";
 import { SiteHeader } from "../../components/SiteHeader";
+import { mapApiError } from "../../i18n/mapApiError";
 
 export function PrivacySettingsPage() {
+  const { t } = useTranslation();
   const [recordLoginActivity, setRecordLoginActivity] = useState(true);
   const [recordPlayActivity, setRecordPlayActivity] = useState(true);
   const [publicBeanLevel, setPublicBeanLevel] = useState(true);
@@ -13,6 +17,7 @@ export function PrivacySettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [msgIsError, setMsgIsError] = useState(false);
 
   useEffect(() => {
     void (async () => {
@@ -41,6 +46,7 @@ export function PrivacySettingsPage() {
   ) => {
     setSaving(true);
     setMsg(null);
+    setMsgIsError(false);
     try {
       const row = await updateMyPrivacySettings({ [field]: next });
       setRecordLoginActivity(row.recordLoginActivity);
@@ -48,66 +54,87 @@ export function PrivacySettingsPage() {
       setPublicBeanLevel(row.publicBeanLevel);
       setPublicLastOnline(row.publicLastOnline);
       setAllowPlaylistInvite(row.allowPlaylistInvite);
-      setMsg("隐私设置已更新");
+      setMsg(t("userProfile.privacyUpdated"));
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : "更新失败");
+      setMsgIsError(true);
+      setMsg(mapApiError(t, e) || t("userProfile.updateFailed"));
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <div className="relative w-full">
+    <div className="relative min-h-dvh w-full bg-[#f4f5f7] text-zinc-800">
+      <div
+        className="pointer-events-none absolute inset-x-0 top-0 h-72 bg-[radial-gradient(ellipse_80%_60%_at_50%_-10%,rgba(26,31,38,0.08),transparent)]"
+        aria-hidden
+      />
       <SiteHeader />
-      <main className="mx-auto max-w-3xl px-4 pb-10 pt-28 sm:px-6 sm:pt-32">
-        <section className="rounded-2xl border border-emerald-300/30 bg-white/75 p-5 backdrop-blur-sm">
-          <h1 className="inline-flex items-center gap-2 text-lg font-semibold text-emerald-700">
-            <ShieldCheck className="h-5 w-5" />
-            隐私设置
+      <main className="relative mx-auto max-w-3xl px-4 pb-10 pt-24 sm:px-6 sm:pb-12 sm:pt-28">
+        <div className="mb-5">
+          <Link
+            to="/account/profile"
+            className="inline-flex items-center gap-1 text-[12px] font-medium text-zinc-500 transition hover:text-zinc-800"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            {t("account.backToProfile")}
+          </Link>
+          <h1 className="mt-2 inline-flex items-center gap-2 font-display text-2xl font-bold tracking-tight text-zinc-900">
+            <ShieldCheck className="h-6 w-6 text-zinc-500" />
+            {t("userProfile.privacy")}
           </h1>
-          <p className="mt-2 text-sm leading-relaxed text-stone-600">
-            我们对隐私的保护是认真的。你可以自主决定是否记录登录活动和听歌活动。
-            关闭后，系统将不再记录对应数据，同时这部分行为也不会计入豆值。
-          </p>
+          <p className="mt-1 max-w-2xl text-sm leading-relaxed text-zinc-500">{t("account.privacyPageHint")}</p>
+        </div>
 
-          <div className="mt-4 space-y-3 rounded-xl border border-rose-100 bg-white p-3">
+        <section className="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white shadow-[0_12px_40px_-24px_rgba(15,18,24,0.35)]">
+          <div className="divide-y divide-zinc-100">
             <ItemSwitch
-              label="记录登录活动（并计入豆值）"
+              label={t("userProfile.recordLoginTitle")}
+              hint={t("userProfile.recordBeanNote")}
               checked={recordLoginActivity}
               disabled={loading || saving}
               onToggle={(v) => void toggle("recordLoginActivity", v)}
             />
             <ItemSwitch
-              label="记录听歌活动（并计入豆值）"
+              label={t("userProfile.recordPlayTitle")}
+              hint={t("userProfile.recordBeanNote")}
               checked={recordPlayActivity}
               disabled={loading || saving}
               onToggle={(v) => void toggle("recordPlayActivity", v)}
             />
             <ItemSwitch
-              label="公开我的豆值与等级"
+              label={t("userProfile.publicBeanLevel")}
               checked={publicBeanLevel}
               disabled={loading || saving}
               onToggle={(v) => void toggle("publicBeanLevel", v)}
             />
             <ItemSwitch
-              label="公开我的最近在线时间"
+              label={t("userProfile.publicLastOnline")}
               checked={publicLastOnline}
               disabled={loading || saving}
               onToggle={(v) => void toggle("publicLastOnline", v)}
             />
             <ItemSwitch
-              label="允许被其他用户邀请加入歌单"
+              label={t("userProfile.allowPlaylistInvite")}
               checked={allowPlaylistInvite}
               disabled={loading || saving}
               onToggle={(v) => void toggle("allowPlaylistInvite", v)}
             />
           </div>
-          {msg ? (
-            <p className={clsx("mt-3 text-sm", msg.includes("失败") ? "text-red-500" : "text-emerald-600")}>
-              {msg}
-            </p>
-          ) : null}
         </section>
+
+        {msg ? (
+          <p
+            className={clsx(
+              "mt-4 rounded-xl border px-3 py-2.5 text-sm",
+              msgIsError
+                ? "border-red-200 bg-red-50 text-red-600"
+                : "border-emerald-200 bg-emerald-50 text-emerald-700"
+            )}
+          >
+            {msg}
+          </p>
+        ) : null}
       </main>
     </div>
   );
@@ -115,35 +142,36 @@ export function PrivacySettingsPage() {
 
 function ItemSwitch({
   label,
+  hint,
   checked,
   disabled,
   onToggle,
 }: {
   label: string;
+  hint?: string;
   checked: boolean;
   disabled?: boolean;
   onToggle: (next: boolean) => void;
 }) {
   return (
-    <label className="flex items-center justify-between gap-3">
-      <span className="text-sm text-stone-700">{label}</span>
+    <div className="flex items-center justify-between gap-4 px-5 py-4 sm:px-6">
+      <div className="min-w-0">
+        <p className="text-sm font-medium text-zinc-800">{label}</p>
+        {hint ? <p className="mt-0.5 text-[12px] text-zinc-500">{hint}</p> : null}
+      </div>
       <button
         type="button"
         disabled={disabled}
         onClick={() => onToggle(!checked)}
+        aria-pressed={checked}
         className={clsx(
-          "relative h-6 w-11 rounded-full transition",
-          checked ? "bg-emerald-500/80" : "bg-zinc-600/80",
+          "inline-flex h-6 w-11 shrink-0 items-center rounded-full p-0.5 transition-colors",
+          checked ? "justify-end bg-zinc-900" : "justify-start bg-zinc-300",
           disabled && "opacity-50"
         )}
       >
-        <span
-          className={clsx(
-            "absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform",
-            checked ? "left-[22px]" : "left-0.5"
-          )}
-        />
+        <span className="pointer-events-none block h-5 w-5 rounded-full bg-white shadow-sm" />
       </button>
-    </label>
+    </div>
   );
 }

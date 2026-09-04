@@ -95,7 +95,16 @@ export function LoginPage() {
       void validateInviteCode(raw)
         .then((r) => {
           setInviteValid(r.valid);
-          setInviteHint(r.valid ? t("auth.inviteValid") : r.message || t("auth.inviteInvalid"));
+          if (r.valid) {
+            setInviteHint(t("auth.inviteValid"));
+            return;
+          }
+          const serverMsg = (r.message || "").trim();
+          if (/已被使用|already.?used/i.test(serverMsg)) {
+            setInviteHint(t("auth.inviteUsed"));
+          } else {
+            setInviteHint(t("auth.inviteInvalid"));
+          }
         })
         .catch(() => {
           setInviteValid(false);
@@ -212,6 +221,14 @@ export function LoginPage() {
           setCode("");
           setApplyMessage("");
         } else {
+          if (!inviteCode.trim() || inviteCode.trim().length < 4) {
+            setErr(t("auth.inviteRequired"));
+            return;
+          }
+          if (inviteHint && !inviteValid) {
+            setErr(inviteHint);
+            return;
+          }
           const res = await registerWithEmail({
             email,
             password,
@@ -259,37 +276,52 @@ export function LoginPage() {
   const footer =
     mode === "login" ? t("auth.footerNote") : mode === "register" ? t("auth.footerRegister") : t("auth.footerReset");
 
+  const fieldClass =
+    "w-full rounded-2xl border border-white/[0.08] bg-white/[0.06] py-3.5 pl-11 pr-3 text-[15px] text-white placeholder:text-white/30 outline-none transition focus:border-music-accent/45 focus:bg-white/[0.08] focus:ring-2 focus:ring-music-accent/20 sm:rounded-xl sm:py-3 sm:text-sm";
+
   return (
     <div
       className={clsx(
-        "relative min-h-dvh w-full overflow-hidden font-sans",
-        wallpaperActive ? "bg-transparent" : "bg-theme-login"
+        "relative min-h-dvh w-full font-sans",
+        wallpaperActive ? "bg-transparent" : "bg-[#0b0d12]"
       )}
     >
       {!wallpaperActive ? (
         <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden>
-          <div className="absolute -left-24 top-[-10%] h-[28rem] w-[28rem] rounded-full bg-[rgba(198,47,47,0.12)] blur-3xl" />
-          <div className="absolute right-[-8rem] top-[20%] h-[32rem] w-[32rem] rounded-full bg-[rgba(26,31,38,0.08)] blur-3xl" />
-          <div className="absolute bottom-[-10rem] left-[30%] h-[28rem] w-[28rem] rounded-full bg-[rgba(56,189,248,0.08)] blur-3xl" />
-          <div className="absolute inset-0 bg-theme-login-overlay" />
+          <div className="absolute -left-24 top-[-10%] h-[28rem] w-[28rem] rounded-full bg-[rgba(198,47,47,0.18)] blur-3xl" />
+          <div className="absolute right-[-8rem] top-[18%] h-[32rem] w-[32rem] rounded-full bg-[rgba(56,189,248,0.1)] blur-3xl" />
+          <div className="absolute bottom-[-10rem] left-[20%] h-[28rem] w-[28rem] rounded-full bg-[rgba(198,47,47,0.08)] blur-3xl" />
+          <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(11,13,18,0.15)_0%,rgba(11,13,18,0.75)_70%)]" />
         </div>
       ) : null}
 
-      <div className="relative z-10 mx-auto flex min-h-dvh max-w-md flex-col justify-center px-6 py-10">
-        <div className="mb-5 flex items-center justify-between gap-2">
+      <div
+        className={clsx(
+          "relative z-10 mx-auto flex min-h-dvh w-full max-w-md flex-col",
+          "px-5 pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))] pt-[calc(0.75rem+env(safe-area-inset-top,0px))]",
+          "justify-start sm:justify-center sm:px-6 sm:py-10"
+        )}
+      >
+        <div className="mb-4 flex items-center justify-between gap-2 sm:mb-5">
           <Link
             to="/"
-            className="inline-flex min-w-0 items-center gap-1.5 text-sm text-ink-500 transition hover:text-ink-800"
+            className="inline-flex min-w-0 items-center gap-1.5 text-sm text-white/55 transition hover:text-white"
           >
             <ArrowLeft className="h-4 w-4 shrink-0" />
             {t("common.backHome")}
           </Link>
-          <LanguageSwitch />
+          <LanguageSwitch tone="dark" />
         </div>
 
-        <div className="relative overflow-hidden rounded-[28px] border border-ink-900/10 bg-[#0f1218]/[0.92] p-8 text-white shadow-[0_28px_60px_-28px_rgba(0,0,0,0.55)] backdrop-blur-xl">
+        <div
+          className={clsx(
+            "relative flex min-h-0 flex-1 flex-col overflow-hidden text-white",
+            "rounded-none border-0 bg-transparent p-0 shadow-none",
+            "sm:flex-none sm:overflow-hidden sm:rounded-[28px] sm:border sm:border-ink-900/10 sm:bg-[#0f1218]/[0.92] sm:p-8 sm:shadow-[0_28px_60px_-28px_rgba(0,0,0,0.55)] sm:backdrop-blur-xl"
+          )}
+        >
           <div
-            className="pointer-events-none absolute inset-0 opacity-90"
+            className="pointer-events-none absolute inset-0 hidden opacity-90 sm:block"
             aria-hidden
             style={{
               background:
@@ -297,15 +329,18 @@ export function LoginPage() {
             }}
           />
 
-          <div className="relative z-10 mb-6">
-            <p className="mb-3 inline-flex items-center gap-2 rounded-full border border-music-accent/30 bg-music-accent/10 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.14em] text-[#fda4af]">
+          <div className="relative z-10 mb-6 sm:mb-6">
+            <p className="font-display text-[1.65rem] font-extrabold tracking-[-0.05em] text-white sm:mb-3 sm:hidden">
+              {PRODUCT_NAME}
+            </p>
+            <p className="mb-3 hidden items-center gap-2 rounded-full border border-music-accent/30 bg-music-accent/10 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.14em] text-[#fda4af] sm:inline-flex">
               <Disc3 className="h-3.5 w-3.5" />
               {PRODUCT_NAME}
             </p>
-            <h1 className="font-display text-[2rem] font-extrabold tracking-[-0.04em] text-white sm:text-[2.15rem]">
+            <h1 className="mt-1 font-display text-[1.75rem] font-bold tracking-[-0.04em] text-white/95 sm:mt-0 sm:text-[2.15rem] sm:font-extrabold">
               {title}
             </h1>
-            <p className="mt-2 max-w-[34ch] text-sm leading-relaxed text-white/55">
+            <p className="mt-2 max-w-[36ch] text-[13px] leading-relaxed text-white/50 sm:text-sm sm:text-white/55">
               {mode === "register"
                 ? registerPath === "apply"
                   ? t("auth.subRegisterApply")
@@ -313,12 +348,12 @@ export function LoginPage() {
                 : subtitle}
             </p>
             {mode !== "reset" ? (
-              <div className="mt-4 flex rounded-xl border border-white/10 bg-white/[0.04] p-1 text-xs">
+              <div className="mt-5 flex gap-1 rounded-2xl border border-white/[0.08] bg-white/[0.04] p-1 text-xs sm:mt-4 sm:rounded-xl">
                 <button
                   type="button"
                   onClick={() => switchMode("login")}
                   className={clsx(
-                    "flex-1 rounded-lg py-2 font-medium transition",
+                    "flex-1 rounded-xl py-2.5 font-medium transition sm:rounded-lg sm:py-2",
                     mode === "login" ? "bg-white/15 text-white" : "text-white/45 hover:text-white/70"
                   )}
                 >
@@ -328,7 +363,7 @@ export function LoginPage() {
                   type="button"
                   onClick={() => switchMode("register")}
                   className={clsx(
-                    "flex-1 rounded-lg py-2 font-medium transition",
+                    "flex-1 rounded-xl py-2.5 font-medium transition sm:rounded-lg sm:py-2",
                     mode === "register" ? "bg-white/15 text-white" : "text-white/45 hover:text-white/70"
                   )}
                 >
@@ -345,7 +380,7 @@ export function LoginPage() {
               </button>
             )}
             {mode === "register" ? (
-              <div className="mt-3 flex rounded-xl border border-white/10 bg-black/20 p-1 text-[11px]">
+              <div className="mt-3 flex gap-1 rounded-2xl border border-white/[0.08] bg-black/25 p-1 text-[11px] sm:rounded-xl sm:bg-black/20">
                 <button
                   type="button"
                   onClick={() => {
@@ -354,7 +389,7 @@ export function LoginPage() {
                     setOkMsg(null);
                   }}
                   className={clsx(
-                    "flex-1 rounded-lg py-1.5 font-medium transition",
+                    "flex-1 rounded-xl py-2 font-medium transition sm:rounded-lg sm:py-1.5",
                     registerPath === "invite" ? "bg-white/12 text-white" : "text-white/40 hover:text-white/65"
                   )}
                 >
@@ -368,7 +403,7 @@ export function LoginPage() {
                     setOkMsg(null);
                   }}
                   className={clsx(
-                    "flex-1 rounded-lg py-1.5 font-medium transition",
+                    "flex-1 rounded-xl py-2 font-medium transition sm:rounded-lg sm:py-1.5",
                     registerPath === "apply" ? "bg-white/12 text-white" : "text-white/40 hover:text-white/65"
                   )}
                 >
@@ -378,222 +413,231 @@ export function LoginPage() {
             ) : null}
           </div>
 
-          <form onSubmit={(e) => void onSubmit(e)} className="relative z-10 space-y-3.5">
-            {mode === "register" ? (
+          <form
+            onSubmit={(e) => void onSubmit(e)}
+            className="relative z-10 flex min-h-0 flex-1 flex-col space-y-4 sm:flex-none sm:space-y-3.5"
+          >
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain sm:flex-none sm:space-y-3.5 sm:overflow-visible">
+              {mode === "register" ? (
+                <div>
+                  <label className="mb-1.5 block text-xs font-medium text-white/50">{t("auth.displayNameLabel")}</label>
+                  <div className="relative">
+                    <UserRound className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-music-accent/80" />
+                    <input
+                      type="text"
+                      autoComplete="nickname"
+                      className={fieldClass}
+                      placeholder={t("auth.displayNamePh")}
+                      value={displayName}
+                      onChange={(e) => setDisplayName(e.target.value)}
+                    />
+                  </div>
+                </div>
+              ) : null}
+
               <div>
-                <label className="mb-1.5 block text-xs font-medium text-white/50">{t("auth.displayNameLabel")}</label>
+                <label className="mb-1.5 block text-xs font-medium text-white/50">{t("auth.email")}</label>
                 <div className="relative">
-                  <UserRound className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-music-accent/80" />
+                  <Mail className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-music-accent/80" />
                   <input
-                    type="text"
-                    autoComplete="nickname"
-                    className="w-full rounded-xl border border-white/10 bg-white/[0.06] py-3 pl-11 pr-3 text-sm text-white placeholder:text-white/30 outline-none transition focus:border-music-accent/50 focus:ring-2 focus:ring-music-accent/25"
-                    placeholder={t("auth.displayNamePh")}
-                    value={displayName}
-                    onChange={(e) => setDisplayName(e.target.value)}
+                    type="email"
+                    required
+                    autoComplete="email"
+                    className={fieldClass}
+                    placeholder={t("auth.emailPh")}
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
                   />
                 </div>
               </div>
-            ) : null}
 
-            <div>
-              <label className="mb-1.5 block text-xs font-medium text-white/50">{t("auth.email")}</label>
-              <div className="relative">
-                <Mail className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-music-accent/80" />
-                <input
-                  type="email"
-                  required
-                  autoComplete="email"
-                  className="w-full rounded-xl border border-white/10 bg-white/[0.06] py-3 pl-11 pr-3 text-sm text-white placeholder:text-white/30 outline-none transition focus:border-music-accent/50 focus:ring-2 focus:ring-music-accent/25"
-                  placeholder={t("auth.emailPh")}
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                />
-              </div>
-            </div>
-
-            {mode === "register" || mode === "reset" ? (
-              <div>
-                <label className="mb-1.5 block text-xs font-medium text-white/50">{t("auth.verifyCode")}</label>
-                <div className="flex gap-2">
-                  <div className="relative min-w-0 flex-1">
-                    <KeyRound className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-music-accent/80" />
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      required
-                      maxLength={8}
-                      autoComplete="one-time-code"
-                      className="w-full rounded-xl border border-white/10 bg-white/[0.06] py-3 pl-11 pr-3 text-sm text-white placeholder:text-white/30 outline-none transition focus:border-music-accent/50 focus:ring-2 focus:ring-music-accent/25"
-                      placeholder={t("auth.verifyCodePh")}
-                      value={code}
-                      onChange={(e) => setCode(e.target.value)}
-                    />
-                  </div>
-                  <button
-                    type="button"
-                    disabled={sendingCode || codeCooldown > 0}
-                    onClick={() => void onSendCode()}
-                    className="shrink-0 rounded-xl border border-white/15 bg-white/10 px-3 text-xs font-medium text-white/85 transition hover:bg-white/15 disabled:opacity-40"
-                  >
-                    {codeCooldown > 0
-                      ? t("auth.resendIn", { sec: codeCooldown })
-                      : sendingCode
-                        ? t("auth.sendingCode")
-                        : t("auth.sendCode")}
-                  </button>
-                </div>
-              </div>
-            ) : null}
-
-            <div>
-              <div className="mb-1.5 flex items-center justify-between gap-2">
-                <label className="block text-xs font-medium text-white/50">
-                  {mode === "reset" ? t("auth.newPassword") : t("auth.password")}
-                </label>
-                {mode === "login" ? (
-                  <button
-                    type="button"
-                    onClick={() => switchMode("reset")}
-                    className="text-[11px] text-white/45 transition hover:text-[#fda4af]"
-                  >
-                    {t("auth.forgotPassword")}
-                  </button>
-                ) : null}
-              </div>
-              <div className="relative">
-                <Lock className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-music-accent/80" />
-                <input
-                  type="password"
-                  required
-                  autoComplete={mode === "login" ? "current-password" : "new-password"}
-                  minLength={6}
-                  className="w-full rounded-xl border border-white/10 bg-white/[0.06] py-3 pl-11 pr-3 text-sm text-white placeholder:text-white/30 outline-none transition focus:border-music-accent/50 focus:ring-2 focus:ring-music-accent/25"
-                  placeholder={t("auth.passwordPh")}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                />
-              </div>
-            </div>
-
-            {mode === "register" ? (
-              registerPath === "invite" ? (
+              {mode === "register" || mode === "reset" ? (
                 <div>
-                  <label className="mb-1.5 block text-xs font-medium text-white/50">{t("auth.inviteCode")}</label>
-                  <div className="relative">
-                    <Ticket className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-music-accent/80" />
-                    <input
-                      type="text"
-                      required
-                      autoComplete="off"
-                      className="w-full rounded-xl border border-white/10 bg-white/[0.06] py-3 pl-11 pr-3 text-sm uppercase tracking-wider text-white placeholder:text-white/30 outline-none transition focus:border-music-accent/50 focus:ring-2 focus:ring-music-accent/25"
-                      placeholder={t("auth.inviteCodePh")}
-                      value={inviteCode}
-                      onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
-                    />
-                  </div>
-                  {inviteHint ? (
-                    <p
-                      className={clsx(
-                        "mt-1.5 text-[11px]",
-                        inviteValid ? "text-emerald-300/90" : "text-amber-300/90"
-                      )}
-                    >
-                      {inviteHint}
-                    </p>
-                  ) : (
-                    <p className="mt-1.5 text-[11px] text-white/35">{t("auth.inviteRequiredHint")}</p>
-                  )}
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {applyStatus?.status === "PENDING" ? (
-                    <p className="rounded-xl border border-amber-400/25 bg-amber-500/10 px-3 py-2.5 text-[12px] leading-relaxed text-amber-100/90">
-                      {t("auth.applyPending")}
-                    </p>
-                  ) : null}
-                  {applyStatus?.status === "REJECTED" ? (
-                    <div className="rounded-xl border border-rose-400/25 bg-rose-500/10 px-3 py-2.5 text-[12px] leading-relaxed text-rose-100/90">
-                      <p className="font-medium">{t("auth.applyRejectedTitle")}</p>
-                      <p className="mt-1 whitespace-pre-wrap text-rose-100/75">
-                        {applyStatus.rejectionReason || t("auth.applyRejectedNoReason")}
-                      </p>
-                      <p className="mt-1.5 text-[11px] text-rose-100/55">{t("auth.applyRejectedHint")}</p>
+                  <label className="mb-1.5 block text-xs font-medium text-white/50">{t("auth.verifyCode")}</label>
+                  <div className="flex gap-2">
+                    <div className="relative min-w-0 flex-1">
+                      <KeyRound className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-music-accent/80" />
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        required
+                        maxLength={8}
+                        autoComplete="one-time-code"
+                        className={fieldClass}
+                        placeholder={t("auth.verifyCodePh")}
+                        value={code}
+                        onChange={(e) => setCode(e.target.value)}
+                      />
                     </div>
-                  ) : null}
-                  {applyStatus?.status === "APPROVED" || applyStatus?.status === "REGISTERED" ? (
-                    <p className="rounded-xl border border-emerald-400/25 bg-emerald-500/10 px-3 py-2.5 text-[12px] text-emerald-100/90">
-                      {applyStatus.message || t("auth.applyApprovedLogin")}
-                    </p>
-                  ) : null}
-                  <div>
-                    <label className="mb-1.5 block text-xs font-medium text-white/50">{t("auth.applyMessage")}</label>
-                    <textarea
-                      rows={3}
-                      maxLength={1000}
-                      disabled={applyStatus?.status === "PENDING"}
-                      className="w-full resize-none rounded-xl border border-white/10 bg-white/[0.06] px-3 py-2.5 text-sm text-white placeholder:text-white/30 outline-none transition focus:border-music-accent/50 focus:ring-2 focus:ring-music-accent/25 disabled:opacity-50"
-                      placeholder={t("auth.applyMessagePh")}
-                      value={applyMessage}
-                      onChange={(e) => setApplyMessage(e.target.value)}
-                    />
+                    <button
+                      type="button"
+                      disabled={sendingCode || codeCooldown > 0}
+                      onClick={() => void onSendCode()}
+                      className="shrink-0 rounded-2xl border border-white/15 bg-white/10 px-3.5 text-xs font-medium text-white/85 transition hover:bg-white/15 disabled:opacity-40 sm:rounded-xl"
+                    >
+                      {codeCooldown > 0
+                        ? t("auth.resendIn", { sec: codeCooldown })
+                        : sendingCode
+                          ? t("auth.sendingCode")
+                          : t("auth.sendCode")}
+                    </button>
                   </div>
                 </div>
-              )
-            ) : mode === "login" ? (
-              <label className="flex cursor-pointer items-center gap-2.5 text-xs text-white/50">
-                <input
-                  type="checkbox"
-                  checked={rememberPassword}
-                  onChange={(e) => setRememberPassword(e.target.checked)}
-                  className="h-4 w-4 rounded border-white/20 bg-white/10 text-music-accent focus:ring-music-accent/40"
-                />
-                <span>{t("auth.rememberPassword")}</span>
-              </label>
-            ) : (
-              <p className="text-[11px] leading-relaxed text-white/35">{t("auth.resetHint")}</p>
-            )}
+              ) : null}
 
-            {okMsg ? (
-              <p className="rounded-xl border border-emerald-400/25 bg-emerald-500/10 px-3 py-2.5 text-center text-sm text-emerald-200">
-                {okMsg}
-              </p>
-            ) : null}
+              <div>
+                <div className="mb-1.5 flex items-center justify-between gap-2">
+                  <label className="block text-xs font-medium text-white/50">
+                    {mode === "reset" ? t("auth.newPassword") : t("auth.password")}
+                  </label>
+                  {mode === "login" ? (
+                    <button
+                      type="button"
+                      onClick={() => switchMode("reset")}
+                      className="text-[11px] text-white/45 transition hover:text-[#fda4af]"
+                    >
+                      {t("auth.forgotPassword")}
+                    </button>
+                  ) : null}
+                </div>
+                <div className="relative">
+                  <Lock className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-music-accent/80" />
+                  <input
+                    type="password"
+                    required
+                    autoComplete={mode === "login" ? "current-password" : "new-password"}
+                    minLength={6}
+                    className={fieldClass}
+                    placeholder={t("auth.passwordPh")}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                  />
+                </div>
+              </div>
 
-            {err ? (
-              <p className="rounded-xl border border-music-accent/25 bg-music-accent/10 px-3 py-2.5 text-center text-sm text-[#fda4af]">
-                {err}
-              </p>
-            ) : null}
+              {mode === "register" ? (
+                registerPath === "invite" ? (
+                  <div>
+                    <label className="mb-1.5 block text-xs font-medium text-white/50">{t("auth.inviteCode")}</label>
+                    <div className="relative">
+                      <Ticket className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-music-accent/80" />
+                      <input
+                        type="text"
+                        required
+                        autoComplete="off"
+                        className={clsx(fieldClass, "uppercase tracking-wider")}
+                        placeholder={t("auth.inviteCodePh")}
+                        value={inviteCode}
+                        onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
+                      />
+                    </div>
+                    {inviteHint ? (
+                      <p
+                        className={clsx(
+                          "mt-1.5 text-[11px]",
+                          inviteValid ? "text-emerald-300/90" : "text-amber-300/90"
+                        )}
+                      >
+                        {inviteHint}
+                      </p>
+                    ) : (
+                      <p className="mt-1.5 text-[11px] text-white/35">{t("auth.inviteRequiredHint")}</p>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {applyStatus?.status === "PENDING" ? (
+                      <p className="rounded-xl border border-amber-400/25 bg-amber-500/10 px-3 py-2.5 text-[12px] leading-relaxed text-amber-100/90">
+                        {t("auth.applyPending")}
+                      </p>
+                    ) : null}
+                    {applyStatus?.status === "REJECTED" ? (
+                      <div className="rounded-xl border border-rose-400/25 bg-rose-500/10 px-3 py-2.5 text-[12px] leading-relaxed text-rose-100/90">
+                        <p className="font-medium">{t("auth.applyRejectedTitle")}</p>
+                        <p className="mt-1 whitespace-pre-wrap text-rose-100/75">
+                          {applyStatus.rejectionReason || t("auth.applyRejectedNoReason")}
+                        </p>
+                        <p className="mt-1.5 text-[11px] text-rose-100/55">{t("auth.applyRejectedHint")}</p>
+                      </div>
+                    ) : null}
+                    {applyStatus?.status === "APPROVED" || applyStatus?.status === "REGISTERED" ? (
+                      <p className="rounded-xl border border-emerald-400/25 bg-emerald-500/10 px-3 py-2.5 text-[12px] text-emerald-100/90">
+                        {applyStatus.message || t("auth.applyApprovedLogin")}
+                      </p>
+                    ) : null}
+                    <div>
+                      <label className="mb-1.5 block text-xs font-medium text-white/50">{t("auth.applyMessage")}</label>
+                      <textarea
+                        rows={3}
+                        maxLength={1000}
+                        disabled={applyStatus?.status === "PENDING"}
+                        className="w-full resize-none rounded-2xl border border-white/[0.08] bg-white/[0.06] px-3 py-2.5 text-[15px] text-white placeholder:text-white/30 outline-none transition focus:border-music-accent/45 focus:ring-2 focus:ring-music-accent/20 disabled:opacity-50 sm:rounded-xl sm:text-sm"
+                        placeholder={t("auth.applyMessagePh")}
+                        value={applyMessage}
+                        onChange={(e) => setApplyMessage(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                )
+              ) : mode === "login" ? (
+                <label className="flex cursor-pointer items-center gap-2.5 text-xs text-white/50">
+                  <input
+                    type="checkbox"
+                    checked={rememberPassword}
+                    onChange={(e) => setRememberPassword(e.target.checked)}
+                    className="h-4 w-4 rounded border-white/20 bg-white/10 text-music-accent focus:ring-music-accent/40"
+                  />
+                  <span>{t("auth.rememberPassword")}</span>
+                </label>
+              ) : (
+                <p className="text-[11px] leading-relaxed text-white/35">{t("auth.resetHint")}</p>
+              )}
 
-            <button
-              type="submit"
-              disabled={
-                submitting ||
-                (mode === "register" &&
-                  registerPath === "apply" &&
-                  (applyStatus?.status === "PENDING" ||
-                    applyStatus?.status === "APPROVED" ||
-                    applyStatus?.status === "REGISTERED"))
-              }
-              className="group relative w-full overflow-hidden rounded-xl bg-gradient-to-r from-music-accent to-[#9f1f1f] py-3.5 text-sm font-semibold text-white shadow-[0_12px_28px_rgba(198,47,47,0.35)] transition hover:brightness-110 disabled:opacity-60"
-            >
-              <span className="relative z-10">
-                {submitting
-                  ? t("auth.submitWait")
-                  : mode === "login"
-                    ? t("auth.loginBtn")
-                    : mode === "register"
-                      ? registerPath === "apply"
-                        ? t("auth.applyBtn")
-                        : t("auth.registerBtn")
-                      : t("auth.resetBtn")}
-              </span>
-            </button>
+              {okMsg ? (
+                <p className="rounded-xl border border-emerald-400/25 bg-emerald-500/10 px-3 py-2.5 text-center text-sm text-emerald-200">
+                  {okMsg}
+                </p>
+              ) : null}
+
+              {err ? (
+                <p className="rounded-xl border border-music-accent/25 bg-music-accent/10 px-3 py-2.5 text-center text-sm text-[#fda4af]">
+                  {err}
+                </p>
+              ) : null}
+            </div>
+
+            <div className="shrink-0 pt-1 sm:pt-0">
+              <button
+                type="submit"
+                disabled={
+                  submitting ||
+                  (mode === "register" &&
+                    registerPath === "apply" &&
+                    (applyStatus?.status === "PENDING" ||
+                      applyStatus?.status === "APPROVED" ||
+                      applyStatus?.status === "REGISTERED"))
+                }
+                className="group relative w-full overflow-hidden rounded-2xl bg-gradient-to-r from-music-accent to-[#9f1f1f] py-3.5 text-[15px] font-semibold text-white shadow-[0_12px_28px_rgba(198,47,47,0.35)] transition hover:brightness-110 disabled:opacity-60 sm:rounded-xl sm:text-sm"
+              >
+                <span className="relative z-10">
+                  {submitting
+                    ? t("auth.submitWait")
+                    : mode === "login"
+                      ? t("auth.loginBtn")
+                      : mode === "register"
+                        ? registerPath === "apply"
+                          ? t("auth.applyBtn")
+                          : t("auth.registerBtn")
+                        : t("auth.resetBtn")}
+                </span>
+              </button>
+            </div>
           </form>
         </div>
 
-        <p className="mt-6 text-center text-xs leading-relaxed text-ink-500/80">{footer}</p>
+        <p className="mt-5 text-center text-[11px] leading-relaxed text-white/35 sm:mt-6 sm:text-xs sm:text-white/40">
+          {footer}
+        </p>
       </div>
     </div>
   );

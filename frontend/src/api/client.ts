@@ -751,6 +751,22 @@ export interface MusicTrackDto {
   hearted?: boolean;
   /** 实际入库音质（网易云导入）：standard / higher / exhigh / lossless / hires */
   audioQuality?: string | null;
+  translatedLyricsUrl?: string | null;
+  hasTranslatedLyrics?: boolean;
+  romaLyricsUrl?: string | null;
+  hasRomaLyrics?: boolean;
+  yrcLyricsUrl?: string | null;
+  hasYrcLyrics?: boolean;
+  neteaseSongId?: number | null;
+  albumId?: number | null;
+  /** [{"id":1,"name":"..."}] */
+  artistsJson?: string | null;
+  titleAlias?: string | null;
+  titleTranslated?: string | null;
+  albumArtist?: string | null;
+  releaseYear?: number | null;
+  /** 网易云详情原始 JSON */
+  sourceDetailJson?: string | null;
 }
 
 export interface DiscoverSearchItemDto {
@@ -1283,6 +1299,62 @@ export async function recordTrackPlay(trackId: number): Promise<MusicTrackDto> {
   return authJson(res);
 }
 
+/** 用户操作痕迹入库（歌单内搜索等前端侧行为；发现搜索等由服务端自动记） */
+export async function recordUserActivity(input: {
+  action: string;
+  scope?: string | null;
+  query?: string | null;
+  targetType?: string | null;
+  targetId?: number | null;
+  detailJson?: string | null;
+}): Promise<void> {
+  try {
+    const res = await fetch(apiPath("/api/activity"), {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${getStoredToken()}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        action: input.action,
+        scope: input.scope ?? null,
+        query: input.query ?? null,
+        targetType: input.targetType ?? null,
+        targetId: input.targetId ?? null,
+        detailJson: input.detailJson ?? null,
+      }),
+    });
+    if (!res.ok) return;
+  } catch {
+    /* 埋点失败忽略 */
+  }
+}
+
+export async function fetchMyActivity(params?: {
+  action?: string;
+  limit?: number;
+}): Promise<
+  Array<{
+    id: number;
+    action: string;
+    scope: string | null;
+    query: string | null;
+    targetType: string | null;
+    targetId: number | null;
+    detailJson: string | null;
+    createdAtMillis: number;
+  }>
+> {
+  const sp = new URLSearchParams();
+  if (params?.action) sp.set("action", params.action);
+  if (params?.limit != null) sp.set("limit", String(params.limit));
+  const q = sp.toString();
+  const res = await fetch(apiPath(`/api/activity/me${q ? `?${q}` : ""}`), {
+    headers: { Authorization: `Bearer ${getStoredToken()}` },
+  });
+  return authJson(res);
+}
+
 export async function fetchTrackPlayStats(trackId: number): Promise<TrackPlayUserStatDto[]> {
   const res = await fetch(apiPath(`/api/music/tracks/${trackId}/play-stats`), {
     headers: { Authorization: `Bearer ${getStoredToken()}` },
@@ -1361,9 +1433,39 @@ export async function importNeteaseTrack(input: {
   return authJson(res);
 }
 
+export interface MusicTrackPageDto {
+  items: MusicTrackDto[];
+  page: number;
+  size: number;
+  total: number;
+  hasMore: boolean;
+}
+
+export async function fetchMusicTracksPage(
+  playlistId: number,
+  opts?: { page?: number; size?: number; q?: string }
+): Promise<MusicTrackPageDto> {
+  const params = new URLSearchParams({
+    playlistId: String(playlistId),
+    page: String(opts?.page ?? 0),
+    size: String(opts?.size ?? 40),
+  });
+  const q = opts?.q?.trim();
+  if (q) params.set("q", q);
+  const res = await fetch(apiPath(`/api/music/tracks?${params.toString()}`), {
+    headers: { Authorization: `Bearer ${getStoredToken()}` },
+  });
+  return authJson(res);
+}
+
+/** @deprecated 使用 fetchMusicTracksPage；保留兼容时仅取第一页 */
 export async function fetchMusicTracks(playlistId: number): Promise<MusicTrackDto[]> {
-  const q = new URLSearchParams({ playlistId: String(playlistId) });
-  const res = await fetch(apiPath(`/api/music/tracks?${q.toString()}`), {
+  const page = await fetchMusicTracksPage(playlistId, { page: 0, size: 40 });
+  return page.items;
+}
+
+export async function fetchMusicTrackMeta(trackId: number): Promise<MusicTrackDto> {
+  const res = await fetch(apiPath(`/api/music/tracks/${trackId}/meta`), {
     headers: { Authorization: `Bearer ${getStoredToken()}` },
   });
   return authJson(res);

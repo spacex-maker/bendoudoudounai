@@ -1,5 +1,7 @@
 package com.bendoudou.server.music;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -23,6 +25,28 @@ public interface MusicTrackRepository extends JpaRepository<MusicTrack, Long> {
     List<MusicTrack> findByUserIdAndPlaylistIdOrderByCreatedAtDesc(long userId, long playlistId);
 
     List<MusicTrack> findByPlaylistIdOrderByCreatedAtDesc(long playlistId);
+
+    Page<MusicTrack> findByPlaylistIdOrderByCreatedAtDesc(long playlistId, Pageable pageable);
+
+    @Query("""
+            select t from MusicTrack t
+            where t.playlistId = :playlistId
+              and (
+                lower(t.title) like lower(concat('%', :q, '%'))
+                or lower(t.artist) like lower(concat('%', :q, '%'))
+                or lower(t.album) like lower(concat('%', :q, '%'))
+                or (t.note is not null and lower(t.note) like lower(concat('%', :q, '%')))
+                or (t.titleAlias is not null and lower(t.titleAlias) like lower(concat('%', :q, '%')))
+                or (t.titleTranslated is not null and lower(t.titleTranslated) like lower(concat('%', :q, '%')))
+                or (t.albumArtist is not null and lower(t.albumArtist) like lower(concat('%', :q, '%')))
+              )
+            order by t.createdAt desc
+            """)
+    Page<MusicTrack> searchByPlaylistId(
+            @Param("playlistId") long playlistId,
+            @Param("q") String q,
+            Pageable pageable
+    );
 
     List<MusicTrack> findByPlaylistId(long playlistId);
 

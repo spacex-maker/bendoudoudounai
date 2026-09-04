@@ -1,6 +1,14 @@
 export type LyricLine = { timeMs: number; text: string };
 
+/** 原文 + 可选副行（翻译 / 罗马音） */
+export type LyricDisplayLine = {
+  timeMs: number;
+  primary: string;
+  secondary: string | null;
+};
+
 const META_LINE = /^\[[a-zA-Z]+:/;
+const PAIR_TOLERANCE_MS = 900;
 
 export function parseLrc(raw: string): LyricLine[] {
   const out: LyricLine[] = [];
@@ -35,7 +43,7 @@ export function parsePlainLines(raw: string, durationSec: number): LyricLine[] {
   }));
 }
 
-export function findActiveIndex(lines: LyricLine[], timeMs: number): number {
+export function findActiveIndex(lines: { timeMs: number }[], timeMs: number): number {
   if (lines.length === 0) return -1;
   let lo = 0;
   let hi = lines.length - 1;
@@ -59,10 +67,48 @@ export function linesFromRaw(raw: string | null, durationSeconds: number): Lyric
   return parsePlainLines(raw, durationSeconds);
 }
 
+/** 按时间戳把副歌词贴到主歌词上（网易云 tlyric / romalrc 通常时间对齐） */
+export function pairLyricLines(
+  primary: LyricLine[],
+  secondary: LyricLine[] | null | undefined
+): LyricDisplayLine[] {
+  if (primary.length === 0) return [];
+  if (!secondary || secondary.length === 0) {
+    return primary.map((p) => ({ timeMs: p.timeMs, primary: p.text, secondary: null }));
+  }
+  return primary.map((p) => {
+    let best: LyricLine | null = null;
+    let bestDist = Number.POSITIVE_INFINITY;
+    for (const s of secondary) {
+      const d = Math.abs(s.timeMs - p.timeMs);
+      if (d < bestDist) {
+        bestDist = d;
+        best = s;
+      }
+      if (s.timeMs > p.timeMs + PAIR_TOLERANCE_MS) break;
+    }
+    const sec =
+      best && bestDist <= PAIR_TOLERANCE_MS && best.text.trim() && best.text.trim() !== p.text.trim()
+        ? best.text
+        : null;
+    return { timeMs: p.timeMs, primary: p.text, secondary: sec };
+  });
+}
+
 /** 当前播放时间（秒）对应的一句；未到首句或无匹配返回 null */
 export function getActiveLyricText(lines: LyricLine[], timeSec: number): string | null {
   if (lines.length === 0) return null;
   const idx = findActiveIndex(lines, Math.max(0, timeSec) * 1000);
   if (idx < 0) return null;
   return lines[idx]!.text;
+}
+
+export function getActiveDisplayLyric(
+  lines: LyricDisplayLine[],
+  timeSec: number
+): LyricDisplayLine | null {
+  if (lines.length === 0) return null;
+  const idx = findActiveIndex(lines, Math.max(0, timeSec) * 1000);
+  if (idx < 0) return null;
+  return lines[idx] ?? null;
 }

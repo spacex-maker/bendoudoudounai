@@ -1,4 +1,5 @@
 import { useEffect, useId, useState } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import clsx from "clsx";
 import { mapApiError } from "../i18n/mapApiError";
@@ -51,6 +52,15 @@ export function CreatePlaylistModal({ open, onClose, onCreated, currentUserEmail
     setSubmitting(false);
     setInviteLookupBusy(false);
   }, [open, t]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !submitting) onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose, submitting]);
 
   if (!open) return null;
 
@@ -159,21 +169,22 @@ export function CreatePlaylistModal({ open, onClose, onCreated, currentUserEmail
     }
   };
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/45 p-4 backdrop-blur-md"
+      className="fixed inset-0 z-[130] flex items-end justify-center bg-zinc-950/65 p-0 backdrop-blur-md sm:items-center sm:p-4"
       role="presentation"
       onClick={(ev) => {
-        if (ev.target === ev.currentTarget) onClose();
+        if (ev.target === ev.currentTarget && !submitting) onClose();
       }}
     >
       <div
-        className="flex max-h-[min(90vh,640px)] w-full max-w-md flex-col overflow-hidden rounded-[28px] border border-white/[0.08] bg-zinc-900/72 text-zinc-200 shadow-[0_24px_64px_rgba(0,0,0,0.45)] ring-1 ring-white/[0.06] backdrop-blur-2xl backdrop-saturate-150"
+        className="flex max-h-[min(92dvh,40rem)] w-full max-w-md flex-col overflow-hidden rounded-t-3xl border border-white/[0.08] border-b-0 bg-[#1a1a1c] text-zinc-200 shadow-[0_24px_64px_rgba(0,0,0,0.55)] sm:rounded-3xl sm:border-b"
         role="dialog"
         aria-modal="true"
         aria-labelledby="create-pl-title"
         onClick={(ev) => ev.stopPropagation()}
       >
+        <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-white/15 sm:hidden" aria-hidden />
         <div className="flex shrink-0 items-center justify-between border-b border-white/[0.08] px-4 py-3">
           <h2 id="create-pl-title" className="flex items-center gap-2 text-sm font-medium">
             <ListMusic className="h-4 w-4 text-red-400/90" />
@@ -192,175 +203,178 @@ export function CreatePlaylistModal({ open, onClose, onCreated, currentUserEmail
 
         <form
           onSubmit={(e) => void submit(e)}
-          className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 text-xs"
+          className="flex min-h-0 flex-1 flex-col"
         >
-          <div>
-            <label htmlFor="create-pl-name" className="mb-1 block text-zinc-500">
-              {t("createPlaylist.nameLabel")} <span className="text-red-400/80">*</span>
-            </label>
-            <input
-              id="create-pl-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              disabled={submitting}
-              placeholder={t("createPlaylist.namePh")}
-              className="w-full rounded-full border border-white/10 bg-white/[0.06] px-3 py-2 text-sm text-zinc-200 outline-none placeholder:text-zinc-600 focus:border-red-900/40"
-            />
-          </div>
-
-          <div>
-            <span className="mb-1 block text-zinc-500">{t("createPlaylist.shareLabel")}</span>
-            <p className="mb-2 text-[11px] leading-snug text-zinc-600">
-              {t("createPlaylist.shareHint")}
-            </p>
-            <div className="flex gap-2">
+          <div className="custom-scrollbar min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4 text-xs">
+            <div>
+              <label htmlFor="create-pl-name" className="mb-1 block text-zinc-500">
+                {t("createPlaylist.nameLabel")} <span className="text-red-400/80">*</span>
+              </label>
               <input
-                type="email"
-                value={inviteDraft}
-                onChange={(e) => {
-                  setInviteDraft(e.target.value);
-                  setErr(null);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    void addInvitee();
-                  }
-                }}
-                placeholder={t("createPlaylist.emailPh")}
-                disabled={submitting || inviteLookupBusy}
-                className="min-w-0 flex-1 rounded-full border border-white/10 bg-white/[0.06] px-3 py-2 text-sm text-zinc-200 outline-none placeholder:text-zinc-600 focus:border-red-900/40"
+                id="create-pl-name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                disabled={submitting}
+                placeholder={t("createPlaylist.namePh")}
+                className="w-full rounded-full border border-white/10 bg-white/[0.06] px-3 py-2.5 text-sm text-zinc-200 outline-none placeholder:text-zinc-600 focus:border-red-900/40"
               />
-              <button
-                type="button"
-                onClick={() => void addInvitee()}
-                disabled={submitting || inviteLookupBusy}
-                className="inline-flex shrink-0 items-center gap-1 rounded-full border border-white/10 bg-white/[0.08] px-3 py-2 text-zinc-300 transition hover:bg-white/15 disabled:opacity-50"
-              >
-                <UserPlus className="h-3.5 w-3.5" />
-                {t("createPlaylist.add")}
-              </button>
-            </div>
-            {inviteLookupBusy ? (
-              <p className="mt-1.5 text-[11px] text-zinc-500">{t("playlistModal.inviteLookupChecking")}</p>
-            ) : null}
-            {invitees.length > 0 ? (
-              <ul className="mt-2 flex flex-wrap gap-1.5">
-                {invitees.map((em) => (
-                  <li
-                    key={em}
-                    className="inline-flex max-w-full items-center gap-1 rounded-full bg-red-950/50 py-1 pl-2.5 pr-1 text-[11px] text-red-100/95 ring-1 ring-red-900/40"
-                  >
-                    <span className="truncate">{em}</span>
-                    <button
-                      type="button"
-                      onClick={() => removeInvitee(em)}
-                      disabled={submitting}
-                      className="rounded-full p-0.5 text-red-200/80 hover:bg-red-900/60 hover:text-white disabled:opacity-50"
-                      aria-label={`移除 ${em}`}
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-          </div>
-
-          <div>
-            <span className="mb-2 block text-zinc-500">{t("createPlaylist.background")}</span>
-            <div className="flex flex-wrap gap-2">
-              {(
-                [
-                  { id: "none" as const, labelKey: "createPlaylist.bgDefault" as const },
-                  { id: "upload" as const, labelKey: "createPlaylist.bgUpload" as const },
-                  { id: "url" as const, labelKey: "createPlaylist.bgUrl" as const },
-                ] as const
-              ).map(({ id, labelKey: lk }) => (
-                <button
-                  key={id}
-                  type="button"
-                  disabled={submitting}
-                  onClick={() => {
-                    setWallpaperMode(id);
-                    if (id !== "upload") setWallpaperFile(null);
-                    if (id !== "url") setWallpaperUrl("");
-                    setErr(null);
-                  }}
-                  className={clsx(
-                    "rounded-full px-3 py-1.5 text-[11px] transition",
-                    wallpaperMode === id
-                      ? "bg-red-900/70 text-white ring-1 ring-red-700/50"
-                      : "border border-white/10 bg-white/[0.04] text-zinc-400 hover:bg-white/[0.08]"
-                  )}
-                >
-                  {t(lk)}
-                </button>
-              ))}
             </div>
 
-            {wallpaperMode === "upload" ? (
-              <div className="mt-3">
+            <div>
+              <span className="mb-1 block text-zinc-500">{t("createPlaylist.shareLabel")}</span>
+              <p className="mb-2 text-[11px] leading-snug text-zinc-600">
+                {t("createPlaylist.shareHint")}
+              </p>
+              <div className="flex gap-2">
                 <input
-                  id={fileInputId}
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp,image/gif"
-                  className="sr-only"
-                  disabled={submitting}
-                  onChange={onWallpaperFile}
-                />
-                <label
-                  htmlFor={fileInputId}
-                  className={clsx(
-                    "inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.06] px-3 py-2 text-zinc-300 transition hover:bg-white/10",
-                    submitting && "pointer-events-none opacity-50"
-                  )}
-                >
-                  <ImageIcon className="h-3.5 w-3.5" />
-                  {wallpaperFile ? wallpaperFile.name : t("createPlaylist.chooseImage")}
-                </label>
-              </div>
-            ) : null}
-
-            {wallpaperMode === "url" ? (
-              <div className="relative mt-3">
-                <Link2 className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500" />
-                <input
-                  type="url"
-                  value={wallpaperUrl}
+                  type="email"
+                  value={inviteDraft}
                   onChange={(e) => {
-                    setWallpaperUrl(e.target.value);
+                    setInviteDraft(e.target.value);
                     setErr(null);
                   }}
-                  placeholder="https://…"
-                  disabled={submitting}
-                  className="w-full rounded-full border border-white/10 bg-white/[0.06] py-2 pl-8 pr-3 text-sm text-zinc-200 outline-none placeholder:text-zinc-600 focus:border-red-900/40"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      void addInvitee();
+                    }
+                  }}
+                  placeholder={t("createPlaylist.emailPh")}
+                  disabled={submitting || inviteLookupBusy}
+                  className="min-w-0 flex-1 rounded-full border border-white/10 bg-white/[0.06] px-3 py-2.5 text-sm text-zinc-200 outline-none placeholder:text-zinc-600 focus:border-red-900/40"
                 />
+                <button
+                  type="button"
+                  onClick={() => void addInvitee()}
+                  disabled={submitting || inviteLookupBusy}
+                  className="inline-flex shrink-0 items-center gap-1 rounded-full border border-white/10 bg-white/[0.08] px-3 py-2.5 text-zinc-300 transition hover:bg-white/15 disabled:opacity-50"
+                >
+                  <UserPlus className="h-3.5 w-3.5" />
+                  {t("createPlaylist.add")}
+                </button>
               </div>
-            ) : null}
+              {inviteLookupBusy ? (
+                <p className="mt-1.5 text-[11px] text-zinc-500">{t("playlistModal.inviteLookupChecking")}</p>
+              ) : null}
+              {invitees.length > 0 ? (
+                <ul className="mt-2 flex flex-wrap gap-1.5">
+                  {invitees.map((em) => (
+                    <li
+                      key={em}
+                      className="inline-flex max-w-full items-center gap-1 rounded-full bg-red-950/50 py-1 pl-2.5 pr-1 text-[11px] text-red-100/95 ring-1 ring-red-900/40"
+                    >
+                      <span className="truncate">{em}</span>
+                      <button
+                        type="button"
+                        onClick={() => removeInvitee(em)}
+                        disabled={submitting}
+                        className="rounded-full p-0.5 text-red-200/80 hover:bg-red-900/60 hover:text-white disabled:opacity-50"
+                        aria-label={`移除 ${em}`}
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+
+            <div>
+              <span className="mb-2 block text-zinc-500">{t("createPlaylist.background")}</span>
+              <div className="flex flex-wrap gap-2">
+                {(
+                  [
+                    { id: "none" as const, labelKey: "createPlaylist.bgDefault" as const },
+                    { id: "upload" as const, labelKey: "createPlaylist.bgUpload" as const },
+                    { id: "url" as const, labelKey: "createPlaylist.bgUrl" as const },
+                  ] as const
+                ).map(({ id, labelKey: lk }) => (
+                  <button
+                    key={id}
+                    type="button"
+                    disabled={submitting}
+                    onClick={() => {
+                      setWallpaperMode(id);
+                      if (id !== "upload") setWallpaperFile(null);
+                      if (id !== "url") setWallpaperUrl("");
+                      setErr(null);
+                    }}
+                    className={clsx(
+                      "rounded-full px-3 py-1.5 text-[11px] transition",
+                      wallpaperMode === id
+                        ? "bg-red-900/70 text-white ring-1 ring-red-700/50"
+                        : "border border-white/10 bg-white/[0.04] text-zinc-400 hover:bg-white/[0.08]"
+                    )}
+                  >
+                    {t(lk)}
+                  </button>
+                ))}
+              </div>
+
+              {wallpaperMode === "upload" ? (
+                <div className="mt-3">
+                  <input
+                    id={fileInputId}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/gif"
+                    className="sr-only"
+                    disabled={submitting}
+                    onChange={onWallpaperFile}
+                  />
+                  <label
+                    htmlFor={fileInputId}
+                    className={clsx(
+                      "inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.06] px-3 py-2 text-zinc-300 transition hover:bg-white/10",
+                      submitting && "pointer-events-none opacity-50"
+                    )}
+                  >
+                    <ImageIcon className="h-3.5 w-3.5" />
+                    {wallpaperFile ? wallpaperFile.name : t("createPlaylist.chooseImage")}
+                  </label>
+                </div>
+              ) : null}
+
+              {wallpaperMode === "url" ? (
+                <div className="relative mt-3">
+                  <Link2 className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500" />
+                  <input
+                    type="url"
+                    value={wallpaperUrl}
+                    onChange={(e) => {
+                      setWallpaperUrl(e.target.value);
+                      setErr(null);
+                    }}
+                    placeholder="https://…"
+                    disabled={submitting}
+                    className="w-full rounded-full border border-white/10 bg-white/[0.06] py-2.5 pl-8 pr-3 text-sm text-zinc-200 outline-none placeholder:text-zinc-600 focus:border-red-900/40"
+                  />
+                </div>
+              ) : null}
+            </div>
+
+            {err ? <p className="text-[11px] text-red-400/90">{err}</p> : null}
           </div>
 
-          {err ? <p className="text-[11px] text-red-400/90">{err}</p> : null}
-
-          <div className="flex justify-end gap-2 border-t border-white/[0.06] pt-4">
+          <div className="flex shrink-0 justify-end gap-2 border-t border-white/[0.06] bg-[#1a1a1c]/95 px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] backdrop-blur">
             <button
               type="button"
               onClick={onClose}
               disabled={submitting}
-              className="rounded-full border border-white/10 px-4 py-2 text-zinc-400 transition hover:bg-white/5 disabled:opacity-50"
+              className="rounded-full border border-white/10 px-4 py-2.5 text-sm text-zinc-400 transition hover:bg-white/5 disabled:opacity-50"
             >
               {t("createPlaylist.cancel")}
             </button>
             <button
               type="submit"
               disabled={submitting}
-              className="rounded-full bg-red-900/80 px-4 py-2 text-white transition hover:bg-red-800 disabled:opacity-50"
+              className="rounded-full bg-red-900/80 px-4 py-2.5 text-sm text-white transition hover:bg-red-800 disabled:opacity-50"
             >
               {submitting ? t("createPlaylist.creating") : t("createPlaylist.create")}
             </button>
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

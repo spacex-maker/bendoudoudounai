@@ -104,20 +104,42 @@
   }
 
   /*
-   * ???????????????? padding??????????????
-   * ??? scrollbar-gutter: stable ?????
+   * 滚动条可见，但不挤占内容宽度：
+   * 经典滚动条仍会占 clientWidth，内容层加宽同等宽度并 overflow-x 裁切，
+   * 视觉上列表仍铺满，滚动条叠在右侧边缘上。
    */
   .scrollbar-overlay {
+    --sb-size: 8px;
+    overflow-x: hidden;
+    overflow-y: auto;
     scrollbar-gutter: auto;
     scrollbar-width: thin;
+    scrollbar-color: rgba(161, 161, 170, 0.65) transparent;
   }
 
   .scrollbar-overlay::-webkit-scrollbar {
-    width: 6px;
+    width: var(--sb-size);
+    height: var(--sb-size);
   }
 
   .scrollbar-overlay::-webkit-scrollbar-track {
     background: transparent;
+  }
+
+  .scrollbar-overlay::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, rgba(212, 212, 216, 0.75), rgba(113, 113, 122, 0.72));
+    border-radius: 9999px;
+    border: 1px solid rgba(24, 24, 27, 0.82);
+  }
+
+  .scrollbar-overlay::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, rgba(228, 228, 231, 0.9), rgba(161, 161, 170, 0.88));
+  }
+
+  .scrollbar-overlay-content {
+    box-sizing: border-box;
+    width: calc(100% + var(--sb-size));
+    max-width: none;
   }
 
   /* ????????????????????????????? */
