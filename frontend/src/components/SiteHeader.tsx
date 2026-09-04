@@ -126,11 +126,8 @@ export function SiteHeader({ className, tone = "light" }: Props) {
       </Link>
     );
 
-  const mobileItemClass = (active?: boolean) =>
-    clsx(
-      "flex min-h-[48px] w-full items-center gap-3 px-4 py-3.5 text-left text-[15px] font-medium transition active:bg-ink-900/5",
-      active ? "bg-ink-900/[0.06] text-ink-900" : "text-ink-800 hover:bg-ink-900/[0.04]"
-    );
+  const mobileNavTileClass =
+    "flex min-h-[3.25rem] items-center justify-center rounded-2xl bg-ink-900/[0.04] px-3 text-center text-[14px] font-medium text-ink-800 transition active:bg-ink-900/[0.08]";
 
   const authed = state.status === "authed";
   const authLoading = state.status === "loading";
@@ -138,6 +135,13 @@ export function SiteHeader({ className, tone = "light" }: Props) {
   const displayName = user?.displayName?.trim() || t("userProfile.noName");
   const userMenuItemClass =
     "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-ink-800 transition hover:bg-ink-900/[0.05]";
+
+  const sectionLinks = [
+    ["features", t("nav.features")],
+    ["immersive", t("nav.immersive")],
+    ["modules", t("nav.modules")],
+    ["steps", t("nav.steps")],
+  ] as const;
 
   const onLogout = () => {
     logout();
@@ -212,8 +216,9 @@ export function SiteHeader({ className, tone = "light" }: Props) {
           {/* 桌面：语言 + 账号；移动：只留菜单（账号/语言进抽屉） */}
           <div className="hidden items-center gap-2 md:flex">
             <LanguageSwitch
-              className={clsx("shrink-0", dark ? "border-white/15" : "border-ink-900/10")}
+              className="shrink-0"
               compact
+              tone={dark ? "dark" : "light"}
               aria-label={t("lang.label")}
             />
 
@@ -355,53 +360,58 @@ export function SiteHeader({ className, tone = "light" }: Props) {
             )}
           </div>
 
-          {/* 移动端：已登录只露头像入口感；主交互进抽屉 */}
-          <div className="flex items-center gap-1.5 md:hidden">
-            {!authLoading && authed && user ? (
-              <button
-                type="button"
-                onClick={() => setMobileMenuOpen(true)}
-                className="rounded-full p-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-netease-accent/35"
-                aria-label={t("userProfile.menuAria")}
-              >
+          {/* 移动端：头像 + 菜单合成一体控件 */}
+          <div ref={mobileMenuRef} className="md:hidden">
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen((v) => !v)}
+              className={clsx(
+                "inline-flex h-10 items-center gap-0.5 rounded-full border p-0.5 transition",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-netease-accent/35",
+                dark
+                  ? mobileMenuOpen
+                    ? "border-white/25 bg-white/15 text-white"
+                    : "border-white/15 bg-white/5 text-white/85 active:bg-white/10"
+                  : mobileMenuOpen
+                    ? "border-ink-900/20 bg-ink-900/[0.06] text-ink-900"
+                    : "border-ink-900/10 bg-white/70 text-ink-800 active:bg-white"
+              )}
+              aria-expanded={mobileMenuOpen}
+              aria-haspopup="dialog"
+              aria-label={mobileMenuOpen ? t("nav.closeMenu") : t("nav.menuAria")}
+            >
+              {authLoading ? (
+                <span
+                  className={clsx(
+                    "h-8 w-8 shrink-0 animate-pulse rounded-full",
+                    dark ? "bg-white/15" : "bg-ink-200/70"
+                  )}
+                  aria-hidden
+                />
+              ) : authed && user ? (
                 <UserAvatar
                   user={user}
                   showLevelBadge={false}
                   className={clsx(
-                    "h-9 w-9 shrink-0 ring-2",
-                    dark
-                      ? "ring-[#0b0d10] shadow-[0_0_0_1px_rgba(255,255,255,0.15)]"
-                      : "ring-white shadow-[0_0_0_1px_rgba(26,31,38,0.08)]"
+                    "h-8 w-8 shrink-0 ring-1",
+                    dark ? "ring-white/20" : "ring-ink-900/10"
                   )}
                 />
-              </button>
-            ) : null}
-
-            <div ref={mobileMenuRef}>
-              <button
-                type="button"
-                onClick={() => setMobileMenuOpen((v) => !v)}
+              ) : null}
+              <span
                 className={clsx(
-                  "inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border transition",
-                  dark
-                    ? mobileMenuOpen
-                      ? "border-white/25 bg-white/15 text-white"
-                      : "border-white/15 bg-white/5 text-white/85 hover:bg-white/10"
-                    : mobileMenuOpen
-                      ? "border-ink-900/20 bg-ink-900/5 text-ink-900"
-                      : "border-ink-900/10 bg-white/70 text-ink-800 hover:bg-white"
+                  "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full",
+                  dark ? "text-white/90" : "text-ink-800"
                 )}
-                aria-expanded={mobileMenuOpen}
-                aria-haspopup="dialog"
-                aria-label={mobileMenuOpen ? t("nav.closeMenu") : t("nav.menuAria")}
+                aria-hidden
               >
                 {mobileMenuOpen ? (
-                  <X className="h-5 w-5" strokeWidth={2} aria-hidden />
+                  <X className="h-[1.15rem] w-[1.15rem]" strokeWidth={2.1} />
                 ) : (
-                  <Menu className="h-5 w-5" strokeWidth={2} aria-hidden />
+                  <Menu className="h-[1.15rem] w-[1.15rem]" strokeWidth={2.1} />
                 )}
-              </button>
-            </div>
+              </span>
+            </button>
           </div>
 
           {mobileMenuOpen
@@ -409,7 +419,7 @@ export function SiteHeader({ className, tone = "light" }: Props) {
                 <div className="fixed inset-0 z-[100] md:hidden">
                   <button
                     type="button"
-                    className="absolute inset-0 bg-ink-900/50 backdrop-blur-[2px]"
+                    className="absolute inset-0 bg-ink-900/45 backdrop-blur-[3px]"
                     aria-hidden
                     tabIndex={-1}
                     onClick={closeMobileMenu}
@@ -420,50 +430,51 @@ export function SiteHeader({ className, tone = "light" }: Props) {
                     aria-modal="true"
                     aria-labelledby="mobile-nav-sheet-title"
                     className={clsx(
-                      "absolute inset-x-0 top-0 z-10 flex max-h-[min(100dvh,40rem)] flex-col overflow-hidden rounded-b-[1.75rem] border-b border-ink-900/10 bg-ink-50 shadow-2xl transition-transform duration-300 ease-[cubic-bezier(0.33,1,0.68,1)]",
+                      "absolute inset-x-0 top-0 z-10 overflow-hidden rounded-b-[1.75rem] border-b border-ink-900/10 bg-[#f7f8fa] shadow-[0_24px_48px_-20px_rgba(15,18,24,0.45)] transition-transform duration-300 ease-[cubic-bezier(0.33,1,0.68,1)]",
                       "pt-[env(safe-area-inset-top,0px)]",
                       mobileSheetEntered ? "translate-y-0" : "-translate-y-full"
                     )}
                   >
-                    <div className="flex shrink-0 items-center justify-between gap-3 border-b border-ink-900/10 px-4 py-3">
-                      <h2
-                        id="mobile-nav-sheet-title"
-                        className="font-display text-lg font-bold tracking-tight text-ink-900"
-                      >
-                        {t("nav.menuSheetTitle")}
-                      </h2>
-                      <button
-                        type="button"
-                        onClick={closeMobileMenu}
-                        className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-ink-900/10 bg-white text-ink-800"
-                        aria-label={t("nav.closeMenu")}
-                      >
-                        <X className="h-5 w-5" strokeWidth={2} aria-hidden />
-                      </button>
-                    </div>
+                    <div className="px-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] pt-3">
+                      <div className="mb-4 flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <p
+                            id="mobile-nav-sheet-title"
+                            className="font-display text-[17px] font-bold tracking-tight text-ink-900"
+                          >
+                            {PRODUCT_NAME}
+                          </p>
+                          <p className="mt-0.5 text-[11px] text-ink-700/50">{t("nav.menuSheetTitle")}</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={closeMobileMenu}
+                          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-ink-900/10 bg-white text-ink-700"
+                          aria-label={t("nav.closeMenu")}
+                        >
+                          <X className="h-4 w-4" strokeWidth={2.25} aria-hidden />
+                        </button>
+                      </div>
 
-                    <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain pb-[calc(1rem+env(safe-area-inset-bottom,0px))]">
                       {authed && user ? (
-                        <div className="border-b border-ink-900/10 px-4 py-4">
-                          <div className="flex items-center gap-3">
-                            <UserAvatar user={user} className="h-11 w-11 shrink-0 ring-2 ring-white" />
-                            <div className="min-w-0 flex-1">
-                              <div className="truncate text-sm font-semibold text-ink-900">{displayName}</div>
-                              <div className="mt-0.5 truncate text-[11px] text-ink-700/55">{user.email}</div>
-                            </div>
+                        <div className="mb-4 flex items-center gap-3 rounded-2xl bg-white px-3 py-2.5 ring-1 ring-ink-900/[0.06]">
+                          <UserAvatar user={user} className="h-10 w-10 shrink-0 ring-2 ring-white" />
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate text-[13px] font-semibold text-ink-900">{displayName}</div>
+                            <div className="mt-0.5 truncate text-[11px] text-ink-700/50">{user.email}</div>
                           </div>
-                          <div className="mt-3 grid grid-cols-2 gap-2">
+                          <div className="flex shrink-0 gap-1.5">
                             <Link
                               to="/account/profile"
                               onClick={closeMobileMenu}
-                              className="rounded-xl bg-ink-900/[0.04] px-3 py-2.5 text-center text-xs font-medium text-ink-800"
+                              className="rounded-full bg-ink-900/[0.05] px-2.5 py-1.5 text-[11px] font-medium text-ink-800"
                             >
                               {t("userProfile.title")}
                             </Link>
                             <Link
                               to="/account/privacy"
                               onClick={closeMobileMenu}
-                              className="rounded-xl bg-ink-900/[0.04] px-3 py-2.5 text-center text-xs font-medium text-ink-800"
+                              className="rounded-full bg-ink-900/[0.05] px-2.5 py-1.5 text-[11px] font-medium text-ink-800"
                             >
                               {t("userProfile.privacy")}
                             </Link>
@@ -471,20 +482,13 @@ export function SiteHeader({ className, tone = "light" }: Props) {
                         </div>
                       ) : null}
 
-                      <nav aria-label={t("nav.menuSheetTitle")}>
-                        {(
-                          [
-                            ["features", t("nav.features")],
-                            ["immersive", t("nav.immersive")],
-                            ["modules", t("nav.modules")],
-                            ["steps", t("nav.steps")],
-                          ] as const
-                        ).map(([id, label]) =>
+                      <nav aria-label={t("nav.menuSheetTitle")} className="grid grid-cols-2 gap-2">
+                        {sectionLinks.map(([id, label]) =>
                           isHome ? (
                             <button
                               key={id}
                               type="button"
-                              className={mobileItemClass()}
+                              className={mobileNavTileClass}
                               onClick={() => {
                                 scrollToId(id);
                                 closeMobileMenu();
@@ -496,69 +500,75 @@ export function SiteHeader({ className, tone = "light" }: Props) {
                             <Link
                               key={id}
                               to={hashLink(id)}
-                              className={mobileItemClass()}
+                              className={mobileNavTileClass}
                               onClick={closeMobileMenu}
                             >
                               {label}
                             </Link>
                           )
                         )}
-                        <Link
-                          to={musicHref}
-                          state={authed ? undefined : { from: "/music" }}
-                          className={mobileItemClass(isMusic)}
-                          aria-current={isMusic ? "page" : undefined}
-                          onClick={closeMobileMenu}
-                        >
-                          <Music2 className="h-5 w-5 shrink-0 opacity-80" aria-hidden />
-                          {t("nav.enterMusic")}
-                        </Link>
                       </nav>
 
-                      <div className="mt-2 border-t border-ink-900/10 px-4 py-4">
-                        <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.14em] text-ink-700/45">
-                          {t("lang.label")}
-                        </p>
+                      <Link
+                        to={musicHref}
+                        state={authed ? undefined : { from: "/music" }}
+                        onClick={closeMobileMenu}
+                        className={clsx(
+                          "mt-3 flex min-h-[3rem] w-full items-center justify-center gap-2 rounded-2xl text-[15px] font-semibold transition",
+                          isMusic
+                            ? "bg-netease-accent text-white"
+                            : "bg-ink-900 text-white active:bg-ink-800"
+                        )}
+                      >
+                        <Music2 className="h-4 w-4 shrink-0 opacity-90" aria-hidden />
+                        {t("nav.enterMusic")}
+                      </Link>
+
+                      <div className="mt-4 flex items-center gap-2">
                         <LanguageSwitch
-                          className="border-ink-900/10 bg-ink-900/[0.03]"
+                          className="shrink-0"
                           compact
+                          tone="light"
                           aria-label={t("lang.label")}
                         />
-                      </div>
-
-                      <div className="border-t border-ink-900/10 px-4 py-4">
-                        {!authLoading && !authed ? (
-                          <Link
-                            to="/login"
-                            onClick={closeMobileMenu}
-                            className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl bg-ink-900 px-4 text-sm font-semibold text-white"
-                          >
-                            <LogIn className="h-4 w-4" />
-                            {t("nav.login")}
-                          </Link>
-                        ) : null}
-                        {authed && user ? (
-                          <div className="space-y-2">
-                            {userIsAdmin(user) ? (
-                              <Link
-                                to="/admin"
-                                onClick={closeMobileMenu}
-                                className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl border border-ink-900/10 bg-white px-4 text-sm font-medium text-ink-800"
-                              >
-                                <LayoutDashboard className="h-4 w-4" />
-                                {t("userProfile.openAdmin")}
-                              </Link>
-                            ) : null}
-                            <button
-                              type="button"
-                              onClick={onLogout}
-                              className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl border border-netease-accent/20 bg-red-50 px-4 text-sm font-medium text-netease-accent"
+                        <div className="min-w-0 flex-1">
+                          {authLoading ? (
+                            <div className="h-10 animate-pulse rounded-2xl bg-ink-900/5" aria-hidden />
+                          ) : !authed ? (
+                            <Link
+                              to="/login"
+                              onClick={closeMobileMenu}
+                              className="flex h-10 w-full items-center justify-center gap-1.5 rounded-2xl border border-ink-900/10 bg-white text-[13px] font-semibold text-ink-900"
                             >
-                              <LogOut className="h-4 w-4" />
-                              {t("userProfile.logout")}
-                            </button>
-                          </div>
-                        ) : null}
+                              <LogIn className="h-3.5 w-3.5" />
+                              {t("nav.login")}
+                            </Link>
+                          ) : (
+                            <div className="flex gap-2">
+                              {user && userIsAdmin(user) ? (
+                                <Link
+                                  to="/admin"
+                                  onClick={closeMobileMenu}
+                                  className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-2xl border border-ink-900/10 bg-white text-[12px] font-medium text-ink-800"
+                                >
+                                  <LayoutDashboard className="h-3.5 w-3.5" />
+                                  {t("admin.consoleLink")}
+                                </Link>
+                              ) : null}
+                              <button
+                                type="button"
+                                onClick={onLogout}
+                                className={clsx(
+                                  "flex h-10 items-center justify-center gap-1.5 rounded-2xl border border-netease-accent/20 bg-red-50 text-[12px] font-medium text-netease-accent",
+                                  user && userIsAdmin(user) ? "flex-1" : "w-full"
+                                )}
+                              >
+                                <LogOut className="h-3.5 w-3.5" />
+                                {t("userProfile.logout")}
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>

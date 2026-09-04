@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { ImageIcon, Link2, Trash2, UserMinus, X, Users, Music, PlayCircle, Calendar, ShieldCheck, MailPlus } from "lucide-react";
 import clsx from "clsx";
@@ -264,14 +265,16 @@ export function PlaylistSettingsModal({ open, onClose, playlist, onSuccess }: Pr
 
   return (
     <>
+      {createPortal(
       <div
-        className="fixed inset-0 z-[60] flex items-end justify-center bg-zinc-950/65 p-0 backdrop-blur-md sm:items-center sm:p-5"
+        className="fixed inset-0 z-[130] flex items-end justify-center bg-zinc-950/65 p-0 backdrop-blur-md sm:items-center sm:p-5"
         onClick={(e) => e.target === e.currentTarget && onClose()}
       >
         <div
-          className="relative flex h-[100dvh] w-full max-w-4xl flex-col overflow-hidden rounded-none border-0 bg-[#141416] shadow-[0_24px_80px_-20px_rgba(0,0,0,0.75)] sm:h-auto sm:max-h-[min(90dvh,100dvh-2.5rem)] sm:rounded-3xl sm:border sm:border-white/10"
+          className="relative flex max-h-[min(94dvh,100dvh)] w-full max-w-4xl flex-col overflow-hidden rounded-t-3xl border border-white/10 border-b-0 bg-[#141416] shadow-[0_24px_80px_-20px_rgba(0,0,0,0.75)] sm:h-auto sm:max-h-[min(90dvh,100dvh-2.5rem)] sm:rounded-3xl sm:border-b"
           onClick={(e) => e.stopPropagation()}
         >
+          <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-white/15 sm:hidden" aria-hidden />
           <header className="relative shrink-0 overflow-hidden border-b border-white/[0.06]">
             <div
               className="pointer-events-none absolute inset-0 opacity-80"
@@ -593,7 +596,9 @@ export function PlaylistSettingsModal({ open, onClose, playlist, onSuccess }: Pr
             </div>
           </div>
         </div>
-      </div>
+      </div>,
+      document.body
+      )}
 
       <ConfirmModal
         open={memberToRemove != null}

@@ -1,11 +1,15 @@
 import { useEffect, useId, useState } from "react";
-import { Camera, KeyRound } from "lucide-react";
+import { Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+import { ArrowLeft, Camera, KeyRound, ShieldCheck } from "lucide-react";
 import { SiteHeader } from "../../components/SiteHeader";
 import { useAuthedUser, useAuth } from "../../auth/AuthContext";
 import { changeMyPassword, updateMyProfile, uploadUserAvatar } from "../../api/client";
 import { UserAvatar } from "../../components/UserAvatar";
+import { mapApiError } from "../../i18n/mapApiError";
 
 export function ProfilePage() {
+  const { t } = useTranslation();
   const user = useAuthedUser();
   const { refreshMe } = useAuth();
   const fileId = useId();
@@ -18,12 +22,13 @@ export function ProfilePage() {
   const [oldPwd, setOldPwd] = useState("");
   const [newPwd, setNewPwd] = useState("");
 
-  if (!user) return null;
-
   useEffect(() => {
+    if (!user) return;
     setDisplayName(user.displayName ?? "");
     setGender((user.gender ?? "UNKNOWN") as "UNKNOWN" | "MALE" | "FEMALE");
-  }, [user.displayName, user.gender]);
+  }, [user]);
+
+  if (!user) return null;
 
   const onAvatar = async (f: File) => {
     setBusy(true);
@@ -33,9 +38,9 @@ export function ProfilePage() {
       await uploadUserAvatar(f);
       await refreshMe();
       setImageVersion((v) => v + 1);
-      setOk("头像已更新");
+      setOk(t("account.avatarUpdated"));
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "头像更新失败");
+      setErr(e instanceof Error ? e.message : t("account.avatarFail"));
     } finally {
       setBusy(false);
     }
@@ -46,7 +51,7 @@ export function ProfilePage() {
     setErr(null);
     setOk(null);
     if (newPwd.length < 6) {
-      setErr("新密码至少 6 位");
+      setErr(t("account.passwordTooShort"));
       return;
     }
     setBusy(true);
@@ -54,9 +59,9 @@ export function ProfilePage() {
       await changeMyPassword(oldPwd, newPwd);
       setOldPwd("");
       setNewPwd("");
-      setOk("密码修改成功");
+      setOk(t("userProfile.passwordChangeOk"));
     } catch (ex) {
-      setErr(ex instanceof Error ? ex.message : "密码修改失败");
+      setErr(mapApiError(t, ex) || t("account.passwordFail"));
     } finally {
       setBusy(false);
     }
@@ -73,47 +78,72 @@ export function ProfilePage() {
         gender,
       });
       await refreshMe();
-      setOk("个人信息已更新");
+      setOk(t("account.profileUpdated"));
     } catch (ex) {
-      setErr(ex instanceof Error ? ex.message : "个人信息更新失败");
+      setErr(mapApiError(t, ex) || t("account.profileFail"));
     } finally {
       setBusy(false);
     }
   };
 
   const currentDisplayName = user.displayName ?? "";
-  const currentGender = user.gender ?? "UNKNOWN";
+  const currentGender = (user.gender ?? "UNKNOWN") as "UNKNOWN" | "MALE" | "FEMALE";
+
+  const fieldClass =
+    "mt-1.5 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm text-zinc-800 outline-none transition placeholder:text-zinc-400 focus:border-zinc-400 focus:ring-2 focus:ring-zinc-900/10";
 
   return (
-    <div className="relative w-full bg-romantic-mesh text-stone-800">
+    <div className="relative min-h-dvh w-full bg-[#f4f5f7] text-zinc-800">
+      <div
+        className="pointer-events-none absolute inset-x-0 top-0 h-72 bg-[radial-gradient(ellipse_80%_60%_at_50%_-10%,rgba(26,31,38,0.08),transparent)]"
+        aria-hidden
+      />
       <SiteHeader />
-      <main className="mx-auto max-w-5xl px-4 pb-14 pt-28 sm:px-6 sm:pt-32">
-        <section className="overflow-hidden rounded-3xl border border-white/50 bg-white/65 p-6 shadow-[0_18px_50px_rgba(244,114,182,0.16)] backdrop-blur-md sm:p-8">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <h1 className="text-xl font-semibold text-warm-700 sm:text-2xl">个人信息</h1>
-              <p className="mt-1 text-sm text-stone-600">在这里可以设置昵称、性别、头像和登录密码。</p>
-            </div>
-            <span className="rounded-full border border-rose-200/70 bg-rose-50/70 px-3 py-1 text-xs font-medium text-rose-500">
-              仅自己可见
-            </span>
+      <main className="relative mx-auto max-w-3xl px-4 pb-10 pt-24 sm:px-6 sm:pb-12 sm:pt-28">
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <Link
+              to="/music"
+              className="inline-flex items-center gap-1 text-[12px] font-medium text-zinc-500 transition hover:text-zinc-800"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+              {t("account.backToMusic")}
+            </Link>
+            <h1 className="mt-2 font-display text-2xl font-bold tracking-tight text-zinc-900">
+              {t("userProfile.title")}
+            </h1>
+            <p className="mt-1 text-sm text-zinc-500">{t("account.profileSubtitle")}</p>
           </div>
+          <div className="flex items-center gap-2">
+            <span className="rounded-full border border-zinc-200 bg-white px-2.5 py-1 text-[11px] font-medium text-zinc-500">
+              {t("account.privateOnly")}
+            </span>
+            <Link
+              to="/account/privacy"
+              className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-[12px] font-medium text-zinc-700 transition hover:bg-zinc-50"
+            >
+              <ShieldCheck className="h-3.5 w-3.5" />
+              {t("userProfile.privacy")}
+            </Link>
+          </div>
+        </div>
 
-          <div className="mt-6 grid gap-4 md:grid-cols-[280px_minmax(0,1fr)]">
-            <div className="rounded-2xl border border-white/70 bg-white/80 p-5">
-              <div className="flex items-center gap-4">
-                <UserAvatar user={user} className="h-20 w-20 shadow-sm ring-2 ring-rose-100" imageVersion={imageVersion} />
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-stone-800">{user.displayName?.trim() || "未设置昵称"}</p>
-                  <p className="mt-1 truncate text-xs text-stone-500">{user.email}</p>
-                </div>
-              </div>
-              <div className="mt-4">
+        <div className="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white shadow-[0_12px_40px_-24px_rgba(15,18,24,0.35)]">
+          <div className="border-b border-zinc-100 px-5 py-5 sm:px-6">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+              <div className="relative shrink-0 self-start">
+                <UserAvatar
+                  user={user}
+                  className="h-[4.5rem] w-[4.5rem] text-xl ring-2 ring-zinc-100"
+                  imageVersion={imageVersion}
+                  showLevelBadge={false}
+                />
                 <input
                   id={fileId}
                   type="file"
                   accept="image/jpeg,image/png,image/webp"
                   className="sr-only"
+                  disabled={busy}
                   onChange={(e) => {
                     const f = e.target.files?.[0];
                     e.target.value = "";
@@ -122,115 +152,130 @@ export function ProfilePage() {
                 />
                 <label
                   htmlFor={fileId}
-                  className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-rose-200 bg-white px-3 py-1.5 text-sm font-medium text-rose-500 transition hover:border-rose-300 hover:bg-rose-50"
+                  className="absolute -bottom-1 -right-1 inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border border-zinc-200 bg-zinc-900 text-white shadow-sm transition hover:bg-zinc-800"
+                  title={t("userProfile.changeAvatar")}
                 >
-                  <Camera className="h-4 w-4" />
-                  更换头像
+                  <Camera className="h-3.5 w-3.5" />
+                  <span className="sr-only">{t("userProfile.changeAvatar")}</span>
                 </label>
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-lg font-semibold tracking-tight text-zinc-900">
+                  {user.displayName?.trim() || t("userProfile.noName")}
+                </p>
+                <p className="mt-0.5 truncate text-sm text-zinc-500">{user.email}</p>
+                <p className="mt-2 text-[12px] text-zinc-400">{t("account.avatarClickHint")}</p>
               </div>
             </div>
-
-            <form className="rounded-2xl border border-white/70 bg-white/80 p-5" onSubmit={(e) => void onSaveProfile(e)}>
-              <h2 className="text-base font-semibold text-warm-700">资料设置</h2>
-              <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                <label className="text-sm text-stone-600">
-                  昵称
-                  <input
-                    type="text"
-                    value={displayName}
-                    onChange={(e) => setDisplayName(e.target.value)}
-                    placeholder="昵称（可选）"
-                    className="mt-1 w-full rounded-xl border border-rose-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-rose-300 focus:ring-2 focus:ring-rose-100"
-                  />
-                </label>
-                <label className="text-sm text-stone-600">
-                  性别
-                  <div className="mt-1 grid grid-cols-3 gap-1 rounded-xl border border-rose-200 bg-rose-50/55 p-1">
-                    {[
-                      { key: "UNKNOWN", label: "保密", tone: "text-stone-600" },
-                      { key: "MALE", label: "男 ♂", tone: "text-sky-600" },
-                      { key: "FEMALE", label: "女 ♀", tone: "text-pink-600" },
-                    ].map((item) => {
-                      const active = gender === item.key;
-                      return (
-                        <button
-                          key={item.key}
-                          type="button"
-                          onClick={() => setGender(item.key as "UNKNOWN" | "MALE" | "FEMALE")}
-                          className={[
-                            "rounded-lg px-2 py-2 text-xs font-medium transition",
-                            active
-                              ? "bg-white shadow-sm ring-1 ring-rose-200"
-                              : "text-stone-500 hover:bg-white/70",
-                            active ? item.tone : "",
-                          ].join(" ")}
-                        >
-                          {item.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </label>
-              </div>
-              <div className="mt-4 flex items-center gap-2">
-                <button
-                  type="submit"
-                  disabled={busy}
-                  className="rounded-full bg-gradient-to-r from-rose-500 to-pink-500 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:opacity-90 disabled:opacity-50"
-                >
-                  保存个人信息
-                </button>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => {
-                    setDisplayName(currentDisplayName);
-                    setGender(currentGender as "UNKNOWN" | "MALE" | "FEMALE");
-                  }}
-                  className="rounded-full border border-rose-200 bg-white px-4 py-2 text-sm text-rose-500 transition hover:bg-rose-50 disabled:opacity-50"
-                >
-                  重置
-                </button>
-              </div>
-            </form>
           </div>
-        </section>
 
-        <section className="mt-4 rounded-3xl border border-white/50 bg-white/65 p-6 shadow-[0_12px_35px_rgba(251,113,133,0.12)] backdrop-blur-md sm:p-7">
-          <h2 className="inline-flex items-center gap-2 text-base font-semibold text-warm-700">
-            <KeyRound className="h-4 w-4" />
-            修改密码
-          </h2>
-          <p className="mt-1 text-xs text-stone-500">建议使用至少 8 位密码，并包含字母和数字。</p>
-          <form className="mt-4 grid gap-2 sm:grid-cols-2" onSubmit={(e) => void onChangePwd(e)}>
-            <input
-              type="password"
-              value={oldPwd}
-              onChange={(e) => setOldPwd(e.target.value)}
-              placeholder="当前密码"
-              className="w-full rounded-xl border border-rose-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-rose-300 focus:ring-2 focus:ring-rose-100"
-            />
-            <input
-              type="password"
-              value={newPwd}
-              onChange={(e) => setNewPwd(e.target.value)}
-              placeholder="新密码（至少6位）"
-              className="w-full rounded-xl border border-rose-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-rose-300 focus:ring-2 focus:ring-rose-100"
-            />
-            <div className="sm:col-span-2">
+          <form className="border-b border-zinc-100 px-5 py-5 sm:px-6" onSubmit={(e) => void onSaveProfile(e)}>
+            <h2 className="text-sm font-semibold text-zinc-900">{t("account.profileSettings")}</h2>
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <label className="block text-[13px] font-medium text-zinc-600">
+                {t("account.displayName")}
+                <input
+                  type="text"
+                  value={displayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
+                  placeholder={t("account.displayNamePh")}
+                  className={fieldClass}
+                />
+              </label>
+              <div>
+                <p className="text-[13px] font-medium text-zinc-600">{t("account.gender")}</p>
+                <div className="mt-1.5 grid grid-cols-3 gap-1 rounded-xl border border-zinc-200 bg-zinc-50 p-1">
+                  {(
+                    [
+                      { key: "UNKNOWN" as const, labelKey: "account.genderUnknown" as const },
+                      { key: "MALE" as const, labelKey: "account.genderMale" as const },
+                      { key: "FEMALE" as const, labelKey: "account.genderFemale" as const },
+                    ] as const
+                  ).map((item) => {
+                    const active = gender === item.key;
+                    return (
+                      <button
+                        key={item.key}
+                        type="button"
+                        onClick={() => setGender(item.key)}
+                        className={[
+                          "rounded-lg px-2 py-2 text-xs font-medium transition",
+                          active
+                            ? "bg-zinc-900 text-white shadow-sm"
+                            : "text-zinc-500 hover:bg-white hover:text-zinc-800",
+                        ].join(" ")}
+                      >
+                        {t(item.labelKey)}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+            <div className="mt-4 flex flex-wrap items-center gap-2">
               <button
                 type="submit"
                 disabled={busy}
-                className="rounded-full bg-gradient-to-r from-warm-500 to-rose-500 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:opacity-90 disabled:opacity-50"
+                className="rounded-xl bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-zinc-800 disabled:opacity-50"
               >
-                保存密码
+                {t("account.saveProfile")}
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  setDisplayName(currentDisplayName);
+                  setGender(currentGender);
+                }}
+                className="rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-sm font-medium text-zinc-600 transition hover:bg-zinc-50 disabled:opacity-50"
+              >
+                {t("account.reset")}
               </button>
             </div>
           </form>
-        </section>
 
-        {err ? <p className="mt-3 rounded-xl border border-red-100 bg-red-50/80 px-3 py-2 text-sm text-red-500">{err}</p> : null}
-        {ok ? <p className="mt-3 rounded-xl border border-emerald-100 bg-emerald-50/80 px-3 py-2 text-sm text-emerald-600">{ok}</p> : null}
+          <form className="px-5 py-5 sm:px-6" onSubmit={(e) => void onChangePwd(e)}>
+            <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-900">
+              <KeyRound className="h-4 w-4 text-zinc-500" />
+              {t("userProfile.changePassword")}
+            </h2>
+            <p className="mt-1 text-[12px] leading-relaxed text-zinc-500">{t("account.passwordPageHint")}</p>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <input
+                type="password"
+                value={oldPwd}
+                onChange={(e) => setOldPwd(e.target.value)}
+                placeholder={t("account.currentPasswordPh")}
+                autoComplete="current-password"
+                className={fieldClass.replace("mt-1.5 ", "")}
+              />
+              <input
+                type="password"
+                value={newPwd}
+                onChange={(e) => setNewPwd(e.target.value)}
+                placeholder={t("account.newPasswordPh")}
+                autoComplete="new-password"
+                className={fieldClass.replace("mt-1.5 ", "")}
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={busy}
+              className="mt-4 rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-2.5 text-sm font-semibold text-zinc-800 transition hover:bg-zinc-100 disabled:opacity-50"
+            >
+              {t("account.savePassword")}
+            </button>
+          </form>
+        </div>
+
+        {err ? (
+          <p className="mt-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-600">{err}</p>
+        ) : null}
+        {ok ? (
+          <p className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm text-emerald-700">
+            {ok}
+          </p>
+        ) : null}
       </main>
     </div>
   );

@@ -478,6 +478,30 @@ export function MusicPage() {
   }, [activeNav, currentPlaylistId]);
 
   useEffect(() => {
+    if (
+      createPlaylistOpen ||
+      uploadOpen ||
+      playlistSettingsOpen ||
+      addTracksOpen ||
+      profileOpen ||
+      mentionsOpen ||
+      addToPlaylistTrack != null ||
+      removeTrackDialog != null
+    ) {
+      setMobileNavOpen(false);
+    }
+  }, [
+    createPlaylistOpen,
+    uploadOpen,
+    playlistSettingsOpen,
+    addTracksOpen,
+    profileOpen,
+    mentionsOpen,
+    addToPlaylistTrack,
+    removeTrackDialog,
+  ]);
+
+  useEffect(() => {
     if (typeof window === "undefined") return;
     window.dispatchEvent(
       new CustomEvent("music-mobile-nav-toggle", {
@@ -892,7 +916,7 @@ export function MusicPage() {
               <button
                 type="button"
                 onClick={() => setProfileOpen(true)}
-                className="flex w-full items-center gap-2 rounded-full px-2 py-1.5 text-left text-zinc-300 transition hover:bg-white/5"
+                className="flex w-full items-center gap-2 rounded-2xl border border-white/[0.06] bg-[#2a2a2a]/80 px-2 py-1.5 text-left text-zinc-300 transition hover:bg-white/5"
               >
                 <UserAvatar user={user} className="h-9 w-9 text-xs" />
                 <span className="min-w-0 flex-1 truncate text-[12px] font-medium">
@@ -943,10 +967,7 @@ export function MusicPage() {
               <div className="hidden shrink-0 text-xs text-zinc-500 sm:block">{t("music.uploadHint")}</div>
             )}
             <div className="ml-auto flex min-w-0 shrink-0 items-center gap-2">
-              <LanguageSwitch
-                compact
-                className="border border-netease-line bg-[#2a2a2a] p-0.5 text-[10px] text-zinc-300"
-              />
+              <LanguageSwitch compact tone="dark" />
               <button
                 type="button"
                 onClick={() => setMentionsOpen(true)}
@@ -968,7 +989,7 @@ export function MusicPage() {
                 onClick={() => setMobileNavOpen(false)}
                 className="absolute inset-0 bg-black/45 backdrop-blur-[2px]"
               />
-              <aside className="absolute left-0 top-0 flex h-full w-[min(80vw,18rem)] flex-col border-r border-netease-line bg-[#1f1f1f] p-3">
+              <aside className="absolute left-0 top-0 flex h-full w-[min(86vw,20rem)] flex-col border-r border-netease-line bg-[#1f1f1f] p-3 shadow-[8px_0_32px_rgba(0,0,0,0.35)]">
                 <div className="mb-2 flex items-center justify-between">
                   <div className="flex items-center gap-2 text-sm text-zinc-300">
                     <Heart className="h-4 w-4 text-red-500/90" fill="currentColor" />
@@ -985,66 +1006,135 @@ export function MusicPage() {
                 </div>
 
                 <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto pr-1">
-                  <div className="space-y-1 text-[13px]">
+                  <div className="space-y-1.5 text-[14px]">
                     <button
                       type="button"
                       onClick={() => goMusic(musicPathFor("discover"), "list")}
-                      className={clsx("flex w-full items-center gap-2 rounded-full px-3 py-2 text-left", activeNav === "discover" ? "bg-white/10 text-white" : "text-zinc-400")}
+                      className={clsx(
+                        "flex min-h-[48px] w-full items-center gap-3 rounded-2xl px-3.5 py-3 text-left transition active:bg-white/10",
+                        activeNav === "discover" ? "bg-white/10 text-white" : "text-zinc-400"
+                      )}
                     >
-                      <Home className="h-4 w-4 shrink-0" />{t("music.discover")}
+                      <Home className="h-[1.15rem] w-[1.15rem] shrink-0" />
+                      {t("music.discover")}
                     </button>
-                    <button type="button" onClick={() => goMusic(musicPathFor("fm"), "list")} className={clsx("flex w-full items-center gap-2 rounded-full px-3 py-2 text-left", activeNav === "fm" ? "bg-white/10 text-white" : "text-zinc-400")}>
-                      <Radio className="h-4 w-4 shrink-0" />{t("music.privateFm")}
+                    <button
+                      type="button"
+                      onClick={() => goMusic(musicPathFor("fm"), "list")}
+                      className={clsx(
+                        "flex min-h-[48px] w-full items-center gap-3 rounded-2xl px-3.5 py-3 text-left transition active:bg-white/10",
+                        activeNav === "fm" ? "bg-white/10 text-white" : "text-zinc-400"
+                      )}
+                    >
+                      <Radio className="h-[1.15rem] w-[1.15rem] shrink-0" />
+                      {t("music.privateFm")}
                     </button>
-                    <button type="button" onClick={() => goMusic(musicPathFor("liked"), "list")} className={clsx("flex w-full items-center gap-2 rounded-full px-3 py-2 text-left", activeNav === "liked" ? "bg-white/10 text-white" : "text-zinc-400")}>
-                      <Heart className={clsx("h-4 w-4 shrink-0", activeNav === "liked" ? "fill-red-500 text-red-500" : "text-red-400/80")} />
+                    <button
+                      type="button"
+                      onClick={() => goMusic(musicPathFor("liked"), "list")}
+                      className={clsx(
+                        "flex min-h-[48px] w-full items-center gap-3 rounded-2xl px-3.5 py-3 text-left transition active:bg-white/10",
+                        activeNav === "liked" ? "bg-white/10 text-white" : "text-zinc-400"
+                      )}
+                    >
+                      <Heart
+                        className={clsx(
+                          "h-[1.15rem] w-[1.15rem] shrink-0",
+                          activeNav === "liked" ? "fill-red-500 text-red-500" : "text-red-400/80"
+                        )}
+                      />
                       {t("music.likedPlaylist", { defaultValue: "我喜欢的音乐" })}
                     </button>
-                    <button type="button" onClick={() => goMusic(musicPathFor("history"), "list")} className={clsx("flex w-full items-center gap-2 rounded-full px-3 py-2 text-left", activeNav === "history" ? "bg-white/10 text-white" : "text-zinc-400")}>
-                      <History className="h-4 w-4 shrink-0" />{t("music.playHistory", { defaultValue: "播放历史" })}
+                    <button
+                      type="button"
+                      onClick={() => goMusic(musicPathFor("history"), "list")}
+                      className={clsx(
+                        "flex min-h-[48px] w-full items-center gap-3 rounded-2xl px-3.5 py-3 text-left transition active:bg-white/10",
+                        activeNav === "history" ? "bg-white/10 text-white" : "text-zinc-400"
+                      )}
+                    >
+                      <History className="h-[1.15rem] w-[1.15rem] shrink-0" />
+                      {t("music.playHistory", { defaultValue: "播放历史" })}
                     </button>
                   </div>
 
-                  <div className="my-3 border-t border-netease-line/70" />
-                  <h2 className="mb-2 px-1 text-[11px] font-semibold tracking-wide text-zinc-500">{t("music.myPlaylist")}</h2>
-                  <div className="space-y-1">
+                  <div className="my-3.5 border-t border-netease-line/70" />
+                  <h2 className="mb-2.5 px-1 text-[11px] font-semibold tracking-wide text-zinc-500">
+                    {t("music.myPlaylist")}
+                  </h2>
+                  <div className="space-y-1.5">
                     {playlists.map((p) => (
                       <button
                         key={p.id}
                         type="button"
                         onClick={() => onPickPlaylist(p.id)}
-                        className={clsx("flex w-full items-center gap-2 rounded-full px-3 py-2 text-left transition", currentPlaylistId === p.id && activeNav === "playlist" ? "bg-white/10 text-white" : "text-zinc-400")}
+                        className={clsx(
+                          "flex min-h-[48px] w-full items-center gap-3 rounded-2xl px-3.5 py-3 text-left transition active:bg-white/10",
+                          currentPlaylistId === p.id && activeNav === "playlist"
+                            ? "bg-white/10 text-white"
+                            : "text-zinc-400"
+                        )}
                       >
-                        <ListMusic className="h-4 w-4 shrink-0 opacity-80" />
-                        <span className="min-w-0 flex-1 truncate text-[12px]">{p.name}</span>
-                        <span className="shrink-0 tabular-nums text-[11px] text-zinc-500">{p.trackCount}</span>
+                        <ListMusic className="h-[1.15rem] w-[1.15rem] shrink-0 opacity-80" />
+                        <span className="min-w-0 flex-1 truncate text-[14px]">{p.name}</span>
+                        <span className="shrink-0 tabular-nums text-[12px] text-zinc-500">{p.trackCount}</span>
                       </button>
                     ))}
                   </div>
                 </div>
 
-                <div className="mt-3 space-y-2 border-t border-netease-line pt-3">
-                  <button type="button" onClick={() => setCreatePlaylistOpen(true)} className="flex w-full items-center justify-center gap-1.5 rounded-full bg-zinc-800 py-2.5 text-[13px] text-zinc-200">
-                    <ListMusic className="h-3.5 w-3.5 opacity-90" />{t("music.newPlaylist")}
-                  </button>
-                  <button type="button" onClick={() => setUploadOpen(true)} className="flex w-full items-center justify-center gap-1.5 rounded-full border border-dashed border-red-900/40 bg-[#252525] py-2.5 text-[13px] text-red-200/90">
-                    <Music2 className="h-3.5 w-3.5" />{t("music.uploadNew")}
-                  </button>
+                <div className="mt-3 shrink-0 space-y-2.5 border-t border-netease-line pt-3 pb-[max(0.25rem,env(safe-area-inset-bottom,0px))]">
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setCreatePlaylistOpen(true)}
+                      className="flex min-h-[44px] items-center justify-center gap-1.5 rounded-2xl bg-zinc-800 px-2 py-2.5 text-[13px] text-zinc-200"
+                    >
+                      <ListMusic className="h-4 w-4 opacity-90" />
+                      {t("music.newPlaylist")}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setUploadOpen(true)}
+                      className="flex min-h-[44px] items-center justify-center gap-1.5 rounded-2xl border border-dashed border-red-900/40 bg-[#252525] px-2 py-2.5 text-[13px] text-red-200/90"
+                    >
+                      <Music2 className="h-4 w-4" />
+                      {t("music.uploadNew")}
+                    </button>
+                  </div>
                   <Link
                     to="/"
-                    className="flex w-full items-center justify-center gap-1.5 rounded-full border border-netease-line bg-[#252525] py-2.5 text-[13px] text-zinc-300 transition hover:bg-[#2a2a2a] hover:text-zinc-100"
+                    className="flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-2xl border border-netease-line bg-[#252525] py-2.5 text-[13px] text-zinc-300 transition hover:bg-[#2a2a2a] hover:text-zinc-100"
                   >
-                    <Home className="h-3.5 w-3.5 shrink-0 opacity-90" />
+                    <Home className="h-4 w-4 shrink-0 opacity-90" />
                     {t("music.backToSite")}
                   </Link>
                   {user && userIsAdmin(user) ? (
                     <Link
                       to="/admin"
-                      className="flex w-full items-center justify-center gap-1.5 rounded-full border border-violet-500/30 bg-violet-500/10 py-2.5 text-[13px] text-violet-200 transition hover:bg-violet-500/20"
+                      className="flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-2xl border border-violet-500/30 bg-violet-500/10 py-2.5 text-[13px] text-violet-200 transition hover:bg-violet-500/20"
                     >
-                      <LayoutDashboard className="h-3.5 w-3.5 shrink-0" />
+                      <LayoutDashboard className="h-4 w-4 shrink-0" />
                       <span className="truncate">{t("admin.consoleLink")}</span>
                     </Link>
+                  ) : null}
+                  {user ? (
+                    <button
+                      type="button"
+                      onClick={() => setProfileOpen(true)}
+                      className="flex min-h-[56px] w-full items-center gap-3 rounded-2xl border border-white/[0.08] bg-[#2a2a2a] px-3 py-2.5 text-left text-zinc-200 transition active:bg-[#333]"
+                    >
+                      <UserAvatar user={user} className="h-11 w-11 text-xs" />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-[14px] font-medium text-zinc-100">
+                          {user.displayName?.trim() || user.email}
+                        </span>
+                        <span className="mt-0.5 block truncate text-[12px] text-zinc-500">
+                          {t("userProfile.title", { defaultValue: "个人信息" })}
+                        </span>
+                      </span>
+                      <ChevronRight className="h-4 w-4 shrink-0 text-zinc-500" aria-hidden />
+                    </button>
                   ) : null}
                 </div>
               </aside>
@@ -1390,14 +1480,15 @@ export function MusicPage() {
 
       {mentionsOpen ? (
         <div
-          className="fixed inset-0 z-[85] flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm"
+          className="fixed inset-0 z-[130] flex items-end justify-center bg-black/60 p-0 backdrop-blur-sm sm:items-center sm:p-4"
           onClick={() => setMentionsOpen(false)}
         >
           <section
-            className="w-full max-w-2xl rounded-2xl border border-zinc-700 bg-zinc-900 p-4 text-zinc-200 shadow-2xl"
+            className="flex max-h-[min(90dvh,40rem)] w-full max-w-2xl flex-col overflow-hidden rounded-t-3xl border border-zinc-700 border-b-0 bg-zinc-900 p-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] text-zinc-200 shadow-2xl sm:rounded-3xl sm:border-b sm:pb-4"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="mb-3 flex items-center justify-between">
+            <div className="mx-auto mb-2 h-1 w-10 shrink-0 rounded-full bg-white/15 sm:hidden" aria-hidden />
+            <div className="mb-3 flex shrink-0 items-center justify-between">
               <h3 className="text-sm font-semibold text-zinc-100">
                 {t("music.mentionsTitle", { defaultValue: "消息列表" })}
               </h3>
@@ -1409,7 +1500,7 @@ export function MusicPage() {
                 <X className="h-4 w-4" />
               </button>
             </div>
-            <div className="max-h-[70vh] overflow-y-auto pr-1">
+            <div className="min-h-0 flex-1 overflow-y-auto pr-1">
               <MusicMentionList
                 embedded
                 hideHeader
