@@ -14,7 +14,7 @@ type Props = {
  * 片刻页底部氛围歌词：随默认配乐当前句若隐若现，不抢交互。
  */
 export function MomentsAmbientLyrics({ elevated = false }: Props) {
-  const { currentTrack, playing, playPos } = useMusicPlayer();
+  const { currentTrack, playing, playPos, playerBarExpanded } = useMusicPlayer();
   const { lines, loading } = useSyncedLyrics(currentTrack);
   const active = useMemo(() => {
     if (!currentTrack?.hasLyrics || lines.length === 0) return null;
@@ -92,7 +92,10 @@ export function MomentsAmbientLyrics({ elevated = false }: Props) {
   return createPortal(
     <div
       className={clsx(
-        "pointer-events-none fixed inset-x-0 bottom-0 flex justify-center px-10 pb-[max(4.5rem,env(safe-area-inset-bottom))] pt-16 sm:px-16 sm:pb-[max(5rem,env(safe-area-inset-bottom))]",
+        "pointer-events-none fixed inset-x-0 bottom-0 flex justify-center px-10 pt-16 sm:px-16",
+        playerBarExpanded
+          ? "pb-[max(22rem,env(safe-area-inset-bottom))] sm:pb-[max(24rem,env(safe-area-inset-bottom))]"
+          : "pb-[max(4.5rem,env(safe-area-inset-bottom))] sm:pb-[max(5rem,env(safe-area-inset-bottom))]",
         elevated ? "z-[125]" : "z-[45]"
       )}
       aria-hidden

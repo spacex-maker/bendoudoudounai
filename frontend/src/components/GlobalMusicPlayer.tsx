@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ChevronUp, Music2, Pause, Play } from "lucide-react";
+import { Music2, Pause, Play } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useMusicPlayer } from "../music/MusicPlayerContext";
 import { isMusicPath } from "../music/musicRoutes";
 import { MusicPlayerBar } from "./MusicPlayerBar";
+import { MomentsSoundtrackDock } from "./MomentsSoundtrackDock";
 import { useSyncedLyrics } from "../music/useSyncedLyrics";
 import { getActiveLyricText } from "../music/lyricsUtils";
 import {
@@ -41,6 +42,7 @@ export function GlobalMusicPlayer() {
     seekPrev,
     coverSrc,
     selectTrack,
+    setPlayerBarExpanded,
   } = useMusicPlayer();
 
   const [historyPanelOpen, setHistoryPanelOpen] = useState(false);
@@ -50,6 +52,11 @@ export function GlobalMusicPlayer() {
   const [musicMobileNavOpen, setMusicMobileNavOpen] = useState(false);
 
   const isOnMusicPage = isMusicPath(location.pathname);
+  const isOnMomentsPage = location.pathname === "/moments" || location.pathname.startsWith("/moments/");
+
+  useEffect(() => {
+    if (!isOnMomentsPage) setPlayerBarExpanded(false);
+  }, [isOnMomentsPage, setPlayerBarExpanded]);
   const openMusicPlayerView = useCallback(() => {
     if (isOnMusicPage) {
       const params = new URLSearchParams(location.search);
@@ -228,11 +235,20 @@ export function GlobalMusicPlayer() {
         />
       )}
 
-      {/* Other pages: mini pill or expanded bar */}
-      {!isOnMusicPage && hasTrack && (
+      {/* 片刻页：可展开精选曲目坞 */}
+      {!isOnMusicPage && isOnMomentsPage && (hasTrack || queue.length > 0) && (
+        <MomentsSoundtrackDock
+          audioRef={audioRef}
+          barMax={barMax}
+          onTogglePlay={handleTogglePlay}
+          onCyclePlayMode={handleCyclePlayMode}
+        />
+      )}
+
+      {/* Other pages: mini pill */}
+      {!isOnMusicPage && !isOnMomentsPage && hasTrack && (
         <div className="pointer-events-none fixed bottom-4 right-4 z-50 sm:bottom-6">
           <div className="pointer-events-auto flex items-center gap-1.5 rounded-full bg-zinc-900/95 px-1.5 py-1.5 shadow-xl ring-1 ring-white/10 backdrop-blur-xl">
-            {/* Vinyl thumbnail */}
             <button
               type="button"
               onClick={openMusicPlayerView}
@@ -252,8 +268,6 @@ export function GlobalMusicPlayer() {
               )}
               <div className="absolute inset-0 m-auto h-2.5 w-2.5 rounded-full border border-zinc-700/40 bg-zinc-900" />
             </button>
-
-            {/* Track info */}
             <button
               type="button"
               onClick={openMusicPlayerView}
@@ -264,8 +278,6 @@ export function GlobalMusicPlayer() {
               </div>
               <div className="truncate text-[10px] text-zinc-500">{currentTrack.artist}</div>
             </button>
-
-            {/* Play/pause */}
             <button
               type="button"
               onClick={handleTogglePlay}
