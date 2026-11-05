@@ -61,6 +61,18 @@ module.exports = {
           "0%": { transform: "translateX(-120%) skewX(-18deg)" },
           "100%": { transform: "translateX(220%) skewX(-18deg)" },
         },
+        wallDrift: {
+          "0%, 100%": { transform: "translate3d(0,0,0) scale(1)" },
+          "50%": { transform: "translate3d(18px,-22px,0) scale(1.04)" },
+        },
+        wallLetterIn: {
+          "0%": { opacity: "0", transform: "translateY(28px)" },
+          "100%": { opacity: "1", transform: "translateY(0)" },
+        },
+        wallInk: {
+          "0%, 100%": { opacity: "0.35", transform: "translateY(0)" },
+          "50%": { opacity: "0.7", transform: "translateY(-12px)" },
+        },
       },
       animation: {
         "vinyl-swap": "vinylSwap 0.72s cubic-bezier(0.4, 0, 0.2, 1) both",
@@ -75,9 +87,13 @@ module.exports = {
         "land-drift": "landDrift 9s ease-in-out infinite",
         "land-grid": "landGridShift 22s linear infinite",
         "land-shine": "landShine 4.5s ease-in-out infinite",
+        "wall-drift": "wallDrift 14s ease-in-out infinite",
+        "wall-letter-in": "wallLetterIn 0.85s cubic-bezier(0.22, 1, 0.36, 1) both",
+        "wall-ink": "wallInk 9s ease-in-out infinite",
       },
       fontFamily: {
         display: ['"Syne"', '"Noto Sans SC"', "system-ui", "sans-serif"],
+        letter: ['"Instrument Serif"', '"Noto Serif SC"', '"Noto Sans SC"', "Georgia", "serif"],
         sans: ['"Manrope"', '"Noto Sans SC"', "system-ui", "sans-serif"],
       },
       colors: {

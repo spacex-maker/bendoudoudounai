@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Loader2, MessageCircle, MessageSquareReply, PenLine, Sparkles } from "lucide-react";
+import { Loader2, MessageCircle, MessageSquareReply, PenLine } from "lucide-react";
 import clsx from "clsx";
 import {
   fetchGuestbookThreads,
@@ -16,6 +16,7 @@ import { SiteHeader } from "../components/SiteHeader";
 import { GuestbookPostModal } from "../components/GuestbookPostModal";
 import { GuestbookReplyModal } from "../components/GuestbookReplyModal";
 import { useAuthedUser } from "../auth/AuthContext";
+import { PRODUCT_NAME } from "../siteMeta";
 
 const PAGE_SIZE = 12;
 
@@ -42,19 +43,19 @@ function FadedWords({
   hint: string;
 }) {
   return (
-    <div className="mt-2.5">
-      <div className="relative overflow-hidden px-1 py-3">
+    <div className="mt-3">
+      <div className="relative overflow-hidden py-3">
         <p
           className={clsx(
-            "pointer-events-none select-none whitespace-pre-wrap text-stone-700",
+            "pointer-events-none select-none whitespace-pre-wrap text-[#5c2434]",
             textClassName,
-            deep ? "opacity-45 blur-[18px]" : "opacity-80 blur-[12px]"
+            deep ? "opacity-40 blur-[18px]" : "opacity-75 blur-[12px]"
           )}
         >
           {text}
         </p>
       </div>
-      <p className="text-[11px] tracking-[0.16em] text-stone-400/90">{hint}</p>
+      <p className="font-letter text-sm italic tracking-[0.08em] text-[#9a6b76]">{hint}</p>
     </div>
   );
 }
@@ -70,29 +71,26 @@ function MessageAvatar({
   authorUserId: number | null | undefined;
   showName: (n: string | null) => string;
   directoryById: Map<number, UserDirectoryItemDto>;
-  /** 回复行略小，主帖为 false */
   compact?: boolean;
 }) {
   const dirUser = authorUserId != null ? directoryById.get(authorUserId) : undefined;
   const avatarUrl = dirUser ? userDirectoryAvatarUrl(dirUser) : null;
   const initial = (showName(nickname).charAt(0) || "·").toUpperCase();
-  const frame = compact
-    ? "h-10 w-10 shrink-0 rounded-xl text-sm"
-    : "h-12 w-12 shrink-0 rounded-2xl text-lg";
+  const frame = compact ? "h-9 w-9 shrink-0 rounded-full text-sm" : "h-11 w-11 shrink-0 rounded-full text-base";
   if (avatarUrl) {
     return (
       <img
         src={avatarUrl}
         alt=""
         draggable={false}
-        className={clsx(frame, "border border-white/90 object-cover shadow-inner")}
+        className={clsx(frame, "border border-[#f0d4da] object-cover")}
       />
     );
   }
   return (
     <div
       className={clsx(
-        "flex items-center justify-center bg-gradient-to-br from-rose-200/80 to-amber-100/80 font-display text-warm-600 shadow-inner",
+        "flex items-center justify-center bg-[#f7e4e8] font-letter text-[#8b3a4a]",
         frame
       )}
       aria-hidden
@@ -140,7 +138,7 @@ function PeerFace({
     <div ref={rootRef} className="relative inline-flex shrink-0">
       <button
         type="button"
-        className="rounded-full outline-none ring-rose-400/0 transition-[box-shadow] focus-visible:ring-2 focus-visible:ring-rose-400/70"
+        className="rounded-full outline-none transition focus-visible:ring-2 focus-visible:ring-[#c73e5a]/60"
         aria-expanded={open}
         aria-haspopup="dialog"
         aria-label={`${label}：${name}`}
@@ -150,12 +148,12 @@ function PeerFace({
           <img
             src={avatarUrl}
             alt=""
-            className="h-8 w-8 rounded-full border border-white/90 object-cover shadow-sm"
+            className="h-8 w-8 rounded-full border border-[#f0d4da] object-cover"
             draggable={false}
           />
         ) : (
           <div
-            className="flex h-8 w-8 items-center justify-center rounded-full border border-rose-200/70 bg-gradient-to-br from-rose-100 to-amber-50 text-[11px] font-semibold text-warm-700 shadow-inner"
+            className="flex h-8 w-8 items-center justify-center rounded-full border border-[#f0d4da] bg-[#f7e4e8] text-[11px] font-semibold text-[#8b3a4a]"
             aria-hidden
           >
             {initial}
@@ -164,11 +162,11 @@ function PeerFace({
       </button>
       {open ? (
         <div
-          className="absolute bottom-[calc(100%+8px)] left-1/2 z-30 w-max max-w-[min(14rem,calc(100vw-2rem))] -translate-x-1/2 rounded-lg border border-stone-700/40 bg-stone-900/95 px-2.5 py-2 text-left text-white shadow-lg shadow-stone-900/25 ring-1 ring-white/10"
+          className="absolute bottom-[calc(100%+8px)] left-1/2 z-30 w-max max-w-[min(14rem,calc(100vw-2rem))] -translate-x-1/2 rounded-md border border-[#3a1f28]/50 bg-[#2a151c]/95 px-2.5 py-2 text-left text-white"
           role="dialog"
           aria-label={`${label}：${name}`}
         >
-          <p className="text-[10px] font-medium uppercase tracking-wide text-stone-400">{label}</p>
+          <p className="text-[10px] font-medium uppercase tracking-wide text-white/55">{label}</p>
           <p className="mt-0.5 text-xs font-medium leading-snug text-white">{name}</p>
         </div>
       ) : null}
@@ -184,6 +182,7 @@ function ThreadCard({
   showName,
   viewerUserId,
   directoryById,
+  index,
 }: {
   t: (k: string, opts?: Record<string, string | number>) => string;
   thread: GuestbookMessageDto;
@@ -192,6 +191,7 @@ function ThreadCard({
   showName: (n: string | null) => string;
   viewerUserId: number | null;
   directoryById: Map<number, UserDirectoryItemDto>;
+  index: number;
 }) {
   const visId = th.visibleToUserId ?? null;
   const target = th.targetDisplayName ?? null;
@@ -202,24 +202,33 @@ function ThreadCard({
     (th.authorUserId === viewerUserId || visId === viewerUserId);
   const mainWeather = wordsWeather(th.createdAtMillis);
   const fadedHint = t("guestbook.fadedByTime");
+  const tilt = ((index % 5) - 2) * 0.55;
+  const shift = index % 2 === 0 ? "sm:ml-0 sm:mr-8" : "sm:ml-8 sm:mr-0";
+
   return (
-    <li>
+    <li
+      className={clsx("animate-wall-letter-in transition duration-500 hover:-translate-y-1.5", shift)}
+      style={{ animationDelay: `${Math.min(index, 8) * 70}ms` }}
+    >
+      <div style={{ transform: `rotate(${tilt}deg)` }}>
       <article
         className={clsx(
-          "group relative overflow-hidden rounded-3xl border backdrop-blur-md transition duration-500",
-          mainWeather.faded
-            ? "border-stone-200/80 bg-white/30 shadow-none"
-            : "border-rose-200/50 bg-white/55 shadow-[0_8px_40px_-12px_rgba(190,100,120,0.25)] hover:border-rose-300/60 hover:shadow-rose-200/30"
+          "group relative overflow-hidden border border-[#ead0d6]/80 bg-[#fffaf8]",
+          mainWeather.faded ? "opacity-90" : "shadow-[0_18px_40px_-28px_rgba(92,36,52,0.35)]"
         )}
       >
-        {mainWeather.faded ? null : (
-          <div
-            className="pointer-events-none absolute inset-0 bg-gradient-to-br from-rose-50/30 via-transparent to-amber-50/20 opacity-0 transition group-hover:opacity-100"
-            aria-hidden
-          />
-        )}
-        <div className="relative border-b border-rose-100/50 px-4 py-4 sm:px-6 sm:py-5">
-          <div className="flex flex-wrap items-start gap-3 sm:gap-4">
+        <div
+          className="pointer-events-none absolute inset-0 opacity-[0.35]"
+          style={{
+            backgroundImage:
+              "radial-gradient(circle at 12% 8%, rgba(199,62,90,0.08), transparent 42%), linear-gradient(180deg, rgba(255,255,255,0.35), transparent 55%)",
+          }}
+          aria-hidden
+        />
+        <div className="pointer-events-none absolute left-0 top-0 h-full w-[3px] bg-[#c73e5a]/70" aria-hidden />
+
+        <div className="relative px-5 pb-4 pt-5 sm:px-7 sm:pt-6">
+          <div className="flex items-start gap-3 sm:gap-4">
             <div className={clsx(mainWeather.faded && "opacity-50 grayscale")}>
               <MessageAvatar
                 nickname={th.nickname}
@@ -229,47 +238,52 @@ function ThreadCard({
               />
             </div>
             <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className={clsx("font-medium", mainWeather.faded ? "text-stone-400" : "text-warm-700")}>
+              <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                <span
+                  className={clsx(
+                    "font-letter text-lg leading-none",
+                    mainWeather.faded ? "text-[#b08a93]" : "text-[#4a1f2c]"
+                  )}
+                >
                   {showName(th.nickname)}
                 </span>
-                <span className="rounded-full bg-rose-500/10 px-2 py-0.5 text-[10px] font-medium text-rose-700">
-                  {t("guestbook.mainThread")}
-                </span>
+                <span className="text-[11px] tracking-[0.18em] text-[#9a6b76]">{t("guestbook.mainThread")}</span>
                 {mine ? (
-                  <span className="rounded-full bg-emerald-500/12 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
-                    {t("guestbook.myBadge")}
-                  </span>
+                  <span className="text-[11px] tracking-[0.14em] text-[#6d8f6a]">{t("guestbook.myBadge")}</span>
                 ) : null}
                 {visId == null ? (
-                  <span className="rounded-full bg-stone-500/10 px-2 py-0.5 text-[10px] text-stone-500">{t("guestbook.publicBadge")}</span>
+                  <span className="text-[11px] tracking-[0.14em] text-[#9a6b76]/80">{t("guestbook.publicBadge")}</span>
                 ) : target ? (
-                  <span className="max-w-full truncate rounded-full bg-violet-500/10 px-2 py-0.5 text-[10px] text-violet-800" title={target}>
+                  <span className="max-w-full truncate text-[11px] tracking-[0.08em] text-[#8b3a4a]" title={target}>
                     {t("guestbook.audienceBadge", { name: target })}
                   </span>
                 ) : null}
               </div>
+
               {mainWeather.faded ? (
                 <FadedWords
                   text={th.content}
-                  textClassName="text-sm leading-relaxed"
+                  textClassName="font-letter text-[1.05rem] leading-relaxed sm:text-[1.15rem]"
                   deep={mainWeather.deep}
                   hint={fadedHint}
                 />
               ) : (
-                <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-stone-800/95">{th.content}</p>
+                <p className="mt-4 whitespace-pre-wrap font-letter text-[1.05rem] leading-[1.75] text-[#3d2430] sm:text-[1.15rem]">
+                  {th.content}
+                </p>
               )}
             </div>
           </div>
         </div>
+
         {th.replies && th.replies.length > 0 ? (
-          <ul className="relative divide-y divide-rose-100/40 border-b border-rose-100/30 bg-rose-50/25">
+          <ul className="relative space-y-0 border-t border-[#f0dce1] bg-[#fff5f7]/55">
             {th.replies.map((r) => {
               const replyMine = viewerUserId != null && r.authorUserId === viewerUserId;
               const replyWeather = wordsWeather(r.createdAtMillis);
               return (
-                <li key={r.id} className={clsx("px-4 py-3 pl-4 sm:px-6 sm:pl-8", replyWeather.faded && "bg-white/20")}>
-                  <div className="flex gap-3 sm:gap-4">
+                <li key={r.id} className="px-5 py-4 sm:px-7 sm:pl-16">
+                  <div className="flex gap-3">
                     <div className={clsx(replyWeather.faded && "opacity-50 grayscale")}>
                       <MessageAvatar
                         nickname={r.nickname}
@@ -279,29 +293,34 @@ function ThreadCard({
                         compact
                       />
                     </div>
-                    <div className="min-w-0 flex-1 border-l-2 border-rose-200/50 pl-3">
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <span className={clsx("text-sm font-medium", replyWeather.faded ? "text-stone-400" : "text-warm-700")}>
+                    <div className="min-w-0 flex-1 border-l border-[#ead0d6] pl-3">
+                      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                        <span
+                          className={clsx(
+                            "font-letter text-base",
+                            replyWeather.faded ? "text-[#b08a93]" : "text-[#4a1f2c]"
+                          )}
+                        >
                           {showName(r.nickname)}
                         </span>
                         {replyMine ? (
-                          <span className="rounded-full bg-emerald-500/12 px-1.5 py-0.5 text-[9px] font-medium text-emerald-700">
-                            {t("guestbook.myBadge")}
-                          </span>
+                          <span className="text-[10px] tracking-[0.12em] text-[#6d8f6a]">{t("guestbook.myBadge")}</span>
                         ) : null}
                       </div>
                       {replyWeather.faded ? (
                         <FadedWords
                           text={r.content}
-                          textClassName="text-[13px] leading-relaxed"
+                          textClassName="font-letter text-[0.98rem] leading-relaxed"
                           deep={replyWeather.deep}
                           hint={fadedHint}
                         />
                       ) : (
-                        <p className="mt-1.5 whitespace-pre-wrap text-[13px] leading-relaxed text-stone-700/95">{r.content}</p>
+                        <p className="mt-2 whitespace-pre-wrap font-letter text-[0.98rem] leading-relaxed text-[#4a3038]">
+                          {r.content}
+                        </p>
                       )}
                       <time
-                        className="mt-2 block text-left text-[10px] tabular-nums text-stone-400"
+                        className="mt-2 block text-left text-[11px] tabular-nums tracking-wide text-[#9a6b76]"
                         dateTime={new Date(r.createdAtMillis).toISOString()}
                       >
                         {formatTime(r.createdAtMillis)}
@@ -313,8 +332,9 @@ function ThreadCard({
             })}
           </ul>
         ) : null}
-        <div className="flex flex-col gap-3 bg-gradient-to-b from-rose-50/30 to-white/20 px-4 py-3 sm:flex-row sm:items-end sm:justify-between sm:gap-4 sm:px-6 sm:py-4">
-          <div className="flex min-w-0 flex-1 flex-col items-start gap-2 self-stretch sm:pb-0.5">
+
+        <div className="relative flex flex-col gap-3 border-t border-[#f0dce1] px-5 py-4 sm:flex-row sm:items-end sm:justify-between sm:px-7">
+          <div className="flex min-w-0 flex-1 flex-col items-start gap-2">
             {showDirectPair ? (
               <div className="flex min-w-0 items-center gap-2">
                 <span className="sr-only">{t("guestbook.directPairHint")}</span>
@@ -331,24 +351,23 @@ function ThreadCard({
               </div>
             ) : null}
             <time
-              className="text-[11px] tabular-nums text-stone-400"
+              className="font-letter text-sm italic tabular-nums text-[#9a6b76]"
               dateTime={new Date(th.createdAtMillis).toISOString()}
             >
               {formatTime(th.createdAtMillis)}
             </time>
           </div>
-          <div className="flex w-full shrink-0 justify-end sm:w-auto">
-            <button
-              type="button"
-              onClick={() => onRequestReply(th.id, showName(th.nickname))}
-              className="inline-flex items-center gap-2 rounded-full border border-rose-300/50 bg-white/70 px-4 py-2 text-sm font-medium text-rose-700 shadow-sm transition hover:border-rose-400/60 hover:bg-white/90"
-            >
-              <MessageSquareReply className="h-4 w-4" />
-              {t("guestbook.reply")}
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={() => onRequestReply(th.id, showName(th.nickname))}
+            className="inline-flex items-center gap-2 self-end border-b border-[#c73e5a]/50 pb-0.5 font-letter text-base text-[#c73e5a] transition hover:border-[#c73e5a] hover:text-[#9d2f46]"
+          >
+            <MessageSquareReply className="h-4 w-4" />
+            {t("guestbook.reply")}
+          </button>
         </div>
       </article>
+      </div>
     </li>
   );
 }
@@ -424,7 +443,6 @@ export function MessageBoardPage() {
     }
   }, [me, scope]);
 
-
   const refreshFirstPage = useCallback(() => {
     void load(0, false);
   }, [load]);
@@ -432,60 +450,85 @@ export function MessageBoardPage() {
   const canMore = page < totalPages - 1;
 
   return (
-    <div className="relative min-h-dvh w-full overflow-x-clip bg-[radial-gradient(ellipse_100%_80%_at_50%_-20%,rgba(255,200,220,0.5),transparent),linear-gradient(180deg,#fff8fa_0%,#ffe8f0_40%,#ffd6e4_100%)]">
+    <div className="relative min-h-dvh w-full overflow-x-clip bg-[#f8e9ed] text-[#4a1f2c]">
       <SiteHeader />
-      <div className="pointer-events-none fixed inset-0 -z-10" aria-hidden>
-        <div className="absolute -left-24 top-20 h-72 w-72 rounded-full bg-fuchsia-300/20 blur-3xl" />
-        <div className="absolute right-0 top-1/3 h-96 w-96 rounded-full bg-amber-200/25 blur-3xl" />
-        <div className="absolute bottom-0 left-1/3 h-64 w-64 rounded-full bg-rose-300/20 blur-3xl" />
+
+      <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden" aria-hidden>
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_90%_70%_at_50%_-10%,#ffd0db_0%,transparent_58%),radial-gradient(ellipse_70%_50%_at_100%_30%,rgba(255,190,150,0.45),transparent_50%),radial-gradient(ellipse_60%_45%_at_0%_80%,rgba(214,120,140,0.28),transparent_55%),linear-gradient(180deg,#fff1f4_0%,#f8e9ed_42%,#f3d7df_100%)]" />
+        <div className="absolute -left-20 top-24 h-[28rem] w-[28rem] rounded-full bg-[#ffb7c5]/35 blur-3xl animate-wall-drift" />
+        <div className="absolute -right-16 top-[38%] h-[32rem] w-[32rem] rounded-full bg-[#ffd7b8]/40 blur-3xl animate-wall-ink" />
+        <div className="absolute bottom-[-10%] left-[28%] h-[22rem] w-[22rem] rounded-full bg-[#e8a0b0]/30 blur-3xl animate-land-float" />
+        <div
+          className="absolute inset-0 opacity-[0.22] mix-blend-multiply"
+          style={{
+            backgroundImage:
+              "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E\")",
+          }}
+        />
       </div>
 
-      <main className="mx-auto max-w-2xl px-4 pb-24 pt-24 sm:px-6 sm:pt-[5.75rem]">
-        <div className="relative mb-10 text-center sm:mb-12">
-          <p className="mb-2 inline-flex items-center justify-center gap-1.5 text-xs font-medium uppercase tracking-[0.2em] text-rose-500/90">
-            <Sparkles className="h-3.5 w-3.5" />
-            wall
-          </p>
-          <h1 className="bg-gradient-to-r from-rose-600 via-pink-600 to-amber-600 bg-clip-text font-display text-4xl text-transparent sm:text-5xl">
-            {t("guestbook.title")}
-          </h1>
-          <p className="mx-auto mt-4 max-w-md text-pretty text-sm leading-relaxed text-stone-600/95 sm:text-base">{t("guestbook.intro")}</p>
-          <div className="mt-8 flex justify-center">
+      <section className="relative mx-auto flex min-h-[calc(100dvh-4.5rem)] max-w-5xl flex-col justify-center px-4 pb-10 pt-24 sm:px-6 sm:pt-[5.75rem]">
+        <p className="animate-land-fade-up font-display text-[11px] font-bold uppercase tracking-[0.28em] text-[#c73e5a]">
+          {PRODUCT_NAME}
+        </p>
+        <h1 className="animate-land-fade-up mt-4 max-w-[10ch] font-letter text-[clamp(3.4rem,14vw,7.5rem)] font-normal leading-[0.92] tracking-[-0.03em] text-[#4a1f2c] [animation-delay:80ms]">
+          {t("guestbook.title")}
+        </h1>
+        <p className="animate-land-fade-up mt-6 max-w-[22ch] font-letter text-xl italic leading-snug text-[#7a4452] sm:text-2xl [animation-delay:150ms]">
+          {t("guestbook.heroLine")}
+        </p>
+        <div className="animate-land-fade-up mt-10 [animation-delay:220ms]">
+          <button
+            type="button"
+            onClick={() => setModalOpen(true)}
+            className="group inline-flex items-center gap-3 bg-[#c73e5a] px-7 py-3.5 text-sm font-semibold tracking-wide text-white transition hover:bg-[#b0334d]"
+          >
+            <PenLine className="h-4 w-4 transition group-hover:-rotate-12" />
+            {t("guestbook.newPost")}
+          </button>
+        </div>
+        <p
+          className="pointer-events-none absolute -right-2 top-[28%] hidden select-none font-letter text-[clamp(5rem,18vw,11rem)] italic leading-none text-[#c73e5a]/[0.08] sm:block"
+          aria-hidden
+        >
+          letters
+        </p>
+      </section>
+
+      <main className="relative mx-auto max-w-3xl px-4 pb-28 sm:px-6">
+        <div className="mb-8 flex flex-col gap-4 border-t border-[#d9a8b4]/50 pt-8 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="font-display text-[11px] font-bold uppercase tracking-[0.22em] text-[#c73e5a]">wall</p>
+            <p className="mt-2 max-w-md text-sm leading-relaxed text-[#7a4452]">{t("guestbook.rules")}</p>
+          </div>
+          <div className="flex gap-5 self-start sm:self-auto">
             <button
               type="button"
-              onClick={() => setModalOpen(true)}
-              className="group inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-rose-500 to-pink-500 px-6 py-3.5 text-sm font-semibold text-white shadow-lg shadow-rose-400/30 transition hover:from-rose-600 hover:to-pink-600 hover:shadow-xl"
+              onClick={() => setScope("public")}
+              className={clsx(
+                "pb-1 font-letter text-base transition",
+                scope === "public"
+                  ? "border-b-2 border-[#c73e5a] text-[#4a1f2c]"
+                  : "border-b-2 border-transparent text-[#9a6b76] hover:text-[#4a1f2c]"
+              )}
             >
-              <PenLine className="h-4 w-4 transition group-hover:rotate-12" />
-              {t("guestbook.newPost")}
+              {t("guestbook.filterPublic")}
             </button>
-          </div>
-          <div className="mt-5 flex justify-center">
-            <div className="inline-flex rounded-full border border-rose-200/70 bg-white/60 p-1 shadow-sm backdrop-blur-sm">
-              <button
-                type="button"
-                onClick={() => setScope("public")}
-                className={clsx(
-                  "rounded-full px-4 py-1.5 text-sm font-medium transition",
-                  scope === "public" ? "bg-rose-500 text-white shadow-sm" : "text-warm-700 hover:bg-white/70"
-                )}
-              >
-                {t("guestbook.filterPublic")}
-              </button>
-              <button
-                type="button"
-                onClick={() => setScope("about_me")}
-                disabled={me == null}
-                className={clsx(
-                  "rounded-full px-4 py-1.5 text-sm font-medium transition",
-                  scope === "about_me" ? "bg-rose-500 text-white shadow-sm" : "text-warm-700 hover:bg-white/70",
-                  me == null && "cursor-not-allowed opacity-50"
-                )}
-                title={me == null ? t("guestbook.loginForDirect") : undefined}
-              >
-                {t("guestbook.filterAboutMe")}
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => setScope("about_me")}
+              disabled={me == null}
+              className={clsx(
+                "pb-1 font-letter text-base transition",
+                scope === "about_me"
+                  ? "border-b-2 border-[#c73e5a] text-[#4a1f2c]"
+                  : "border-b-2 border-transparent text-[#9a6b76] hover:text-[#4a1f2c]",
+                me == null && "cursor-not-allowed opacity-45"
+              )}
+              title={me == null ? t("guestbook.loginForDirect") : undefined}
+            >
+              {t("guestbook.filterAboutMe")}
+            </button>
           </div>
         </div>
 
@@ -499,27 +542,27 @@ export function MessageBoardPage() {
         />
 
         {loading ? (
-          <div className="flex flex-col items-center justify-center gap-2 py-20 text-stone-500">
-            <Loader2 className="h-6 w-6 animate-spin text-rose-400" />
+          <div className="flex flex-col items-center justify-center gap-2 py-24 text-[#9a6b76]">
+            <Loader2 className="h-6 w-6 animate-spin text-[#c73e5a]" />
             <span className="text-sm">{t("common.loading")}</span>
           </div>
         ) : err ? (
-          <p className="py-12 text-center text-sm text-red-600/90">{err}</p>
+          <p className="py-16 text-center text-sm text-red-700/90">{err}</p>
         ) : rows.length === 0 ? (
-          <div className="flex flex-col items-center rounded-3xl border-2 border-dashed border-rose-200/60 bg-white/30 px-6 py-16 text-center backdrop-blur-sm">
-            <MessageCircle className="mb-3 h-10 w-10 text-rose-300" strokeWidth={1.25} />
-            <p className="text-sm text-stone-500">{t("guestbook.empty")}</p>
+          <div className="flex flex-col items-center border border-dashed border-[#d9a8b4] bg-[#fffaf8]/70 px-6 py-20 text-center">
+            <MessageCircle className="mb-3 h-10 w-10 text-[#d9a8b4]" strokeWidth={1.25} />
+            <p className="font-letter text-lg text-[#7a4452]">{t("guestbook.empty")}</p>
             <button
               type="button"
               onClick={() => setModalOpen(true)}
-              className="mt-4 text-sm font-medium text-rose-600 underline decoration-rose-300 underline-offset-2 hover:text-rose-700"
+              className="mt-5 font-letter text-base text-[#c73e5a] underline decoration-[#c73e5a]/40 underline-offset-4 hover:decoration-[#c73e5a]"
             >
               {t("guestbook.newPost")}
             </button>
           </div>
         ) : (
-          <ul className="space-8">
-            {rows.map((row) => (
+          <ul className="space-y-10 sm:space-y-12">
+            {rows.map((row, index) => (
               <ThreadCard
                 key={row.id}
                 t={t}
@@ -529,18 +572,19 @@ export function MessageBoardPage() {
                 showName={showName}
                 viewerUserId={me?.id ?? null}
                 directoryById={directoryById}
+                index={index}
               />
             ))}
           </ul>
         )}
 
         {!loading && !err && canMore ? (
-          <div className="mt-10 flex justify-center">
+          <div className="mt-14 flex justify-center">
             <button
               type="button"
               disabled={loadMoreBusy}
               onClick={() => void load(page + 1, true)}
-              className="rounded-full border border-rose-300/50 bg-white/50 px-6 py-2.5 text-sm font-medium text-warm-600 shadow-sm backdrop-blur transition hover:bg-white/90 disabled:opacity-50"
+              className="border border-[#c73e5a]/40 bg-[#fffaf8]/80 px-8 py-3 font-letter text-base text-[#8b3a4a] transition hover:border-[#c73e5a] hover:bg-white disabled:opacity-50"
             >
               {loadMoreBusy ? t("common.loading") : t("guestbook.loadMore")}
             </button>
