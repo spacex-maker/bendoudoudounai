@@ -9,6 +9,7 @@ import { AdminDeveloperApplicationPanel } from "./components/AdminDeveloperAppli
 import { AdminDevelopersPage } from "./components/AdminDevelopersPage";
 import { AdminDeveloperListPanel } from "./components/AdminDeveloperListPanel";
 import { AdminBeanPanel } from "./components/AdminBeanPanel";
+import { AdminMomentsPanel } from "./components/AdminMomentsPanel";
 import { userIsAdmin } from "./api/client";
 import { useAuth } from "./auth/AuthContext";
 import { AdminConsoleDock } from "./components/AdminConsoleDock";
@@ -19,6 +20,7 @@ import { AdminPage } from "./pages/AdminPage";
 import { HomePage } from "./pages/HomePage";
 import { LoginPage } from "./pages/LoginPage";
 import { MessageBoardPage } from "./pages/MessageBoardPage";
+import { MomentsPage } from "./pages/MomentsPage";
 import { MusicPage } from "./pages/MusicPage";
 import { BeansPage } from "./pages/BeansPage";
 import { ProfilePage } from "./pages/account/ProfilePage";
@@ -110,6 +112,7 @@ export default function App() {
       } />
       <Route path="/dev-diary/entry/:id" element={<DevDiaryEntryPage />} />
       <Route path="/messages" element={<MessageBoardPage />} />
+      <Route path="/moments" element={<MomentsPage />} />
       <Route
         path="/beans"
         element={
@@ -155,6 +158,7 @@ export default function App() {
         <Route path="users" element={<AdminUserListPanel />} />
         <Route path="guestbook" element={<AdminGuestbookPanel />} />
         <Route path="wishlist" element={<AdminWishlistPanel />} />
+        <Route path="moments" element={<AdminMomentsPanel />} />
         <Route path="beans" element={<AdminBeanPanel />} />
         <Route path="developers" element={<AdminDevelopersPage />}>
           <Route index element={<Navigate to="list" replace />} />

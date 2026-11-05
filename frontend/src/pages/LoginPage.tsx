@@ -207,7 +207,7 @@ export function LoginPage() {
             <button
               type="submit"
               disabled={submitting}
-              className="w-full rounded-xl bg-gradient-to-r from-rose-400/95 to-amber-300/90 py-3 font-medium text-white shadow-md shadow-rose-300/40 transition hover:from-rose-500 hover:to-amber-400/90 disabled:opacity-60"
+              className="w-full rounded-xl bg-rose-500 py-3 font-medium text-white shadow-[0_10px_28px_rgba(244,63,94,0.35)] transition hover:bg-rose-600 hover:shadow-[0_12px_32px_rgba(244,63,94,0.42)] active:scale-[0.99] disabled:opacity-60"
             >
               {submitting ? t("auth.submitWait") : t("auth.loginBtn")}
             </button>

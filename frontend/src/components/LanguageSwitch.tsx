@@ -32,7 +32,7 @@ export function LanguageSwitch({ className, compact, "aria-label": ariaLabel }: 
             onClick={() => void i18n.changeLanguage(loc.code)}
             className={clsx(
               "rounded-full px-2 py-0.5 transition",
-              active ? "bg-warm-500/90 text-white shadow-sm" : "text-warm-700/75 hover:bg-white/20"
+              active ? "bg-rose-500 text-white shadow-sm" : "text-rose-700/75 hover:bg-white/25"
             )}
             lang={loc.code}
           >

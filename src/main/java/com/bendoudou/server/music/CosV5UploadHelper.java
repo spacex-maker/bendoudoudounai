@@ -66,4 +66,25 @@ public final class CosV5UploadHelper {
             client.shutdown();
         }
     }
+
+    public static void deleteObject(
+            String secretId,
+            String secretKey,
+            String region,
+            String bucket,
+            String objectKey
+    ) {
+        ClientConfig config = new ClientConfig(new Region(region));
+        COSClient client = new COSClient(
+                new COSStaticCredentialsProvider(
+                        new BasicCOSCredentials(secretId, secretKey)
+                ),
+                config
+        );
+        try {
+            client.deleteObject(bucket, objectKey);
+        } finally {
+            client.shutdown();
+        }
+    }
 }

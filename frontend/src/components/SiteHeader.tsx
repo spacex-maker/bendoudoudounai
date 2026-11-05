@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { BookHeart, Compass, Heart, LogIn, LogOut, Menu, Music2, ShieldCheck, UserCog, X } from "lucide-react";
+import { BookHeart, Compass, Heart, Images, LogIn, LogOut, Menu, Music2, ShieldCheck, UserCog, X } from "lucide-react";
 import clsx from "clsx";
 import { useTranslation } from "react-i18next";
 import { useAuth, useAuthedUser } from "../auth/AuthContext";
@@ -35,6 +35,7 @@ export function SiteHeader({ className }: Props) {
   const { pathname } = useLocation();
   const isHome = pathname === "/";
   const isMessages = pathname === "/messages";
+  const isMoments = pathname === "/moments" || pathname.startsWith("/moments/");
   const isDevDiary = pathname.startsWith("/dev-diary");
   const isMusic = isMusicPath(pathname);
 
@@ -164,13 +165,17 @@ export function SiteHeader({ className }: Props) {
               className={clsx(
                 navButtonClass,
                 "inline-flex cursor-pointer list-none items-center gap-1",
-                (isMessages || isMusic || isDevDiary) && "bg-white/35 font-medium text-warm-700"
+                (isMessages || isMusic || isDevDiary || isMoments) && "bg-white/35 font-medium text-warm-700"
               )}
             >
               <Compass className="h-3.5 w-3.5 shrink-0 opacity-80" />
               {t("nav.discover")}
             </summary>
             <div className="absolute left-1/2 top-[calc(100%+0.4rem)] z-30 w-44 -translate-x-1/2 overflow-hidden rounded-xl border border-white/45 bg-white/90 py-1 shadow-lg shadow-rose-200/25 backdrop-blur-xl">
+              <Link to="/moments" className="flex items-center gap-2 px-3 py-2 text-xs text-warm-700 transition hover:bg-white/60">
+                <Images className="h-3.5 w-3.5 shrink-0 opacity-80" />
+                {t("nav.moments")}
+              </Link>
               <Link to={hashLink("wishlist")} className="flex items-center gap-2 px-3 py-2 text-xs text-warm-700 transition hover:bg-white/60">
                 <Heart className="h-3.5 w-3.5 shrink-0 opacity-70" />
                 {t("nav.wishlist")}
@@ -287,6 +292,15 @@ export function SiteHeader({ className }: Props) {
                             <Compass className="h-3.5 w-3.5 shrink-0 opacity-90" aria-hidden />
                             {t("nav.discover")}
                           </div>
+                          <Link
+                            to="/moments"
+                            className={mobileItemClass(isMoments)}
+                            aria-current={isMoments ? "page" : undefined}
+                            onClick={closeMobileMenu}
+                          >
+                            <Images className="h-5 w-5 shrink-0 opacity-80" aria-hidden />
+                            {t("nav.moments")}
+                          </Link>
                           <Link to={hashLink("wishlist")} className={mobileItemClass()} onClick={closeMobileMenu}>
                             <Heart className="h-5 w-5 shrink-0 opacity-75" aria-hidden />
                             {t("nav.wishlist")}
@@ -420,7 +434,7 @@ export function SiteHeader({ className }: Props) {
           ) : (
             <Link
               to="/login"
-              className="inline-flex items-center gap-1.5 rounded-full bg-warm-500/90 px-3 py-2 text-sm text-white shadow-md shadow-rose-200/50 transition hover:bg-warm-600 sm:px-4"
+              className="inline-flex items-center gap-1.5 rounded-full bg-rose-500 px-3 py-2 text-sm font-medium text-white shadow-md shadow-rose-300/45 transition hover:bg-rose-600 sm:px-4"
             >
               <LogIn className="h-4 w-4" />
               {t("nav.login")}

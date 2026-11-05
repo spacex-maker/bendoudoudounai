@@ -39,6 +39,8 @@ public class DiscoverMusicService {
 
     private final NeteaseProperties neteaseProperties;
     private final NeteaseApiClient neteaseApiClient;
+    private final NeteaseRemoteCredentialSync credentialSync;
+    private final NeteaseMusicLibraryClient musicLibraryClient;
     private final MusicService musicService;
     private final MusicTrackRepository musicTrackRepository;
     private final CosStorageService cosStorageService;
@@ -48,6 +50,8 @@ public class DiscoverMusicService {
     public DiscoverMusicService(
             NeteaseProperties neteaseProperties,
             NeteaseApiClient neteaseApiClient,
+            NeteaseRemoteCredentialSync credentialSync,
+            NeteaseMusicLibraryClient musicLibraryClient,
             MusicService musicService,
             MusicTrackRepository musicTrackRepository,
             CosStorageService cosStorageService,
@@ -55,6 +59,8 @@ public class DiscoverMusicService {
     ) {
         this.neteaseProperties = neteaseProperties;
         this.neteaseApiClient = neteaseApiClient;
+        this.credentialSync = credentialSync;
+        this.musicLibraryClient = musicLibraryClient;
         this.musicService = musicService;
         this.musicTrackRepository = musicTrackRepository;
         this.cosStorageService = cosStorageService;
@@ -70,22 +76,53 @@ public class DiscoverMusicService {
         if (!StringUtils.hasText(keyword) || keyword.trim().length() < 1) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "请输入搜索关键词");
         }
+        // 与 AIMATEX-MUSIC 一致：先保证 Cookie 新鲜（从 music 内部接口同步）
+        credentialSync.ensureFresh(false);
         if (!neteaseProperties.isConfigured()) {
-            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "网易云未配置 MUSIC_U");
+            // 再强制拉一次；仍无则明确提示
+            credentialSync.ensureFresh(true);
+            if (!neteaseProperties.isConfigured()) {
+                throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "网易云未配置 MUSIC_U（可从 music 同步）");
+            }
         }
+        try {
+            return searchOnce(userId, keyword.trim(), offset, limit);
+        } catch (ResponseStatusException first) {
+            // Cookie 过期等：强制向 music 刷新后再试一次（对齐 music 侧自动续期链路）
+            int status = first.getStatusCode().value();
+            if (status == HttpStatus.BAD_GATEWAY.value()
+                    || status == HttpStatus.SERVICE_UNAVAILABLE.value()) {
+                if (credentialSync.ensureFresh(true)) {
+                    try {
+                        return searchOnce(userId, keyword.trim(), offset, limit);
+                    } catch (ResponseStatusException ignored) {
+                        throw first;
+                    }
+                }
+            }
+            throw first;
+        }
+    }
+
+    private DiscoverSearchPageResponse searchOnce(long userId, String keyword, int offset, int limit) {
         int safeLimit = Math.min(Math.max(limit, 1), 50);
         int safeOffset = Math.max(offset, 0);
         try {
-            JsonNode root = neteaseApiClient.searchSongs(keyword.trim(), safeLimit, safeOffset);
-            int code = root.path("code").asInt(200);
-            if (code != 200) {
-                String msg = root.path("message").asText("网易云搜索失败");
-                throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, msg);
-            }
+            JsonNode root = neteaseApiClient.searchSongs(keyword, safeLimit, safeOffset);
             JsonNode result = root.path("result");
             JsonNode songs = result.path("songs");
-            int total = result.path("songCount").asInt(0);
-            if (!songs.isArray()) {
+            int code = root.path("code").asInt(200);
+            // /api/cloudsearch/pc 有时不带 code；只要有 songs 就视为成功（与 music 解析习惯一致）
+            boolean hasSongs = songs.isArray();
+            if (code != 200 && code != 0 && !hasSongs) {
+                String msg = root.path("message").asText("");
+                if (!StringUtils.hasText(msg)) {
+                    msg = root.path("msg").asText("网易云搜索失败");
+                }
+                throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, msg + " (code=" + code + ")");
+            }
+            int total = result.path("songCount").asInt(hasSongs ? songs.size() : 0);
+            if (!hasSongs) {
                 return new DiscoverSearchPageResponse(List.of(), safeOffset, safeLimit, total, false);
             }
             Set<Long> heartedNeteaseIds = loadHeartedNeteaseSongIds(userId);
@@ -155,8 +192,9 @@ public class DiscoverMusicService {
         if (neteaseSongId <= 0) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "无效的歌曲 ID");
         }
+        credentialSync.ensureFresh(false);
         if (!neteaseProperties.isConfigured()) {
-            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "网易云未配置 MUSIC_U");
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "网易云未配置 MUSIC_U（可从 music 同步）");
         }
         if (!cosStorageService.isUsable()) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "COS 配置不可用");
@@ -178,6 +216,53 @@ public class DiscoverMusicService {
         if (cachedPreferred.isPresent()) {
             MusicTrackResponse cloned = cloneFromExisting(userId, playlistId, cachedPreferred.get());
             return heart ? musicService.addHeart(userId, cloned.id()) : cloned;
+        }
+
+        // 优先让 music 侧确保入库并复用同一 COS 对象（两端共用 px-1258150206 / bendoudou/music/）
+        Optional<NeteaseMusicLibraryClient.RemoteAsset> remote =
+                musicLibraryClient.ensureAsset(neteaseSongId, preferredQuality, true);
+        if (remote.isPresent()) {
+            NeteaseMusicLibraryClient.RemoteAsset asset = remote.get();
+            String note = StringUtils.hasText(asset.note())
+                    ? asset.note()
+                    : neteaseNote(neteaseSongId, StringUtils.hasText(asset.quality()) ? asset.quality() : preferredQuality);
+            Optional<MusicTrack> mineRemote = musicTrackRepository.findFirstByUserIdAndNoteOrderByIdAsc(userId, note);
+            if (mineRemote.isPresent() && StringUtils.hasText(mineRemote.get().getAudioUrl())) {
+                MusicTrackResponse existing = musicService.getAccessibleTrack(userId, mineRemote.get().getId());
+                return heart ? musicService.addHeart(userId, existing.id()) : existing;
+            }
+            Optional<MusicTrack> cachedRemote = musicTrackRepository.findFirstByNoteOrderByIdAsc(note)
+                    .filter(t -> StringUtils.hasText(t.getAudioUrl()) && StringUtils.hasText(t.getFileSha256()));
+            if (cachedRemote.isPresent()) {
+                MusicTrackResponse cloned = cloneFromExisting(userId, playlistId, cachedRemote.get());
+                return heart ? musicService.addHeart(userId, cloned.id()) : cloned;
+            }
+            String filename = sanitizeFilename(
+                    StringUtils.hasText(asset.artist()) ? asset.artist() : "未知歌手",
+                    StringUtils.hasText(asset.title()) ? asset.title() : "未知标题",
+                    asset.audioExt()
+            );
+            CreateTrackFromCosRequest req = new CreateTrackFromCosRequest(
+                    playlistId,
+                    asset.fileSha256(),
+                    asset.audioExt(),
+                    asset.title(),
+                    asset.artist(),
+                    asset.album(),
+                    note,
+                    asset.durationSeconds(),
+                    filename,
+                    false,
+                    asset.fileSize(),
+                    StringUtils.hasText(asset.mimeType())
+                            ? asset.mimeType()
+                            : CosStorageService.guessAudioContentType(asset.audioExt(), null),
+                    asset.audioObjectKey(),
+                    asset.lyricsObjectKey(),
+                    asset.coverObjectKey()
+            );
+            MusicTrackResponse created = musicService.createTrackFromCos(userId, req);
+            return heart ? musicService.addHeart(userId, created.id()) : created;
         }
 
         try {

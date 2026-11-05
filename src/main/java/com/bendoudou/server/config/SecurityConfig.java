@@ -43,6 +43,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/guestbook", "/api/guestbook/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/guestbook", "/api/guestbook/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/diary/entries", "/api/diary/entries/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/moments", "/api/moments/**").permitAll()
                         .anyRequest().authenticated()
                 )
                 .exceptionHandling(ex -> ex

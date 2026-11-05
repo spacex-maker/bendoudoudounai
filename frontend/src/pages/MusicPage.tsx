@@ -653,7 +653,12 @@ export function MusicPage() {
                 )}
               >
                 <ListMusic className="h-4 w-4 shrink-0 opacity-80" />
-                <span className="min-w-0 flex-1 truncate text-[12px]">{p.name}</span>
+                <span className="min-w-0 flex-1 truncate text-[12px]">
+                  {p.name}
+                  {p.momentsFeatured ? (
+                    <span className="ml-1 text-[10px] text-rose-300/90">{t("music.momentsFeaturedBadge")}</span>
+                  ) : null}
+                </span>
                 {p.newForToday ? (
                   <span
                     className="shrink-0 rounded px-1.5 py-px text-[9px] font-bold tabular-nums text-amber-200 ring-1 ring-amber-400/35 bg-amber-500/15"
@@ -873,7 +878,12 @@ export function MusicPage() {
                         className={clsx("flex w-full items-center gap-2 rounded-full px-3 py-2 text-left transition", currentPlaylistId === p.id && activeNav === "playlist" ? "bg-white/10 text-white" : "text-zinc-400")}
                       >
                         <ListMusic className="h-4 w-4 shrink-0 opacity-80" />
-                        <span className="min-w-0 flex-1 truncate text-[12px]">{p.name}</span>
+                        <span className="min-w-0 flex-1 truncate text-[12px]">
+                  {p.name}
+                  {p.momentsFeatured ? (
+                    <span className="ml-1 text-[10px] text-rose-300/90">{t("music.momentsFeaturedBadge")}</span>
+                  ) : null}
+                </span>
                         <span className="shrink-0 tabular-nums text-[11px] text-zinc-500">{p.trackCount}</span>
                       </button>
                     ))}

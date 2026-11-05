@@ -54,6 +54,7 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -76,6 +77,7 @@ public class MusicService {
     private static final Set<String> ALLOWED_WALLPAPER_EXT = Set.of("jpg", "jpeg", "png", "webp", "gif");
     private static final long MAX_WALLPAPER_BYTES = 3 * 1024 * 1024;
     private static final String DEFAULT_PLAYLIST_NAME = "我的歌单";
+    private static final String MOMENTS_FEATURED_PLAYLIST_NAME = "片刻精选";
 
     private final Path uploadBase;
     private final PlaylistRepository playlistRepository;
@@ -1201,6 +1203,9 @@ public class MusicService {
         if (p.isDefaultPlaylist()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "默认歌单不可删除");
         }
+        if (p.isMomentsFeatured()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "片刻精选歌单不可删除，请先取消精选");
+        }
         assertMember(playlistId, userId);
 
         Playlist fallback = getOrCreateDefaultPlaylist(userId);
@@ -1220,6 +1225,106 @@ public class MusicService {
         playlistInvitationRepository.deleteByPlaylistId(playlistId);
         playlistMemberRepository.deleteByPlaylistId(playlistId);
         playlistRepository.delete(p);
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<PlaylistItemResponse> getMomentsFeaturedPlaylist(long userId) {
+        return playlistRepository.findFirstByMomentsFeaturedTrue()
+                .flatMap(p -> playlistMemberRepository.findByPlaylistIdAndUserId(p.getId(), userId)
+                        .map(row -> toPlaylistItem(row, userId)));
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<PlaylistItemResponse> getMomentsFeaturedPlaylistPublic() {
+        return playlistRepository.findFirstByMomentsFeaturedTrue().map(p -> {
+            long trackCount = musicTrackRepository.countByPlaylistId(p.getId());
+            long memCount = playlistMemberRepository.countByPlaylistId(p.getId());
+            long totalPlayCount = musicTrackRepository.sumPlayCountByPlaylistId(p.getId());
+            User owner = userRepository.findById(p.getUserId()).orElse(null);
+            String ownerLabel = owner == null ? "?" : userLabel(owner);
+            return new PlaylistItemResponse(
+                    p.getId(),
+                    p.getName(),
+                    p.getUserId(),
+                    ownerLabel,
+                    false,
+                    "VIEWER",
+                    trackCount,
+                    memCount > 1,
+                    playlistWallpaperClientUrl(p),
+                    totalPlayCount,
+                    memCount,
+                    p.getCreatedAt().toEpochMilli(),
+                    false,
+                    true
+            );
+        });
+    }
+
+    /**
+     * 将指定歌单设为片刻精选（全站唯一）；playlistId 为空则取消精选。
+     */
+    @Transactional
+    public PlaylistItemResponse setMomentsFeaturedPlaylist(long userId, Long playlistId) {
+        playlistRepository.clearMomentsFeatured();
+        playlistRepository.flush();
+        if (playlistId == null) {
+            return null;
+        }
+        Playlist p = playlistRepository.findById(playlistId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "歌单不存在"));
+        if (p.getUserId() != userId) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "只能把自己创建的歌单设为片刻精选");
+        }
+        assertMember(playlistId, userId);
+        p.setMomentsFeatured(true);
+        playlistRepository.save(p);
+        return toPlaylistItem(
+                playlistMemberRepository.findByPlaylistIdAndUserId(playlistId, userId).orElseThrow(),
+                userId
+        );
+    }
+
+    /** 若尚无片刻精选，则为当前用户创建「片刻精选」歌单并设为精选。 */
+    @Transactional
+    public PlaylistItemResponse ensureMomentsFeaturedPlaylist(long userId) {
+        Optional<Playlist> existing = playlistRepository.findFirstByMomentsFeaturedTrue();
+        if (existing.isPresent()) {
+            Playlist p = existing.get();
+            if (p.getUserId() != userId) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "已有其他管理员的片刻精选歌单");
+            }
+            return toPlaylistItem(
+                    playlistMemberRepository.findByPlaylistIdAndUserId(p.getId(), userId).orElseThrow(),
+                    userId
+            );
+        }
+        Playlist p = new Playlist();
+        p.setUserId(userId);
+        p.setName(MOMENTS_FEATURED_PLAYLIST_NAME);
+        p.setDefaultPlaylist(false);
+        p.setMomentsFeatured(true);
+        p = playlistRepository.save(p);
+        addMember(p.getId(), userId, PlaylistMemberRole.OWNER);
+        return toPlaylistItem(
+                playlistMemberRepository.findByPlaylistIdAndUserId(p.getId(), userId).orElseThrow(),
+                userId
+        );
+    }
+
+    /** 公开：片刻页随机播放队列（已打乱）。 */
+    @Transactional(readOnly = true)
+    public List<MusicTrackResponse> listMomentsSoundtrackShuffled() {
+        Optional<Playlist> featured = playlistRepository.findFirstByMomentsFeaturedTrue();
+        if (featured.isEmpty()) {
+            return List.of();
+        }
+        List<MusicTrack> list = new ArrayList<>(
+                musicTrackRepository.findByPlaylistIdOrderByCreatedAtDesc(featured.get().getId())
+        );
+        list.removeIf(t -> !StringUtils.hasText(resolveCosPublicUrl(t.getAudioUrl(), t.getStoredRelpath())));
+        Collections.shuffle(list);
+        return list.stream().map(t -> toResponse(t, false)).collect(Collectors.toList());
     }
 
     @Transactional
@@ -1624,7 +1729,8 @@ public class MusicService {
                             totalPlayCount,
                             memCount,
                             p.getCreatedAt().toEpochMilli(),
-                            newForToday
+                            newForToday,
+                            p.isMomentsFeatured()
                     );
                 })
                 .orElse(null);

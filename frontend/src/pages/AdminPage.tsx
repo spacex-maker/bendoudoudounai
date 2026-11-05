@@ -5,6 +5,7 @@ import {
   Code2,
   Coins,
   Heart,
+  Images,
   LayoutDashboard,
   Menu,
   MessageSquareText,
@@ -47,6 +48,7 @@ export function AdminPage() {
   const isUsers = useMatch({ path: "/admin/users", end: true });
   const isGuestbook = useMatch({ path: "/admin/guestbook", end: true });
   const isWishlist = useMatch({ path: "/admin/wishlist", end: true });
+  const isMoments = useMatch({ path: "/admin/moments", end: true });
   const isBeans = useMatch({ path: "/admin/beans", end: true });
   const inDevSection = pathname.startsWith("/admin/developers");
   const isDevApps = pathname.includes("/admin/developers/applications");
@@ -56,11 +58,13 @@ export function AdminPage() {
       ? t("admin.guestbookTitle")
       : isWishlist
         ? t("admin.wishlistTitle")
-        : isBeans
-          ? "豆值管理"
-        : isUsers
-          ? t("admin.usersTitle")
-          : t("admin.pageTitle");
+        : isMoments
+          ? t("admin.momentsTitle")
+          : isBeans
+            ? "豆值管理"
+            : isUsers
+              ? t("admin.usersTitle")
+              : t("admin.pageTitle");
   const sectionSub = inDevSection
     ? isDevApps
       ? t("admin.devAppTabSub")
@@ -69,11 +73,13 @@ export function AdminPage() {
       ? t("admin.guestbookSub")
       : isWishlist
         ? t("admin.wishlistSub")
-        : isBeans
-          ? "配置豆值规则与等级，并查看流水"
-        : isUsers
-          ? t("admin.usersSub")
-          : t("admin.pageSub");
+        : isMoments
+          ? t("admin.momentsSub")
+          : isBeans
+            ? "配置豆值规则与等级，并查看流水"
+            : isUsers
+              ? t("admin.usersSub")
+              : t("admin.pageSub");
 
   const sideNavItemCls = (active: boolean) =>
     clsx(
@@ -153,6 +159,14 @@ export function AdminPage() {
           >
             <Heart className="h-4 w-4 shrink-0 opacity-90" />
             {t("admin.navWishlist")}
+          </NavLink>
+          <NavLink
+            to="moments"
+            className={({ isActive }) => sideNavItemCls(isActive)}
+            {...navLinkProps}
+          >
+            <Images className="h-4 w-4 shrink-0 opacity-90" />
+            {t("admin.navMoments")}
           </NavLink>
           <NavLink
             to="beans"
