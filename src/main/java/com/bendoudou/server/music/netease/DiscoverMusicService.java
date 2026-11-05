@@ -207,7 +207,7 @@ public class DiscoverMusicService {
                 .findFirstByUserIdAndNoteOrderByIdAsc(userId, neteaseNote(neteaseSongId, preferredQuality));
         if (minePreferred.isPresent() && StringUtils.hasText(minePreferred.get().getAudioUrl())) {
             MusicTrackResponse existing = musicService.getAccessibleTrack(userId, minePreferred.get().getId());
-            return heart ? musicService.addHeart(userId, existing.id()) : existing;
+            return finishExistingImport(userId, playlistId, heart, existing);
         }
 
         Optional<MusicTrack> cachedPreferred = musicTrackRepository
@@ -229,7 +229,7 @@ public class DiscoverMusicService {
             Optional<MusicTrack> mineRemote = musicTrackRepository.findFirstByUserIdAndNoteOrderByIdAsc(userId, note);
             if (mineRemote.isPresent() && StringUtils.hasText(mineRemote.get().getAudioUrl())) {
                 MusicTrackResponse existing = musicService.getAccessibleTrack(userId, mineRemote.get().getId());
-                return heart ? musicService.addHeart(userId, existing.id()) : existing;
+                return finishExistingImport(userId, playlistId, heart, existing);
             }
             Optional<MusicTrack> cachedRemote = musicTrackRepository.findFirstByNoteOrderByIdAsc(note)
                     .filter(t -> StringUtils.hasText(t.getAudioUrl()) && StringUtils.hasText(t.getFileSha256()));
@@ -304,7 +304,7 @@ public class DiscoverMusicService {
             Optional<MusicTrack> mineActual = musicTrackRepository.findFirstByUserIdAndNoteOrderByIdAsc(userId, note);
             if (mineActual.isPresent() && StringUtils.hasText(mineActual.get().getAudioUrl())) {
                 MusicTrackResponse existing = musicService.getAccessibleTrack(userId, mineActual.get().getId());
-                return heart ? musicService.addHeart(userId, existing.id()) : existing;
+                return finishExistingImport(userId, playlistId, heart, existing);
             }
             Optional<MusicTrack> cachedActual = musicTrackRepository.findFirstByNoteOrderByIdAsc(note)
                     .filter(t -> StringUtils.hasText(t.getAudioUrl()) && StringUtils.hasText(t.getFileSha256()));
@@ -397,6 +397,26 @@ public class DiscoverMusicService {
         } catch (IOException e) {
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "下载或上传失败: " + e.getMessage());
         }
+    }
+
+
+    /**
+     * 已有本地曲目时：按需复制到目标歌单，再按需红心。
+     */
+    private MusicTrackResponse finishExistingImport(
+            long userId,
+            Long playlistId,
+            boolean heart,
+            MusicTrackResponse existing
+    ) {
+        MusicTrackResponse result = existing;
+        if (playlistId != null && playlistId > 0 && existing.playlistId() != playlistId) {
+            result = musicService.addTrackToPlaylist(userId, existing.id(), playlistId);
+        }
+        if (heart) {
+            result = musicService.addHeart(userId, result.id());
+        }
+        return result;
     }
 
     private MusicTrackResponse cloneFromExisting(long userId, Long playlistId, MusicTrack source) {
