@@ -16,7 +16,7 @@ import { SiteHeader } from "../components/SiteHeader";
 import { GuestbookPostModal } from "../components/GuestbookPostModal";
 import { GuestbookReplyModal } from "../components/GuestbookReplyModal";
 import { useAuthedUser } from "../auth/AuthContext";
-import { PRODUCT_NAME } from "../siteMeta";
+import { FOR_NAME } from "../siteMeta";
 
 const PAGE_SIZE = 12;
 
@@ -487,7 +487,7 @@ export function MessageBoardPage() {
 
       <section className="relative mx-auto flex min-h-[calc(100dvh-4.5rem)] max-w-5xl flex-col justify-center px-4 pb-10 pt-24 sm:px-6 sm:pt-[5.75rem]">
         <p className="animate-land-fade-up font-display text-[11px] font-bold uppercase tracking-[0.28em] text-[#c73e5a]">
-          {PRODUCT_NAME}
+          {t("home.siteFor", { name: FOR_NAME })}
         </p>
         <h1 className="animate-land-fade-up mt-4 max-w-[10ch] font-letter text-[clamp(3.4rem,14vw,7.5rem)] font-normal leading-[0.92] tracking-[-0.03em] text-[#4a1f2c] [animation-delay:80ms]">
           {t("guestbook.title")}

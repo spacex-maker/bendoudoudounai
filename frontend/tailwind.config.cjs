@@ -19,6 +19,22 @@ module.exports = {
           "72%": { opacity: "1", transform: "translateY(0) scale(1)" },
           "100%": { opacity: "0", transform: "translateY(-8px) scale(0.96)" },
         },
+        homeFadeUp: {
+          "0%": { opacity: "0", transform: "translateY(14px)" },
+          "100%": { opacity: "1", transform: "translateY(0)" },
+        },
+        homeShine: {
+          "0%": { transform: "translateX(-120%)" },
+          "100%": { transform: "translateX(320%)" },
+        },
+        homeSpin: {
+          "0%": { transform: "rotate(0deg)" },
+          "100%": { transform: "rotate(360deg)" },
+        },
+        homeBlob: {
+          "0%, 100%": { transform: "translate(0, 0) scale(1)" },
+          "50%": { transform: "translate(12px, -10px) scale(1.06)" },
+        },
         landFadeUp: {
           "0%": { opacity: "0", transform: "translateY(18px)" },
           "100%": { opacity: "1", transform: "translateY(0)" },
@@ -77,6 +93,12 @@ module.exports = {
       animation: {
         "vinyl-swap": "vinylSwap 0.72s cubic-bezier(0.4, 0, 0.2, 1) both",
         "play-mode-tip": "playModeTip 1.35s cubic-bezier(0.22, 1, 0.36, 1) both",
+        "home-fade-up": "homeFadeUp 0.7s cubic-bezier(0.22, 1, 0.36, 1) both",
+        "home-shine": "homeShine 2.8s ease-in-out infinite",
+        "home-spin": "homeSpin 28s linear infinite",
+        "home-spin-slow": "homeSpin 48s linear infinite reverse",
+        "home-blob": "homeBlob 11s ease-in-out infinite",
+        "home-blob-delay": "homeBlob 14s ease-in-out 1.2s infinite",
         "land-fade-up": "landFadeUp 0.7s cubic-bezier(0.22, 1, 0.36, 1) both",
         "land-float": "landFloat 7s ease-in-out infinite",
         "land-spin": "landSpin 18s linear infinite",
@@ -92,9 +114,9 @@ module.exports = {
         "wall-ink": "wallInk 9s ease-in-out infinite",
       },
       fontFamily: {
-        display: ['"Syne"', '"Noto Sans SC"', "system-ui", "sans-serif"],
+        display: ['"ZCOOL XiaoWei"', "serif"],
         letter: ['"Instrument Serif"', '"Noto Serif SC"', '"Noto Sans SC"', "Georgia", "serif"],
-        sans: ['"Manrope"', '"Noto Sans SC"', "system-ui", "sans-serif"],
+        sans: ['"Nunito"', "system-ui", "sans-serif"],
       },
       colors: {
         warm: {
