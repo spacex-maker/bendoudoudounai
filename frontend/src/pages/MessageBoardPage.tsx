@@ -60,6 +60,19 @@ function FadedWords({
   );
 }
 
+/** 无称呼，或登录后匿名发且称呼不是账号名：不露头像。 */
+function isAnonymousGuestbookPost(
+  nickname: string | null,
+  authorUserId: number | null | undefined,
+  directoryById: Map<number, UserDirectoryItemDto>
+): boolean {
+  const nick = nickname?.trim() || "";
+  if (!nick) return true;
+  if (authorUserId == null) return false;
+  const account = directoryById.get(authorUserId)?.label?.trim() || "";
+  return Boolean(account) && nick !== account;
+}
+
 function MessageAvatar({
   nickname,
   authorUserId,
@@ -73,6 +86,7 @@ function MessageAvatar({
   directoryById: Map<number, UserDirectoryItemDto>;
   compact?: boolean;
 }) {
+  if (isAnonymousGuestbookPost(nickname, authorUserId, directoryById)) return null;
   const dirUser = authorUserId != null ? directoryById.get(authorUserId) : undefined;
   const avatarUrl = dirUser ? userDirectoryAvatarUrl(dirUser) : null;
   const initial = (showName(nickname).charAt(0) || "·").toUpperCase();
@@ -229,14 +243,16 @@ function ThreadCard({
 
         <div className="relative px-5 pb-4 pt-5 sm:px-7 sm:pt-6">
           <div className="flex items-start gap-3 sm:gap-4">
-            <div className={clsx(mainWeather.faded && "opacity-50 grayscale")}>
-              <MessageAvatar
-                nickname={th.nickname}
-                authorUserId={th.authorUserId}
-                showName={showName}
-                directoryById={directoryById}
-              />
-            </div>
+            {!isAnonymousGuestbookPost(th.nickname, th.authorUserId, directoryById) ? (
+              <div className={clsx(mainWeather.faded && "opacity-50 grayscale")}>
+                <MessageAvatar
+                  nickname={th.nickname}
+                  authorUserId={th.authorUserId}
+                  showName={showName}
+                  directoryById={directoryById}
+                />
+              </div>
+            ) : null}
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
                 <span
@@ -284,15 +300,17 @@ function ThreadCard({
               return (
                 <li key={r.id} className="px-5 py-4 sm:px-7 sm:pl-16">
                   <div className="flex gap-3">
-                    <div className={clsx(replyWeather.faded && "opacity-50 grayscale")}>
-                      <MessageAvatar
-                        nickname={r.nickname}
-                        authorUserId={r.authorUserId}
-                        showName={showName}
-                        directoryById={directoryById}
-                        compact
-                      />
-                    </div>
+                    {!isAnonymousGuestbookPost(r.nickname, r.authorUserId, directoryById) ? (
+                      <div className={clsx(replyWeather.faded && "opacity-50 grayscale")}>
+                        <MessageAvatar
+                          nickname={r.nickname}
+                          authorUserId={r.authorUserId}
+                          showName={showName}
+                          directoryById={directoryById}
+                          compact
+                        />
+                      </div>
+                    ) : null}
                     <div className="min-w-0 flex-1 border-l border-[#ead0d6] pl-3">
                       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
                         <span
