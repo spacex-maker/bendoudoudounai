@@ -41,6 +41,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/wishlist", "/api/wishlist/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/wishlist", "/api/wishlist/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/guestbook", "/api/guestbook/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/moments", "/api/moments/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/guestbook", "/api/guestbook/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/diary/entries", "/api/diary/entries/**").permitAll()
                         .anyRequest().authenticated()

@@ -259,7 +259,19 @@ public class DiscoverMusicService {
                             : CosStorageService.guessAudioContentType(asset.audioExt(), null),
                     asset.audioObjectKey(),
                     asset.lyricsObjectKey(),
-                    asset.coverObjectKey()
+                    asset.coverObjectKey(),
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null
             );
             MusicTrackResponse created = musicService.createTrackFromCos(userId, req);
             return heart ? musicService.addHeart(userId, created.id()) : created;
@@ -383,7 +395,19 @@ public class DiscoverMusicService {
                         CosStorageService.guessAudioContentType(urlInfo.ext(), urlInfo.mimeType()),
                         audioObjectKey,
                         lyricsObjectKey,
-                        coverObjectKey
+                        coverObjectKey,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null
                 );
                 MusicTrackResponse created = musicService.createTrackFromCos(userId, req);
                 return heart ? musicService.addHeart(userId, created.id()) : created;
@@ -441,7 +465,19 @@ public class DiscoverMusicService {
                 source.getMimeType(),
                 audioKey,
                 source.getLyricsStoredRelpath(),
-                source.getCoverStoredRelpath()
+                source.getCoverStoredRelpath(),
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
         );
         return musicService.createTrackFromCos(userId, req);
     }

@@ -18,6 +18,7 @@ import { useTranslation } from "react-i18next";
 import { useAuth } from "../auth/AuthContext";
 import { usePageAppearance } from "../pageAppearance/PageAppearanceContext";
 import { FutureWishlistSection } from "../components/FutureWishlistSection";
+import { HomeMomentsTeaser } from "../components/HomeMomentsTeaser";
 import { SiteHeader } from "../components/SiteHeader";
 import { DEVELOPER_NAME, FOR_NAME } from "../siteMeta";
 
@@ -121,9 +122,14 @@ export function HomePage() {
                 </span>
                 <ChevronRight className="relative h-4 w-4 transition group-hover:translate-x-0.5" />
               </Link>
+              <Link to="/moments" className={secondaryCtaClass}>
+                <ImageIcon className="h-4 w-4 opacity-90" />
+                {t("home.ctaMoments")}
+              </Link>
             </div>
           </section>
 
+          <HomeMomentsTeaser />
 
           <section
             id="features"

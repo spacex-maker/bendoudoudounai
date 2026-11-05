@@ -26,6 +26,14 @@ public class Playlist {
     @Column(name = "is_default", nullable = false)
     private boolean defaultPlaylist = false;
 
+    /** 云同步曲库等系统桶；普通歌单为 false */
+    @Column(name = "is_library_bucket", nullable = false)
+    private boolean libraryBucket = false;
+
+    /** 片刻页背景音乐精选歌单（全站至多一个为 true） */
+    @Column(name = "moments_featured", nullable = false)
+    private boolean momentsFeatured = false;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt = Instant.now();
 
@@ -67,6 +75,22 @@ public class Playlist {
 
     public void setDefaultPlaylist(boolean defaultPlaylist) {
         this.defaultPlaylist = defaultPlaylist;
+    }
+
+    public boolean isLibraryBucket() {
+        return libraryBucket;
+    }
+
+    public void setLibraryBucket(boolean libraryBucket) {
+        this.libraryBucket = libraryBucket;
+    }
+
+    public boolean isMomentsFeatured() {
+        return momentsFeatured;
+    }
+
+    public void setMomentsFeatured(boolean momentsFeatured) {
+        this.momentsFeatured = momentsFeatured;
     }
 
     public Instant getCreatedAt() {

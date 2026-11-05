@@ -724,6 +724,61 @@ export interface CosUploadTicketDto {
   coverObjectKey: string | null;
 }
 
+export interface MomentUploadTicketDto {
+  tmpSecretId: string;
+  tmpSecretKey: string;
+  sessionToken: string;
+  startTime: number;
+  expiredTime: number;
+  bucket: string;
+  region: string;
+  host: string;
+  objectKey: string;
+}
+
+export interface MomentPhotoDto {
+  id: number;
+  objectKey: string;
+  publicUrl: string;
+  thumbUrl: string;
+  largeUrl: string;
+  width: number | null;
+  height: number | null;
+  caption: string | null;
+  takenAt: string | null;
+  sortOrder: number;
+  createdAt: string;
+  dominantHue: number | null;
+  dominantSat: number | null;
+  dominantLight: number | null;
+  paletteJson: string | null;
+}
+
+export type MomentListQuery = {
+  page?: number;
+  size?: number;
+  hue?: number | null;
+  tolerance?: number | null;
+  mood?: "warm" | "cool" | "neutral" | "vivid" | "soft" | null;
+  sort?: "newest" | "hue" | null;
+};
+
+export type MomentColorFacetDto = {
+  hue: number | null;
+  neutral: boolean;
+  count: number;
+};
+
+export interface MomentPhotoPageDto {
+  content: MomentPhotoDto[];
+  totalElements: number;
+  totalPages: number;
+  number: number;
+  size: number;
+  last: boolean;
+}
+
+
 export interface MusicTrackDto {
   id: number;
   playlistId: number;
@@ -866,6 +921,7 @@ export interface PlaylistItemDto {
   createdAtMillis?: number;
   /** 当日新建，或当前用户当日新加入（与后端 Asia/Shanghai 日切一致） */
   newForToday?: boolean;
+  momentsFeatured?: boolean;
 }
 
 export interface PlaylistMemberDto {
@@ -1813,8 +1869,136 @@ export async function createCosUploadTicket(input: {
   return authJson(res);
 }
 
+export async function createMomentUploadTicket(input: {
+  ext: string;
+  contentType?: string;
+}): Promise<MomentUploadTicketDto> {
+  const res = await fetch(apiPath("/api/admin/moments/upload-ticket"), {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${getStoredToken()}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      ext: input.ext,
+      contentType: input.contentType ?? null,
+    }),
+  });
+  return authJson(res);
+}
+
+export async function createMomentPhoto(input: {
+  objectKey: string;
+  width?: number | null;
+  height?: number | null;
+  caption?: string | null;
+  dominantHue?: number | null;
+  dominantSat?: number | null;
+  dominantLight?: number | null;
+  paletteJson?: string | null;
+}): Promise<MomentPhotoDto> {
+  const res = await fetch(apiPath("/api/admin/moments"), {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${getStoredToken()}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(input),
+  });
+  return authJson(res);
+}
+
+export async function listMomentPhotos(
+  pageOrQuery: number | MomentListQuery = 0,
+  size = 40
+): Promise<MomentPhotoPageDto> {
+  const q: MomentListQuery =
+    typeof pageOrQuery === "number" ? { page: pageOrQuery, size } : { size: 40, ...pageOrQuery };
+  const params = new URLSearchParams();
+  params.set("page", String(q.page ?? 0));
+  params.set("size", String(q.size ?? 40));
+  if (q.hue != null) params.set("hue", String(q.hue));
+  if (q.tolerance != null) params.set("tolerance", String(q.tolerance));
+  if (q.mood) params.set("mood", q.mood);
+  if (q.sort && q.sort !== "newest") params.set("sort", q.sort);
+  const { data } = await api.get<MomentPhotoPageDto>(`/api/moments?${params}`);
+  return data;
+}
+
+export async function listMomentColorFacets(): Promise<MomentColorFacetDto[]> {
+  const { data } = await api.get<MomentColorFacetDto[]>("/api/moments/color-facets");
+  return Array.isArray(data) ? data : [];
+}
+
+/** 片刻精选歌单曲目（已打乱，公开） */
+export async function listMomentsSoundtrack(): Promise<MusicTrackDto[]> {
+  const { data } = await api.get<MusicTrackDto[]>("/api/moments/soundtrack");
+  return Array.isArray(data) ? data : [];
+}
+
+export async function fetchMomentsFeaturedPlaylist(): Promise<PlaylistItemDto | null> {
+  const { data } = await api.get<{ playlist: PlaylistItemDto | null }>("/api/admin/moments/featured-playlist");
+  return data?.playlist ?? null;
+}
+
+export async function setMomentsFeaturedPlaylist(playlistId: number | null): Promise<PlaylistItemDto | null> {
+  const { data } = await api.put<{ playlist: PlaylistItemDto | null }>("/api/admin/moments/featured-playlist", {
+    playlistId,
+  });
+  return data?.playlist ?? null;
+}
+
+export async function ensureMomentsFeaturedPlaylist(): Promise<PlaylistItemDto> {
+  const { data } = await api.post<PlaylistItemDto>("/api/admin/moments/featured-playlist/ensure");
+  return data;
+}
+
+export async function patchMomentPhoto(
+  id: number,
+  body: {
+    caption?: string | null;
+    sortOrder?: number | null;
+    dominantHue?: number | null;
+    dominantSat?: number | null;
+    dominantLight?: number | null;
+    paletteJson?: string | null;
+    clearColor?: boolean;
+  }
+): Promise<MomentPhotoDto> {
+  const { data } = await api.patch<MomentPhotoDto>(`/api/admin/moments/${id}`, body);
+  return data;
+}
+
+export async function deleteMomentPhoto(id: number): Promise<void> {
+  await api.delete(`/api/admin/moments/${id}`);
+}
+
+export async function replaceMomentPhoto(
+  id: number,
+  input: {
+    objectKey: string;
+    width?: number | null;
+    height?: number | null;
+    dominantHue?: number | null;
+    dominantSat?: number | null;
+    dominantLight?: number | null;
+    paletteJson?: string | null;
+  }
+): Promise<MomentPhotoDto> {
+  const res = await fetch(apiPath(`/api/admin/moments/${id}/replace`), {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${getStoredToken()}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(input),
+  });
+  return authJson(res);
+}
+
+
 export function uploadObjectToCos(
-  ticket: CosUploadTicketDto,
+  ticket: CosUploadTicketDto | MomentUploadTicketDto,
   objectKey: string,
   file: File,
   onProgress?: (percent: number | null) => void

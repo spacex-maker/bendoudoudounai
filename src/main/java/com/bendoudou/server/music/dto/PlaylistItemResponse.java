@@ -19,5 +19,7 @@ public record PlaylistItemResponse(
         long memberCount,
         long createdAtMillis,
         /** 歌单为当日创建，或当前用户为当日新加入该歌单（以 Asia/Shanghai 日切计） */
-        boolean newForToday
+        boolean newForToday,
+        /** 片刻页随机播放用的精选歌单 */
+        boolean momentsFeatured
 ) {}

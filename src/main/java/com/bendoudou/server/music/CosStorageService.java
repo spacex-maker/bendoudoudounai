@@ -116,6 +116,42 @@ public class CosStorageService {
                 + songContentSha256Hex + "." + e.toLowerCase();
     }
 
+
+    /** 片刻相册：bendoudou/moments/{yyyy}/{uuid}.{ext} */
+    public String buildMomentObjectKey(String uuidHex, String extWithoutDot) {
+        String e = extWithoutDot;
+        if (e != null && e.startsWith(".")) {
+            e = e.substring(1);
+        }
+        if (e == null || e.isEmpty()) {
+            e = "jpg";
+        }
+        String year = java.time.Year.now(java.time.ZoneId.of("Asia/Shanghai")).toString();
+        return "bendoudou/moments/" + year + "/" + uuidHex + "." + e.toLowerCase();
+    }
+
+    public void deleteObject(String objectKey) {
+        if (!StringUtils.hasText(objectKey)) {
+            return;
+        }
+        if (!isUsable()) {
+            throw new IllegalStateException("COS 未正确配置，无法删除");
+        }
+        String secretId = CosSecretResolver.resolveSecretId(props);
+        String secretKey = CosSecretResolver.resolveSecretKey(props);
+        try {
+            CosV5UploadHelper.deleteObject(
+                    secretId,
+                    secretKey,
+                    props.getRegion(),
+                    props.getBucket(),
+                    objectKey
+            );
+        } catch (NoClassDefFoundError e) {
+            throw new IllegalStateException("未找到腾讯云 COS 依赖", e);
+        }
+    }
+
     /** 每歌单一张壁纸，路径固定便于覆盖更新 */
     public String buildPlaylistWallpaperObjectKey(long playlistId, String extWithoutDot) {
         String p = props.getPathPrefix() == null ? "" : props.getPathPrefix();

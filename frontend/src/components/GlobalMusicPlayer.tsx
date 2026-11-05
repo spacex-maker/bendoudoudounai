@@ -1,47 +1,24 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ChevronUp, Music2, Pause, Play } from "lucide-react";
+import { Music2, Pause, Play } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useMusicPlayer } from "../music/MusicPlayerContext";
 import { isMusicPath } from "../music/musicRoutes";
 import { MusicPlayerBar } from "./MusicPlayerBar";
-import { ImmersiveLyricsStage } from "./ImmersiveLyricsStage";
+import { MomentsSoundtrackDock } from "./MomentsSoundtrackDock";
 import { useSyncedLyrics } from "../music/useSyncedLyrics";
 import { getActiveLyricText } from "../music/lyricsUtils";
 import {
   coverDisplayUrl,
-  fetchPlayHistoryPlays,
-  type PlayHistoryItemDto,
+  fetchPlayHistoryTracks,
+  type MusicTrackDto,
   updatePlaylistListeningState,
   updatePlaylistListeningStateAsync,
 } from "../api/client";
 import { mapApiError } from "../i18n/mapApiError";
-import { useDateLocale } from "../i18n/useDateLocale";
-
-const HISTORY_PAGE_SIZE = 30;
-
-function formatHistoryPlayedAt(ms: number, locale: string, now = Date.now()): string {
-  const d = new Date(ms);
-  const n = new Date(now);
-  const sameDay = d.toDateString() === n.toDateString();
-  const y = new Date(now);
-  y.setDate(y.getDate() - 1);
-  const yesterday = d.toDateString() === y.toDateString();
-  const time = d.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" });
-  if (sameDay) return time;
-  if (yesterday) {
-    return locale.startsWith("ja") ? `昨日 ${time}` : `昨天 ${time}`;
-  }
-  const sameYear = d.getFullYear() === n.getFullYear();
-  const date = d.toLocaleDateString(locale, sameYear
-    ? { month: "numeric", day: "numeric" }
-    : { year: "numeric", month: "numeric", day: "numeric" });
-  return `${date} ${time}`;
-}
 
 export function GlobalMusicPlayer() {
   const { t } = useTranslation();
-  const dateLoc = useDateLocale();
   const location = useLocation();
   const navigate = useNavigate();
   const {
@@ -65,21 +42,21 @@ export function GlobalMusicPlayer() {
     seekPrev,
     coverSrc,
     selectTrack,
-    setImmersiveLyricsOpen,
+    setPlayerBarExpanded,
   } = useMusicPlayer();
 
   const [historyPanelOpen, setHistoryPanelOpen] = useState(false);
-  const [historyItems, setHistoryItems] = useState<PlayHistoryItemDto[]>([]);
-  const [historyPage, setHistoryPage] = useState(0);
-  const [historyTotalPages, setHistoryTotalPages] = useState(0);
-  const [historyTotal, setHistoryTotal] = useState(0);
+  const [historyTracks, setHistoryTracks] = useState<MusicTrackDto[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
-  const [historyLoadingMore, setHistoryLoadingMore] = useState(false);
   const [historyErr, setHistoryErr] = useState<string | null>(null);
   const [musicMobileNavOpen, setMusicMobileNavOpen] = useState(false);
-  const historyLoadMoreRef = useRef<HTMLDivElement | null>(null);
 
   const isOnMusicPage = isMusicPath(location.pathname);
+  const isOnMomentsPage = location.pathname === "/moments" || location.pathname.startsWith("/moments/");
+
+  useEffect(() => {
+    if (!isOnMomentsPage) setPlayerBarExpanded(false);
+  }, [isOnMomentsPage, setPlayerBarExpanded]);
   const openMusicPlayerView = useCallback(() => {
     if (isOnMusicPage) {
       const params = new URLSearchParams(location.search);
@@ -106,7 +83,6 @@ export function GlobalMusicPlayer() {
       return;
     }
     a.src = audioObjectUrl;
-    a.loop = playMode === "single";
     a.load();
     if (playing) void a.play().catch(() => setPlaying(false));
   }, [audioObjectUrl, currentTrack?.id]);
@@ -115,12 +91,6 @@ export function GlobalMusicPlayer() {
     const a = audioRef.current;
     if (a) a.volume = volume;
   }, [volume, audioObjectUrl, currentId]);
-
-  // 单曲循环用原生 loop，比 ended 里手动 seek 更稳（且不受 queue 为空影响）
-  useEffect(() => {
-    const a = audioRef.current;
-    if (a) a.loop = playMode === "single";
-  }, [playMode, audioRef]);
 
   // Keep playlist listening state synced globally (not only /music page).
   useEffect(() => {
@@ -176,17 +146,9 @@ export function GlobalMusicPlayer() {
     setHistoryPanelOpen(true);
     setHistoryLoading(true);
     setHistoryErr(null);
-    setHistoryItems([]);
-    setHistoryPage(0);
-    setHistoryTotalPages(0);
-    setHistoryTotal(0);
     void (async () => {
       try {
-        const data = await fetchPlayHistoryPlays(0, HISTORY_PAGE_SIZE);
-        setHistoryItems(data.content ?? []);
-        setHistoryPage(data.number ?? 0);
-        setHistoryTotalPages(data.totalPages ?? 0);
-        setHistoryTotal(data.totalElements ?? 0);
+        setHistoryTracks(await fetchPlayHistoryTracks());
       } catch (e) {
         setHistoryErr(mapApiError(t, e));
       } finally {
@@ -194,40 +156,6 @@ export function GlobalMusicPlayer() {
       }
     })();
   }, [t]);
-
-  const loadMoreHistory = useCallback(async () => {
-    if (historyLoading || historyLoadingMore) return;
-    if (historyPage >= historyTotalPages - 1) return;
-    setHistoryLoadingMore(true);
-    try {
-      const next = historyPage + 1;
-      const data = await fetchPlayHistoryPlays(next, HISTORY_PAGE_SIZE);
-      setHistoryItems((prev) => [...prev, ...(data.content ?? [])]);
-      setHistoryPage(data.number ?? next);
-      setHistoryTotalPages(data.totalPages ?? historyTotalPages);
-      setHistoryTotal(data.totalElements ?? historyTotal);
-    } catch (e) {
-      setHistoryErr(mapApiError(t, e));
-    } finally {
-      setHistoryLoadingMore(false);
-    }
-  }, [historyLoading, historyLoadingMore, historyPage, historyTotal, historyTotalPages, t]);
-
-  useEffect(() => {
-    if (!historyPanelOpen) return;
-    const target = historyLoadMoreRef.current;
-    if (!target) return;
-    const io = new IntersectionObserver(
-      (entries) => {
-        const first = entries[0];
-        if (!first?.isIntersecting) return;
-        void loadMoreHistory();
-      },
-      { root: target.parentElement, rootMargin: "120px 0px" }
-    );
-    io.observe(target);
-    return () => io.disconnect();
-  }, [historyPanelOpen, loadMoreHistory, historyItems.length]);
 
   const handleCyclePlayMode = useCallback(() => {
     setPlayMode((prev) => (prev === "list" ? "single" : prev === "single" ? "shuffle" : "list"));
@@ -259,7 +187,6 @@ export function GlobalMusicPlayer() {
     onCyclePlayMode: handleCyclePlayMode,
     onOpenHistoryPanel: openHistoryPanel,
     onOpenPlayerView: openMusicPlayerView,
-    onOpenImmersiveLyrics: () => setImmersiveLyricsOpen(true),
   };
 
   return (
@@ -269,7 +196,6 @@ export function GlobalMusicPlayer() {
         className="hidden"
         crossOrigin="anonymous"
         preload="auto"
-        loop={playMode === "single"}
         onTimeUpdate={(e) => {
           if (!scrubbing) setPlayPos(e.currentTarget.currentTime);
         }}
@@ -282,26 +208,20 @@ export function GlobalMusicPlayer() {
           if (Number.isFinite(d) && d > 0) setPlayDur(d);
         }}
         onEnded={() => {
-          // loop=true 时通常不触发 ended；此处兜底单曲重播，并处理列表/随机
+          if (queue.length === 0 || !currentTrack) {
+            setPlaying(false);
+            setPlayPos(0);
+            return;
+          }
           if (playMode === "single") {
             const a = audioRef.current;
-            if (!a || !currentTrack) {
-              setPlaying(false);
-              setPlayPos(0);
-              return;
-            }
+            if (!a) { setPlaying(false); setPlayPos(0); return; }
             a.currentTime = 0;
             setPlayPos(0);
             setPlaying(true);
             void a.play().catch(() => setPlaying(false));
             return;
           }
-          if (!currentTrack) {
-            setPlaying(false);
-            setPlayPos(0);
-            return;
-          }
-          // 队列空或当前曲不在队列时，seekNext 会重播当前 / 落到队列头
           seekNext();
         }}
       />
@@ -315,11 +235,20 @@ export function GlobalMusicPlayer() {
         />
       )}
 
-      {/* Other pages: mini pill or expanded bar */}
-      {!isOnMusicPage && hasTrack && (
+      {/* 片刻页：可展开精选曲目坞 */}
+      {!isOnMusicPage && isOnMomentsPage && (hasTrack || queue.length > 0) && (
+        <MomentsSoundtrackDock
+          audioRef={audioRef}
+          barMax={barMax}
+          onTogglePlay={handleTogglePlay}
+          onCyclePlayMode={handleCyclePlayMode}
+        />
+      )}
+
+      {/* Other pages: mini pill */}
+      {!isOnMusicPage && !isOnMomentsPage && hasTrack && (
         <div className="pointer-events-none fixed bottom-4 right-4 z-50 sm:bottom-6">
           <div className="pointer-events-auto flex items-center gap-1.5 rounded-full bg-zinc-900/95 px-1.5 py-1.5 shadow-xl ring-1 ring-white/10 backdrop-blur-xl">
-            {/* Vinyl thumbnail */}
             <button
               type="button"
               onClick={openMusicPlayerView}
@@ -339,8 +268,6 @@ export function GlobalMusicPlayer() {
               )}
               <div className="absolute inset-0 m-auto h-2.5 w-2.5 rounded-full border border-zinc-700/40 bg-zinc-900" />
             </button>
-
-            {/* Track info */}
             <button
               type="button"
               onClick={openMusicPlayerView}
@@ -351,8 +278,6 @@ export function GlobalMusicPlayer() {
               </div>
               <div className="truncate text-[10px] text-zinc-500">{currentTrack.artist}</div>
             </button>
-
-            {/* Play/pause */}
             <button
               type="button"
               onClick={handleTogglePlay}
@@ -371,22 +296,15 @@ export function GlobalMusicPlayer() {
       {/* History panel */}
       {historyPanelOpen && (
         <div
-          className="fixed inset-0 z-[220] bg-black/45 backdrop-blur-[1px]"
+          className="fixed inset-0 z-[70] bg-black/35 backdrop-blur-[1px]"
           onClick={() => setHistoryPanelOpen(false)}
         >
           <aside
-            className="absolute right-0 top-0 flex h-full w-[min(88vw,380px)] flex-col border-l border-white/10 bg-zinc-950/95 p-4 shadow-2xl"
+            className="absolute right-0 top-0 h-full w-[min(88vw,360px)] border-l border-white/10 bg-zinc-950/95 p-4 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="mb-3 flex shrink-0 items-center justify-between gap-2">
-              <div className="min-w-0">
-                <h3 className="text-sm font-semibold text-zinc-100">{t("music.playHistory")}</h3>
-                {!historyLoading && historyTotal > 0 ? (
-                  <p className="mt-0.5 text-[11px] text-zinc-500">
-                    {t("music.historyTotal", { count: historyTotal })}
-                  </p>
-                ) : null}
-              </div>
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-zinc-100">{t("music.playHistory")}</h3>
               <button
                 type="button"
                 className="rounded-full px-2 py-1 text-xs text-zinc-400 hover:bg-white/10 hover:text-zinc-200"
@@ -395,76 +313,49 @@ export function GlobalMusicPlayer() {
                 {t("common.close", { defaultValue: "关闭" })}
               </button>
             </div>
-            {historyErr && <p className="mb-2 shrink-0 text-xs text-red-400/90">{historyErr}</p>}
+            {historyErr && <p className="mb-2 text-xs text-red-400/90">{historyErr}</p>}
             {historyLoading && <p className="text-xs text-zinc-500">{t("common.loading")}</p>}
-            {!historyLoading && historyItems.length === 0 && (
+            {!historyLoading && historyTracks.length === 0 && (
               <p className="text-xs text-zinc-500">
                 {t("music.historyEmpty", { defaultValue: "暂无播放历史" })}
               </p>
             )}
-            <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto pr-1">
+            <div className="custom-scrollbar h-[calc(100%-2.25rem)] overflow-y-auto pr-1">
               <div className="space-y-1">
-                {historyItems.map((item) => {
-                  const tr = item.track;
-                  return (
-                    <button
-                      key={item.historyId}
-                      type="button"
-                      className="flex w-full items-center gap-2.5 rounded-xl px-2 py-2 text-left hover:bg-white/10"
-                      onClick={() => {
-                        selectTrack(tr, true);
-                        setHistoryPanelOpen(false);
-                      }}
-                    >
-                      <div className="h-10 w-10 shrink-0 overflow-hidden rounded-lg bg-zinc-800">
-                        {coverDisplayUrl(tr) ? (
-                          <img
-                            src={coverDisplayUrl(tr)!}
-                            alt={tr.title}
-                            className="h-full w-full object-cover"
-                          />
-                        ) : (
-                          <div className="flex h-full w-full items-center justify-center text-zinc-600">
-                            <Music2 className="h-4 w-4" />
-                          </div>
-                        )}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate text-xs font-medium text-zinc-100">{tr.title}</div>
-                        <div className="mt-0.5 truncate text-[11px] text-zinc-500">
-                          {tr.artist}
-                          {tr.album ? ` · ${tr.album}` : ""}
+                {historyTracks.map((tr) => (
+                  <button
+                    key={tr.id}
+                    type="button"
+                    className="flex w-full items-center gap-2 rounded-xl px-2 py-2 text-left hover:bg-white/10"
+                    onClick={() => {
+                      selectTrack(tr, true);
+                      setHistoryPanelOpen(false);
+                    }}
+                  >
+                    <div className="h-10 w-10 shrink-0 overflow-hidden rounded-lg bg-zinc-800">
+                      {coverDisplayUrl(tr) ? (
+                        <img
+                          src={coverDisplayUrl(tr)!}
+                          alt={tr.title}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center text-zinc-600">
+                          <Music2 className="h-4 w-4" />
                         </div>
-                        <div className="mt-0.5 text-[10px] tabular-nums text-zinc-600">
-                          {formatHistoryPlayedAt(item.playedAtMillis, dateLoc)}
-                        </div>
-                      </div>
-                    </button>
-                  );
-                })}
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-xs text-zinc-100">{tr.title}</div>
+                      <div className="truncate text-[11px] text-zinc-500">{tr.artist}</div>
+                    </div>
+                  </button>
+                ))}
               </div>
-              <div ref={historyLoadMoreRef} className="h-8" />
-              {historyLoadingMore ? (
-                <p className="py-2 text-center text-[11px] text-zinc-500">{t("common.loading")}</p>
-              ) : null}
-              {!historyLoading &&
-              !historyLoadingMore &&
-              historyItems.length > 0 &&
-              historyPage < historyTotalPages - 1 ? (
-                <button
-                  type="button"
-                  className="mt-1 w-full rounded-xl py-2 text-[11px] text-zinc-400 transition hover:bg-white/5 hover:text-zinc-200"
-                  onClick={() => void loadMoreHistory()}
-                >
-                  {t("music.historyLoadMore")}
-                </button>
-              ) : null}
             </div>
           </aside>
         </div>
       )}
-
-      <ImmersiveLyricsStage onOpenHistoryPanel={openHistoryPanel} />
     </>
   );
 }

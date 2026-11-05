@@ -56,6 +56,7 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -68,6 +69,8 @@ import java.util.stream.Collectors;
 
 @Service
 public class MusicService {
+    private static final String MOMENTS_FEATURED_PLAYLIST_NAME = "片刻精选";
+
 
     /** 与数据库 / 业务日切一致，用于歌单「新」字判断 */
     private static final ZoneId APP_ZONE = ZoneId.of("Asia/Shanghai");
@@ -1758,6 +1761,107 @@ public class MusicService {
         musicMentionNotificationRepository.saveAll(batch);
     }
 
+@Transactional(readOnly = true)
+    public Optional<PlaylistItemResponse> getMomentsFeaturedPlaylist(long userId) {
+        return playlistRepository.findFirstByMomentsFeaturedTrue()
+                .flatMap(p -> playlistMemberRepository.findByPlaylistIdAndUserId(p.getId(), userId)
+                        .map(row -> toPlaylistItem(row, userId)));
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<PlaylistItemResponse> getMomentsFeaturedPlaylistPublic() {
+        return playlistRepository.findFirstByMomentsFeaturedTrue().map(p -> {
+            long trackCount = musicTrackRepository.countByPlaylistId(p.getId());
+            long memCount = playlistMemberRepository.countByPlaylistId(p.getId());
+            long totalPlayCount = musicTrackRepository.sumPlayCountByPlaylistId(p.getId());
+            User owner = userRepository.findById(p.getUserId()).orElse(null);
+            String ownerLabel = owner == null ? "?" : userLabel(owner);
+            return new PlaylistItemResponse(
+                    p.getId(),
+                    p.getName(),
+                    p.getUserId(),
+                    ownerLabel,
+                    false,
+                    "VIEWER",
+                    trackCount,
+                    memCount > 1,
+                    playlistWallpaperClientUrl(p),
+                    totalPlayCount,
+                    memCount,
+                    p.getCreatedAt().toEpochMilli(),
+                    false,
+                    true
+            );
+        });
+    }
+
+    /**
+     * 将指定歌单设为片刻精选（全站唯一）；playlistId 为空则取消精选。
+     */
+    @Transactional
+    public PlaylistItemResponse setMomentsFeaturedPlaylist(long userId, Long playlistId) {
+        playlistRepository.clearMomentsFeatured();
+        playlistRepository.flush();
+        if (playlistId == null) {
+            return null;
+        }
+        Playlist p = playlistRepository.findById(playlistId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "歌单不存在"));
+        if (p.getUserId() != userId) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "只能把自己创建的歌单设为片刻精选");
+        }
+        assertMember(playlistId, userId);
+        p.setMomentsFeatured(true);
+        playlistRepository.save(p);
+        return toPlaylistItem(
+                playlistMemberRepository.findByPlaylistIdAndUserId(playlistId, userId).orElseThrow(),
+                userId
+        );
+    }
+
+    /** 若尚无片刻精选，则为当前用户创建「片刻精选」歌单并设为精选。 */
+    @Transactional
+    public PlaylistItemResponse ensureMomentsFeaturedPlaylist(long userId) {
+        Optional<Playlist> existing = playlistRepository.findFirstByMomentsFeaturedTrue();
+        if (existing.isPresent()) {
+            Playlist p = existing.get();
+            if (p.getUserId() != userId) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "已有其他管理员的片刻精选歌单");
+            }
+            return toPlaylistItem(
+                    playlistMemberRepository.findByPlaylistIdAndUserId(p.getId(), userId).orElseThrow(),
+                    userId
+            );
+        }
+        Playlist p = new Playlist();
+        p.setUserId(userId);
+        p.setName(MOMENTS_FEATURED_PLAYLIST_NAME);
+        p.setDefaultPlaylist(false);
+        p.setMomentsFeatured(true);
+        p = playlistRepository.save(p);
+        addMember(p.getId(), userId, PlaylistMemberRole.OWNER);
+        return toPlaylistItem(
+                playlistMemberRepository.findByPlaylistIdAndUserId(p.getId(), userId).orElseThrow(),
+                userId
+        );
+    }
+
+    /** 公开：片刻页随机播放队列（已打乱）。 */
+    @Transactional(readOnly = true)
+    public List<MusicTrackResponse> listMomentsSoundtrackShuffled() {
+        Optional<Playlist> featured = playlistRepository.findFirstByMomentsFeaturedTrue();
+        if (featured.isEmpty()) {
+            return List.of();
+        }
+        List<MusicTrack> list = new ArrayList<>(
+                musicTrackRepository.findByPlaylistIdOrderByCreatedAtDesc(featured.get().getId())
+        );
+        list.removeIf(t -> !StringUtils.hasText(resolveCosPublicUrl(t.getAudioUrl(), t.getStoredRelpath())));
+        Collections.shuffle(list);
+        return list.stream().map(t -> toResponse(t, false)).collect(Collectors.toList());
+    }
+
+    
     private PlaylistItemResponse toPlaylistItem(PlaylistMember row, long currentUserId) {
         return playlistRepository.findById(row.getPlaylistId())
                 .map(p -> {
@@ -1782,7 +1886,8 @@ public class MusicService {
                             totalPlayCount,
                             memCount,
                             p.getCreatedAt().toEpochMilli(),
-                            newForToday
+                            newForToday,
+                            p.isMomentsFeatured()
                     );
                 })
                 .orElse(null);

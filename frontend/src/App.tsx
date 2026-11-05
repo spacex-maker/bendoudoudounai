@@ -3,6 +3,7 @@ import { useEffect, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { AdminGuestbookPanel } from "./components/AdminGuestbookPanel";
+import { AdminMomentsPanel } from "./components/AdminMomentsPanel";
 import { AdminWishlistPanel } from "./components/AdminWishlistPanel";
 import { AdminUserListPanel } from "./components/AdminUserListPanel";
 import { AdminDeveloperApplicationPanel } from "./components/AdminDeveloperApplicationPanel";
@@ -20,6 +21,7 @@ import { AdminPage } from "./pages/AdminPage";
 import { HomePage } from "./pages/HomePage";
 import { LoginPage } from "./pages/LoginPage";
 import { MessageBoardPage } from "./pages/MessageBoardPage";
+import { MomentsPage } from "./pages/MomentsPage";
 import { MusicPage } from "./pages/MusicPage";
 import { BeansPage } from "./pages/BeansPage";
 import { ProfilePage } from "./pages/account/ProfilePage";
@@ -111,6 +113,7 @@ export default function App() {
       } />
       <Route path="/dev-diary/entry/:id" element={<DevDiaryEntryPage />} />
       <Route path="/messages" element={<MessageBoardPage />} />
+      <Route path="/moments" element={<MomentsPage />} />
       <Route
         path="/beans"
         element={
@@ -155,6 +158,7 @@ export default function App() {
         <Route index element={<Navigate to="users" replace />} />
         <Route path="users" element={<AdminUserListPanel />} />
         <Route path="guestbook" element={<AdminGuestbookPanel />} />
+        <Route path="moments" element={<AdminMomentsPanel />} />
         <Route path="wishlist" element={<AdminWishlistPanel />} />
         <Route path="beans" element={<AdminBeanPanel />} />
         <Route path="registration-applications" element={<AdminRegistrationApplicationPanel />} />
