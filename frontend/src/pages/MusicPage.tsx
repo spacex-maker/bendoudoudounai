@@ -506,13 +506,33 @@ export function MusicPage() {
 
   const isDiscoverCatalog = activeNav === "discover";
 
-  const onDiscoverImported = useCallback((track: MusicTrackDto) => {
-    setPlaylists((pls) =>
-      pls.map((p) =>
-        p.id === track.playlistId ? { ...p, trackCount: (p.trackCount ?? 0) + 1 } : p
-      )
-    );
-  }, []);
+  const onDiscoverImported = useCallback(
+    (track: MusicTrackDto, targetPlaylistId?: number) => {
+      const pid = targetPlaylistId ?? track.playlistId;
+      void (async () => {
+        try {
+          const pls = await fetchVisiblePlaylists();
+          setPlaylists(pls);
+        } catch {
+          if (pid != null) {
+            setPlaylists((prev) =>
+              prev.map((p) =>
+                p.id === pid ? { ...p, trackCount: (p.trackCount ?? 0) + 1 } : p
+              )
+            );
+          }
+        }
+        if (pid != null && activeNav === "playlist" && currentPlaylistId === pid) {
+          try {
+            setTracks(await fetchMusicTracks(pid));
+          } catch {
+            setTracks((prev) => (prev.some((x) => x.id === track.id) ? prev : [track, ...prev]));
+          }
+        }
+      })();
+    },
+    [activeNav, currentPlaylistId]
+  );
 
   const onDiscoverPlay = useCallback(
     (track: MusicTrackDto) => {

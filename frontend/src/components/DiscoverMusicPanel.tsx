@@ -37,8 +37,8 @@ type DiscoverMusicPanelProps = {
   query: string;
   onPlayTrack: (track: MusicTrackDto) => void;
   onHeartTrack: (track: MusicTrackDto) => void;
-  /** 首次入库云端时回调（用于刷新歌单曲目数） */
-  onTrackSynced?: (track: MusicTrackDto) => void;
+  /** 入库/加入歌单后回调（用于刷新歌单列表）；targetPlaylistId 为显式加入的目标歌单 */
+  onTrackSynced?: (track: MusicTrackDto, targetPlaylistId?: number) => void;
 };
 
 export function DiscoverMusicPanel({
@@ -250,7 +250,7 @@ export function DiscoverMusicPanel({
     if (track.audioQuality) {
       setQualityBySong((prev) => ({ ...prev, [item.neteaseSongId]: track.audioQuality! }));
     }
-    onTrackSynced?.(track);
+    onTrackSynced?.(track, playlistId);
   };
 
   const q = query.trim();
