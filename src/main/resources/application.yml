@@ -19,6 +19,23 @@ spring:
     multipart:
       max-file-size: 120MB
       max-request-size: 125MB
+  # QQ SMTP：账号/授权码放 secrets/bendoudou.env 或环境变量，勿写进仓库
+  mail:
+    host: smtp.qq.com
+    port: 465
+    username: ${SPRING_MAIL_USERNAME:}
+    password: ${SPRING_MAIL_PASSWORD:}
+    protocol: smtp
+    default-encoding: UTF-8
+    properties:
+      mail:
+        smtp:
+          auth: true
+          ssl:
+            enable: true
+          socketFactory:
+            class: javax.net.ssl.SSLSocketFactory
+            port: 465
 
 server:
   port: 8882
@@ -43,6 +60,9 @@ bendoudou:
     bucket: px-1258150206
     region: ap-nanjing
     path-prefix: bendoudou/music/
+  mail:
+    # 发件显示名；SMTP 账号与 productx spring.mail.user 相同
+    personal: AIMATEX-MUSIC
   # 网易云：优先从 AIMATEX-MUSIC 内部接口同步（自动续期后的最新 Cookie）
   netease:
     music-u: ${BENDOUDOU_NETEASE_MUSIC_U:}
