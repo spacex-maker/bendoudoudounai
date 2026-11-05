@@ -19,6 +19,46 @@ import { useAuthedUser } from "../auth/AuthContext";
 
 const PAGE_SIZE = 12;
 
+/** 满一个月起半消失；再过两个月，字影更淡。 */
+function wordsWeather(createdAtMillis: number, now = Date.now()): { faded: boolean; deep: boolean } {
+  if (!Number.isFinite(createdAtMillis)) return { faded: false, deep: false };
+  const monthAgo = new Date(now);
+  monthAgo.setMonth(monthAgo.getMonth() - 1);
+  if (createdAtMillis >= monthAgo.getTime()) return { faded: false, deep: false };
+  const deepAgo = new Date(now);
+  deepAgo.setMonth(deepAgo.getMonth() - 3);
+  return { faded: true, deep: createdAtMillis < deepAgo.getTime() };
+}
+
+function FadedWords({
+  text,
+  textClassName,
+  deep,
+  hint,
+}: {
+  text: string;
+  textClassName: string;
+  deep: boolean;
+  hint: string;
+}) {
+  return (
+    <div className="mt-2.5">
+      <div className="relative overflow-hidden px-1 py-3">
+        <p
+          className={clsx(
+            "pointer-events-none select-none whitespace-pre-wrap text-stone-700",
+            textClassName,
+            deep ? "opacity-45 blur-[18px]" : "opacity-80 blur-[12px]"
+          )}
+        >
+          {text}
+        </p>
+      </div>
+      <p className="text-[11px] tracking-[0.16em] text-stone-400/90">{hint}</p>
+    </div>
+  );
+}
+
 function MessageAvatar({
   nickname,
   authorUserId,
@@ -160,29 +200,39 @@ function ThreadCard({
     visId != null &&
     viewerUserId != null &&
     (th.authorUserId === viewerUserId || visId === viewerUserId);
+  const mainWeather = wordsWeather(th.createdAtMillis);
+  const fadedHint = t("guestbook.fadedByTime");
   return (
     <li>
       <article
         className={clsx(
-          "group relative overflow-hidden rounded-3xl border border-rose-200/50 bg-white/55 shadow-[0_8px_40px_-12px_rgba(190,100,120,0.25)]",
-          "backdrop-blur-md transition duration-300 hover:border-rose-300/60 hover:shadow-rose-200/30"
+          "group relative overflow-hidden rounded-3xl border backdrop-blur-md transition duration-500",
+          mainWeather.faded
+            ? "border-stone-200/80 bg-white/30 shadow-none"
+            : "border-rose-200/50 bg-white/55 shadow-[0_8px_40px_-12px_rgba(190,100,120,0.25)] hover:border-rose-300/60 hover:shadow-rose-200/30"
         )}
       >
-        <div
-          className="pointer-events-none absolute inset-0 bg-gradient-to-br from-rose-50/30 via-transparent to-amber-50/20 opacity-0 transition group-hover:opacity-100"
-          aria-hidden
-        />
+        {mainWeather.faded ? null : (
+          <div
+            className="pointer-events-none absolute inset-0 bg-gradient-to-br from-rose-50/30 via-transparent to-amber-50/20 opacity-0 transition group-hover:opacity-100"
+            aria-hidden
+          />
+        )}
         <div className="relative border-b border-rose-100/50 px-4 py-4 sm:px-6 sm:py-5">
           <div className="flex flex-wrap items-start gap-3 sm:gap-4">
-            <MessageAvatar
-              nickname={th.nickname}
-              authorUserId={th.authorUserId}
-              showName={showName}
-              directoryById={directoryById}
-            />
+            <div className={clsx(mainWeather.faded && "opacity-50 grayscale")}>
+              <MessageAvatar
+                nickname={th.nickname}
+                authorUserId={th.authorUserId}
+                showName={showName}
+                directoryById={directoryById}
+              />
+            </div>
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="font-medium text-warm-700">{showName(th.nickname)}</span>
+                <span className={clsx("font-medium", mainWeather.faded ? "text-stone-400" : "text-warm-700")}>
+                  {showName(th.nickname)}
+                </span>
                 <span className="rounded-full bg-rose-500/10 px-2 py-0.5 text-[10px] font-medium text-rose-700">
                   {t("guestbook.mainThread")}
                 </span>
@@ -199,7 +249,16 @@ function ThreadCard({
                   </span>
                 ) : null}
               </div>
-              <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-stone-800/95">{th.content}</p>
+              {mainWeather.faded ? (
+                <FadedWords
+                  text={th.content}
+                  textClassName="text-sm leading-relaxed"
+                  deep={mainWeather.deep}
+                  hint={fadedHint}
+                />
+              ) : (
+                <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-stone-800/95">{th.content}</p>
+              )}
             </div>
           </div>
         </div>
@@ -207,26 +266,40 @@ function ThreadCard({
           <ul className="relative divide-y divide-rose-100/40 border-b border-rose-100/30 bg-rose-50/25">
             {th.replies.map((r) => {
               const replyMine = viewerUserId != null && r.authorUserId === viewerUserId;
+              const replyWeather = wordsWeather(r.createdAtMillis);
               return (
-                <li key={r.id} className="px-4 py-3 pl-4 sm:px-6 sm:pl-8">
+                <li key={r.id} className={clsx("px-4 py-3 pl-4 sm:px-6 sm:pl-8", replyWeather.faded && "bg-white/20")}>
                   <div className="flex gap-3 sm:gap-4">
-                    <MessageAvatar
-                      nickname={r.nickname}
-                      authorUserId={r.authorUserId}
-                      showName={showName}
-                      directoryById={directoryById}
-                      compact
-                    />
+                    <div className={clsx(replyWeather.faded && "opacity-50 grayscale")}>
+                      <MessageAvatar
+                        nickname={r.nickname}
+                        authorUserId={r.authorUserId}
+                        showName={showName}
+                        directoryById={directoryById}
+                        compact
+                      />
+                    </div>
                     <div className="min-w-0 flex-1 border-l-2 border-rose-200/50 pl-3">
                       <div className="flex flex-wrap items-center gap-1.5">
-                        <span className="text-sm font-medium text-warm-700">{showName(r.nickname)}</span>
+                        <span className={clsx("text-sm font-medium", replyWeather.faded ? "text-stone-400" : "text-warm-700")}>
+                          {showName(r.nickname)}
+                        </span>
                         {replyMine ? (
                           <span className="rounded-full bg-emerald-500/12 px-1.5 py-0.5 text-[9px] font-medium text-emerald-700">
                             {t("guestbook.myBadge")}
                           </span>
                         ) : null}
                       </div>
-                      <p className="mt-1.5 whitespace-pre-wrap text-[13px] leading-relaxed text-stone-700/95">{r.content}</p>
+                      {replyWeather.faded ? (
+                        <FadedWords
+                          text={r.content}
+                          textClassName="text-[13px] leading-relaxed"
+                          deep={replyWeather.deep}
+                          hint={fadedHint}
+                        />
+                      ) : (
+                        <p className="mt-1.5 whitespace-pre-wrap text-[13px] leading-relaxed text-stone-700/95">{r.content}</p>
+                      )}
                       <time
                         className="mt-2 block text-left text-[10px] tabular-nums text-stone-400"
                         dateTime={new Date(r.createdAtMillis).toISOString()}
