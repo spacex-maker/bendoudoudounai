@@ -497,11 +497,8 @@ export function MessageBoardPage() {
 
       <main className="relative mx-auto max-w-3xl px-4 pb-28 sm:px-6">
         <div className="mb-8 flex flex-col gap-4 border-t border-[#d9a8b4]/50 pt-8 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <p className="font-display text-[11px] font-bold uppercase tracking-[0.22em] text-[#c73e5a]">wall</p>
-            <p className="mt-2 max-w-md text-sm leading-relaxed text-[#7a4452]">{t("guestbook.rules")}</p>
-          </div>
-          <div className="flex gap-5 self-start sm:self-auto">
+          <p className="font-display text-[11px] font-bold uppercase tracking-[0.22em] text-[#c73e5a]">wall</p>
+          <div className="flex gap-5">
             <button
               type="button"
               onClick={() => setScope("public")}
