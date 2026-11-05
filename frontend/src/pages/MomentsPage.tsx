@@ -16,6 +16,7 @@ import {
 } from "../api/client";
 import { useAuthedUser } from "../auth/AuthContext";
 import { ConfirmModal } from "../components/ConfirmModal";
+import { MomentsAmbientLyrics } from "../components/MomentsAmbientLyrics";
 import { MomentsCinematic } from "../components/MomentsCinematic";
 import { MomentsColorWheel } from "../components/MomentsColorWheel";
 import { MomentsCropModal } from "../components/MomentsCropModal";
@@ -418,6 +419,8 @@ export function MomentsPage() {
           </>
         )}
       </main>
+
+      <MomentsAmbientLyrics elevated={cinematic || lightbox != null} />
 
       <MomentsCinematic
         items={items}

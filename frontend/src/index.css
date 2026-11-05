@@ -249,3 +249,109 @@
     background: linear-gradient(180deg, #e4e4e7, #71717a);
   }
 }
+
+/* 片刻页：底部氛围歌词若隐若现 */
+.moments-ambient-lyric-veil {
+  pointer-events: none;
+}
+.moments-ambient-lyric-veil--light {
+  background: linear-gradient(
+    to top,
+    rgba(255, 232, 238, 0.72) 0%,
+    rgba(255, 245, 248, 0.28) 42%,
+    transparent 100%
+  );
+}
+.moments-ambient-lyric-veil--dark {
+  background: linear-gradient(
+    to top,
+    rgba(12, 10, 12, 0.55) 0%,
+    rgba(12, 10, 12, 0.18) 48%,
+    transparent 100%
+  );
+}
+
+.moments-ambient-lyric {
+  margin: 0;
+  will-change: opacity, transform, filter;
+}
+.moments-ambient-lyric--light {
+  color: rgba(120, 58, 72, 0.78);
+  text-shadow:
+    0 0 28px rgba(255, 255, 255, 0.85),
+    0 0 48px rgba(255, 190, 210, 0.45),
+    0 1px 0 rgba(255, 255, 255, 0.55);
+}
+.moments-ambient-lyric--dark {
+  color: rgba(255, 236, 242, 0.78);
+  text-shadow:
+    0 0 26px rgba(255, 160, 190, 0.35),
+    0 0 48px rgba(255, 120, 160, 0.22),
+    0 1px 2px rgba(0, 0, 0, 0.35);
+}
+
+.moments-ambient-lyric--enter {
+  animation: momentsLyricEnter 0.85s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.moments-ambient-lyric--breathe {
+  animation: momentsLyricBreathe 4.8s ease-in-out infinite;
+}
+.moments-ambient-lyric--leave {
+  animation: momentsLyricLeave 0.32s ease-in both;
+}
+.moments-ambient-lyric--static {
+  opacity: 0.58 !important;
+  transform: none !important;
+  filter: none !important;
+  animation: none !important;
+}
+
+@keyframes momentsLyricEnter {
+  0% {
+    opacity: 0;
+    transform: translateY(14px);
+    filter: blur(5px);
+  }
+  45% {
+    opacity: 0.82;
+    filter: blur(0);
+  }
+  100% {
+    opacity: 0.62;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+@keyframes momentsLyricBreathe {
+  0%,
+  100% {
+    opacity: 0.34;
+    transform: translateY(0);
+  }
+  50% {
+    opacity: 0.78;
+    transform: translateY(-2px);
+  }
+}
+
+@keyframes momentsLyricLeave {
+  0% {
+    opacity: 0.55;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-8px);
+    filter: blur(4px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .moments-ambient-lyric--enter,
+  .moments-ambient-lyric--breathe,
+  .moments-ambient-lyric--leave {
+    animation: none !important;
+  }
+}
