@@ -39,6 +39,8 @@ public class DiscoverMusicService {
 
     private final NeteaseProperties neteaseProperties;
     private final NeteaseApiClient neteaseApiClient;
+    private final NeteaseRemoteCredentialSync credentialSync;
+    private final NeteaseMusicLibraryClient musicLibraryClient;
     private final MusicService musicService;
     private final MusicTrackRepository musicTrackRepository;
     private final CosStorageService cosStorageService;
@@ -48,6 +50,8 @@ public class DiscoverMusicService {
     public DiscoverMusicService(
             NeteaseProperties neteaseProperties,
             NeteaseApiClient neteaseApiClient,
+            NeteaseRemoteCredentialSync credentialSync,
+            NeteaseMusicLibraryClient musicLibraryClient,
             MusicService musicService,
             MusicTrackRepository musicTrackRepository,
             CosStorageService cosStorageService,
@@ -55,6 +59,8 @@ public class DiscoverMusicService {
     ) {
         this.neteaseProperties = neteaseProperties;
         this.neteaseApiClient = neteaseApiClient;
+        this.credentialSync = credentialSync;
+        this.musicLibraryClient = musicLibraryClient;
         this.musicService = musicService;
         this.musicTrackRepository = musicTrackRepository;
         this.cosStorageService = cosStorageService;
@@ -70,22 +76,53 @@ public class DiscoverMusicService {
         if (!StringUtils.hasText(keyword) || keyword.trim().length() < 1) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "请输入搜索关键词");
         }
+        // 与 AIMATEX-MUSIC 一致：先保证 Cookie 新鲜（从 music 内部接口同步）
+        credentialSync.ensureFresh(false);
         if (!neteaseProperties.isConfigured()) {
-            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "网易云未配置 MUSIC_U");
+            // 再强制拉一次；仍无则明确提示
+            credentialSync.ensureFresh(true);
+            if (!neteaseProperties.isConfigured()) {
+                throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "网易云未配置 MUSIC_U（可从 music 同步）");
+            }
         }
+        try {
+            return searchOnce(userId, keyword.trim(), offset, limit);
+        } catch (ResponseStatusException first) {
+            // Cookie 过期等：强制向 music 刷新后再试一次（对齐 music 侧自动续期链路）
+            int status = first.getStatusCode().value();
+            if (status == HttpStatus.BAD_GATEWAY.value()
+                    || status == HttpStatus.SERVICE_UNAVAILABLE.value()) {
+                if (credentialSync.ensureFresh(true)) {
+                    try {
+                        return searchOnce(userId, keyword.trim(), offset, limit);
+                    } catch (ResponseStatusException ignored) {
+                        throw first;
+                    }
+                }
+            }
+            throw first;
+        }
+    }
+
+    private DiscoverSearchPageResponse searchOnce(long userId, String keyword, int offset, int limit) {
         int safeLimit = Math.min(Math.max(limit, 1), 50);
         int safeOffset = Math.max(offset, 0);
         try {
-            JsonNode root = neteaseApiClient.searchSongs(keyword.trim(), safeLimit, safeOffset);
-            int code = root.path("code").asInt(200);
-            if (code != 200) {
-                String msg = root.path("message").asText("网易云搜索失败");
-                throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, msg);
-            }
+            JsonNode root = neteaseApiClient.searchSongs(keyword, safeLimit, safeOffset);
             JsonNode result = root.path("result");
             JsonNode songs = result.path("songs");
-            int total = result.path("songCount").asInt(0);
-            if (!songs.isArray()) {
+            int code = root.path("code").asInt(200);
+            // /api/cloudsearch/pc 有时不带 code；只要有 songs 就视为成功（与 music 解析习惯一致）
+            boolean hasSongs = songs.isArray();
+            if (code != 200 && code != 0 && !hasSongs) {
+                String msg = root.path("message").asText("");
+                if (!StringUtils.hasText(msg)) {
+                    msg = root.path("msg").asText("网易云搜索失败");
+                }
+                throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, msg + " (code=" + code + ")");
+            }
+            int total = result.path("songCount").asInt(hasSongs ? songs.size() : 0);
+            if (!hasSongs) {
                 return new DiscoverSearchPageResponse(List.of(), safeOffset, safeLimit, total, false);
             }
             Set<Long> heartedNeteaseIds = loadHeartedNeteaseSongIds(userId);
@@ -155,8 +192,9 @@ public class DiscoverMusicService {
         if (neteaseSongId <= 0) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "无效的歌曲 ID");
         }
+        credentialSync.ensureFresh(false);
         if (!neteaseProperties.isConfigured()) {
-            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "网易云未配置 MUSIC_U");
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "网易云未配置 MUSIC_U（可从 music 同步）");
         }
         if (!cosStorageService.isUsable()) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "COS 配置不可用");
@@ -164,12 +202,12 @@ public class DiscoverMusicService {
 
         String preferredQuality = normalizeQuality(qualityRaw);
 
-        // 当前用户已导入过「同曲 + 偏好音质」时，复用本地曲目；若指定了歌单则确保加入该歌单
+        // 当前用户已导入过「同曲 + 任意音质」时，若恰好命中目标或更高，可在下载前先按偏好查
         Optional<MusicTrack> minePreferred = musicTrackRepository
                 .findFirstByUserIdAndNoteOrderByIdAsc(userId, neteaseNote(neteaseSongId, preferredQuality));
         if (minePreferred.isPresent() && StringUtils.hasText(minePreferred.get().getAudioUrl())) {
             MusicTrackResponse existing = musicService.getAccessibleTrack(userId, minePreferred.get().getId());
-            return finishExistingImport(userId, playlistId, heart, existing);
+            return heart ? musicService.addHeart(userId, existing.id()) : existing;
         }
 
         Optional<MusicTrack> cachedPreferred = musicTrackRepository
@@ -178,6 +216,53 @@ public class DiscoverMusicService {
         if (cachedPreferred.isPresent()) {
             MusicTrackResponse cloned = cloneFromExisting(userId, playlistId, cachedPreferred.get());
             return heart ? musicService.addHeart(userId, cloned.id()) : cloned;
+        }
+
+        // 优先让 music 侧确保入库并复用同一 COS 对象（两端共用 px-1258150206 / bendoudou/music/）
+        Optional<NeteaseMusicLibraryClient.RemoteAsset> remote =
+                musicLibraryClient.ensureAsset(neteaseSongId, preferredQuality, true);
+        if (remote.isPresent()) {
+            NeteaseMusicLibraryClient.RemoteAsset asset = remote.get();
+            String note = StringUtils.hasText(asset.note())
+                    ? asset.note()
+                    : neteaseNote(neteaseSongId, StringUtils.hasText(asset.quality()) ? asset.quality() : preferredQuality);
+            Optional<MusicTrack> mineRemote = musicTrackRepository.findFirstByUserIdAndNoteOrderByIdAsc(userId, note);
+            if (mineRemote.isPresent() && StringUtils.hasText(mineRemote.get().getAudioUrl())) {
+                MusicTrackResponse existing = musicService.getAccessibleTrack(userId, mineRemote.get().getId());
+                return heart ? musicService.addHeart(userId, existing.id()) : existing;
+            }
+            Optional<MusicTrack> cachedRemote = musicTrackRepository.findFirstByNoteOrderByIdAsc(note)
+                    .filter(t -> StringUtils.hasText(t.getAudioUrl()) && StringUtils.hasText(t.getFileSha256()));
+            if (cachedRemote.isPresent()) {
+                MusicTrackResponse cloned = cloneFromExisting(userId, playlistId, cachedRemote.get());
+                return heart ? musicService.addHeart(userId, cloned.id()) : cloned;
+            }
+            String filename = sanitizeFilename(
+                    StringUtils.hasText(asset.artist()) ? asset.artist() : "未知歌手",
+                    StringUtils.hasText(asset.title()) ? asset.title() : "未知标题",
+                    asset.audioExt()
+            );
+            CreateTrackFromCosRequest req = new CreateTrackFromCosRequest(
+                    playlistId,
+                    asset.fileSha256(),
+                    asset.audioExt(),
+                    asset.title(),
+                    asset.artist(),
+                    asset.album(),
+                    note,
+                    asset.durationSeconds(),
+                    filename,
+                    false,
+                    asset.fileSize(),
+                    StringUtils.hasText(asset.mimeType())
+                            ? asset.mimeType()
+                            : CosStorageService.guessAudioContentType(asset.audioExt(), null),
+                    asset.audioObjectKey(),
+                    asset.lyricsObjectKey(),
+                    asset.coverObjectKey()
+            );
+            MusicTrackResponse created = musicService.createTrackFromCos(userId, req);
+            return heart ? musicService.addHeart(userId, created.id()) : created;
         }
 
         try {
@@ -192,8 +277,7 @@ public class DiscoverMusicService {
             }
             JsonNode song = songs.get(0);
             String title = textOrDefault(song.path("name"), "未知标题");
-            JsonNode artistNode = firstArtistNode(song);
-            String artist = joinArtists(artistNode);
+            String artist = joinArtists(firstArtistNode(song));
             String album = firstNonBlank(
                     textOrDefault(song.path("al").path("name"), null),
                     textOrDefault(song.path("album").path("name"), null),
@@ -205,26 +289,6 @@ public class DiscoverMusicService {
                     song.path("album").path("picUrl").asText(""),
                     ""
             );
-            Long albumId = firstPositiveId(
-                    song.path("al").path("id").asLong(0),
-                    song.path("album").path("id").asLong(0)
-            );
-            String artistsJson = artistsToJson(artistNode);
-            String titleAlias = joinStringArray(song.path("alia"));
-            if (!StringUtils.hasText(titleAlias)) {
-                titleAlias = joinStringArray(song.path("alias"));
-            }
-            String titleTranslated = joinStringArray(song.path("tns"));
-            String albumArtist = joinArtists(firstNonEmptyArray(
-                    song.path("al").path("artists"),
-                    song.path("al").path("ar"),
-                    song.path("album").path("artists")
-            ));
-            if ("未知歌手".equals(albumArtist)) {
-                albumArtist = artist;
-            }
-            Integer releaseYear = extractReleaseYear(song);
-            String sourceDetailJson = song.toString();
 
             UrlInfo urlInfo = resolvePlayUrl(neteaseSongId, preferredQuality);
             if (urlInfo.url() == null || urlInfo.url().isBlank()) {
@@ -240,7 +304,7 @@ public class DiscoverMusicService {
             Optional<MusicTrack> mineActual = musicTrackRepository.findFirstByUserIdAndNoteOrderByIdAsc(userId, note);
             if (mineActual.isPresent() && StringUtils.hasText(mineActual.get().getAudioUrl())) {
                 MusicTrackResponse existing = musicService.getAccessibleTrack(userId, mineActual.get().getId());
-                return finishExistingImport(userId, playlistId, heart, existing);
+                return heart ? musicService.addHeart(userId, existing.id()) : existing;
             }
             Optional<MusicTrack> cachedActual = musicTrackRepository.findFirstByNoteOrderByIdAsc(note)
                     .filter(t -> StringUtils.hasText(t.getAudioUrl()) && StringUtils.hasText(t.getFileSha256()));
@@ -252,9 +316,6 @@ public class DiscoverMusicService {
             Path audioTemp = null;
             Path coverTemp = null;
             Path lyricsTemp = null;
-            Path translatedLyricsTemp = null;
-            Path romaLyricsTemp = null;
-            Path yrcLyricsTemp = null;
             try {
                 try {
                     audioTemp = downloadToTemp(urlInfo.url(), "." + urlInfo.ext());
@@ -280,7 +341,7 @@ public class DiscoverMusicService {
                 String coverObjectKey = null;
                 if (StringUtils.hasText(picUrl)) {
                     try {
-                        coverTemp = downloadCoverPreferHiRes(picUrl);
+                        coverTemp = downloadToTemp(normalizePicUrl(picUrl), ".jpg");
                         if (coverTemp != null && Files.size(coverTemp) > 0) {
                             coverObjectKey = cosStorageService.buildCoverObjectKey(sha, "jpg");
                             long coverSize = Files.size(coverTemp);
@@ -291,53 +352,18 @@ public class DiscoverMusicService {
                     }
                 }
 
-                LyricBundle lyrics = fetchLyricBundle(neteaseSongId);
                 String lyricsObjectKey = null;
-                String translatedLyricsObjectKey = null;
-                String romaLyricsObjectKey = null;
-                String yrcLyricsObjectKey = null;
-                if (StringUtils.hasText(lyrics.lrc())) {
+                String lrc = fetchLyricText(neteaseSongId);
+                if (StringUtils.hasText(lrc)) {
                     lyricsTemp = Files.createTempFile("netease-lrc-", ".lrc");
-                    Files.writeString(lyricsTemp, lyrics.lrc(), StandardCharsets.UTF_8);
+                    Files.writeString(lyricsTemp, lrc, StandardCharsets.UTF_8);
                     lyricsObjectKey = cosStorageService.buildLyricsObjectKey(sha, "lrc");
+                    long lyricsSize = Files.size(lyricsTemp);
                     cosStorageService.uploadObject(
                             lyricsObjectKey,
                             lyricsTemp,
-                            Files.size(lyricsTemp),
+                            lyricsSize,
                             CosStorageService.guessLyricsContentType("lrc")
-                    );
-                }
-                if (StringUtils.hasText(lyrics.tlyric())) {
-                    translatedLyricsTemp = Files.createTempFile("netease-tlyric-", ".lrc");
-                    Files.writeString(translatedLyricsTemp, lyrics.tlyric(), StandardCharsets.UTF_8);
-                    translatedLyricsObjectKey = cosStorageService.buildLyricsVariantObjectKey(sha, "tlyric", "lrc");
-                    cosStorageService.uploadObject(
-                            translatedLyricsObjectKey,
-                            translatedLyricsTemp,
-                            Files.size(translatedLyricsTemp),
-                            CosStorageService.guessLyricsContentType("lrc")
-                    );
-                }
-                if (StringUtils.hasText(lyrics.roma())) {
-                    romaLyricsTemp = Files.createTempFile("netease-roma-", ".lrc");
-                    Files.writeString(romaLyricsTemp, lyrics.roma(), StandardCharsets.UTF_8);
-                    romaLyricsObjectKey = cosStorageService.buildLyricsVariantObjectKey(sha, "roma", "lrc");
-                    cosStorageService.uploadObject(
-                            romaLyricsObjectKey,
-                            romaLyricsTemp,
-                            Files.size(romaLyricsTemp),
-                            CosStorageService.guessLyricsContentType("lrc")
-                    );
-                }
-                if (StringUtils.hasText(lyrics.yrc())) {
-                    yrcLyricsTemp = Files.createTempFile("netease-yrc-", ".yrc");
-                    Files.writeString(yrcLyricsTemp, lyrics.yrc(), StandardCharsets.UTF_8);
-                    yrcLyricsObjectKey = cosStorageService.buildLyricsVariantObjectKey(sha, null, "yrc");
-                    cosStorageService.uploadObject(
-                            yrcLyricsObjectKey,
-                            yrcLyricsTemp,
-                            Files.size(yrcLyricsTemp),
-                            "text/plain; charset=utf-8"
                     );
                 }
 
@@ -357,19 +383,7 @@ public class DiscoverMusicService {
                         CosStorageService.guessAudioContentType(urlInfo.ext(), urlInfo.mimeType()),
                         audioObjectKey,
                         lyricsObjectKey,
-                        coverObjectKey,
-                        translatedLyricsObjectKey,
-                        romaLyricsObjectKey,
-                        yrcLyricsObjectKey,
-                        actualQuality,
-                        neteaseSongId,
-                        albumId,
-                        artistsJson,
-                        titleAlias,
-                        titleTranslated,
-                        albumArtist,
-                        releaseYear,
-                        sourceDetailJson
+                        coverObjectKey
                 );
                 MusicTrackResponse created = musicService.createTrackFromCos(userId, req);
                 return heart ? musicService.addHeart(userId, created.id()) : created;
@@ -377,34 +391,12 @@ public class DiscoverMusicService {
                 deleteQuietly(audioTemp);
                 deleteQuietly(coverTemp);
                 deleteQuietly(lyricsTemp);
-                deleteQuietly(translatedLyricsTemp);
-                deleteQuietly(romaLyricsTemp);
-                deleteQuietly(yrcLyricsTemp);
             }
         } catch (ResponseStatusException e) {
             throw e;
         } catch (IOException e) {
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "下载或上传失败: " + e.getMessage());
         }
-    }
-
-    /**
-     * 已有本地曲目时：按需复制到目标歌单，再按需红心。
-     */
-    private MusicTrackResponse finishExistingImport(
-            long userId,
-            Long playlistId,
-            boolean heart,
-            MusicTrackResponse existing
-    ) {
-        MusicTrackResponse result = existing;
-        if (playlistId != null && playlistId > 0 && existing.playlistId() != playlistId) {
-            result = musicService.addTrackToPlaylist(userId, existing.id(), playlistId);
-        }
-        if (heart) {
-            result = musicService.addHeart(userId, result.id());
-        }
-        return result;
     }
 
     private MusicTrackResponse cloneFromExisting(long userId, Long playlistId, MusicTrack source) {
@@ -429,19 +421,7 @@ public class DiscoverMusicService {
                 source.getMimeType(),
                 audioKey,
                 source.getLyricsStoredRelpath(),
-                source.getCoverStoredRelpath(),
-                source.getTranslatedLyricsStoredRelpath(),
-                source.getRomaLyricsStoredRelpath(),
-                source.getYrcLyricsStoredRelpath(),
-                source.getAudioQuality(),
-                source.getNeteaseSongId(),
-                source.getAlbumId(),
-                source.getArtistsJson(),
-                source.getTitleAlias(),
-                source.getTitleTranslated(),
-                source.getAlbumArtist(),
-                source.getReleaseYear(),
-                source.getSourceDetailJson()
+                source.getCoverStoredRelpath()
         );
         return musicService.createTrackFromCos(userId, req);
     }
@@ -579,143 +559,13 @@ public class DiscoverMusicService {
         return new UrlInfo(url, ext, mime, quality);
     }
 
-    private LyricBundle fetchLyricBundle(long songId) throws IOException {
+    private String fetchLyricText(long songId) throws IOException {
         JsonNode root = neteaseApiClient.songLyric(songId);
-        return new LyricBundle(
-                textualLyric(root.path("lrc").path("lyric")),
-                textualLyric(root.path("tlyric").path("lyric")),
-                firstNonBlank(
-                        textualLyric(root.path("romalrc").path("lyric")),
-                        textualLyric(root.path("romaLrc").path("lyric"))
-                ),
-                textualLyric(root.path("yrc").path("lyric"))
-        );
-    }
-
-    private static String textualLyric(JsonNode node) {
-        if (node != null && node.isTextual() && StringUtils.hasText(node.asText())) {
-            return node.asText();
+        JsonNode lrc = root.path("lrc").path("lyric");
+        if (lrc.isTextual() && StringUtils.hasText(lrc.asText())) {
+            return lrc.asText();
         }
         return null;
-    }
-
-    private Path downloadCoverPreferHiRes(String picUrl) throws IOException {
-        IOException last = null;
-        for (String candidate : List.of(
-                normalizePicUrl(picUrl, 1000),
-                normalizePicUrl(picUrl, 800),
-                normalizePicUrl(picUrl, 300),
-                stripPicParam(picUrl)
-        )) {
-            try {
-                Path p = downloadToTemp(candidate, ".jpg");
-                if (p != null && Files.size(p) > 0) {
-                    return p;
-                }
-                deleteQuietly(p);
-            } catch (IOException e) {
-                last = e;
-            }
-        }
-        if (last != null) {
-            throw last;
-        }
-        return null;
-    }
-
-    private static String stripPicParam(String picUrl) {
-        if (!StringUtils.hasText(picUrl)) {
-            return picUrl;
-        }
-        int q = picUrl.indexOf('?');
-        return q > 0 ? picUrl.substring(0, q) : picUrl;
-    }
-
-    private static String normalizePicUrl(String picUrl, int size) {
-        if (!StringUtils.hasText(picUrl)) {
-            return picUrl;
-        }
-        String base = stripPicParam(picUrl);
-        return base + "?param=" + size + "y" + size;
-    }
-
-    private static Long firstPositiveId(long... ids) {
-        for (long id : ids) {
-            if (id > 0) {
-                return id;
-            }
-        }
-        return null;
-    }
-
-    private static Integer extractReleaseYear(JsonNode song) {
-        long ms = song.path("publishTime").asLong(0);
-        if (ms <= 0) {
-            ms = song.path("al").path("publishTime").asLong(0);
-        }
-        if (ms <= 0) {
-            return null;
-        }
-        return java.time.Instant.ofEpochMilli(ms)
-                .atZone(java.time.ZoneId.of("Asia/Shanghai"))
-                .getYear();
-    }
-
-    private static String artistsToJson(JsonNode artists) {
-        if (artists == null || !artists.isArray() || artists.isEmpty()) {
-            return null;
-        }
-        StringBuilder sb = new StringBuilder("[");
-        boolean first = true;
-        for (JsonNode a : artists) {
-            long id = a.path("id").asLong(0);
-            String name = a.path("name").asText("");
-            if (!StringUtils.hasText(name) && id <= 0) {
-                continue;
-            }
-            if (!first) {
-                sb.append(',');
-            }
-            first = false;
-            sb.append("{\"id\":").append(id)
-                    .append(",\"name\":\"").append(jsonEscape(name)).append("\"}");
-        }
-        sb.append(']');
-        return first ? null : sb.toString();
-    }
-
-    private static String joinStringArray(JsonNode arr) {
-        if (arr == null || !arr.isArray() || arr.isEmpty()) {
-            return null;
-        }
-        StringBuilder sb = new StringBuilder();
-        for (JsonNode n : arr) {
-            String s = n.isTextual() ? n.asText() : n.path("name").asText("");
-            if (!StringUtils.hasText(s)) {
-                continue;
-            }
-            if (sb.length() > 0) {
-                sb.append(" / ");
-            }
-            sb.append(s.trim());
-        }
-        return sb.length() > 0 ? sb.toString() : null;
-    }
-
-    private static JsonNode firstNonEmptyArray(JsonNode... nodes) {
-        for (JsonNode n : nodes) {
-            if (n != null && n.isArray() && !n.isEmpty()) {
-                return n;
-            }
-        }
-        return null;
-    }
-
-    private static String jsonEscape(String s) {
-        if (s == null) {
-            return "";
-        }
-        return s.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 
     private Path downloadToTemp(String url, String suffix) throws IOException {
@@ -752,11 +602,13 @@ public class DiscoverMusicService {
                     last = new IOException("下载文件为空: " + candidate);
                     continue;
                 }
+                // 消费错误流，避免连接泄漏
                 try (InputStream err = response.body()) {
                     if (err != null) {
                         err.readAllBytes();
                     }
                 } catch (Exception ignored) {
+                    // ignore
                 }
                 last = new IOException("下载 HTTP " + code + " @ " + candidate);
             } catch (InterruptedException e) {
@@ -773,6 +625,7 @@ public class DiscoverMusicService {
         String https = url.replace("http://", "https://");
         LinkedHashSet<String> out = new LinkedHashSet<>();
         out.add(https);
+        // Music163bot 常用镜像替换，规避部分节点 403
         out.add(https
                 .replace("m801.", "m701.")
                 .replace("m804.", "m701.")
@@ -799,7 +652,7 @@ public class DiscoverMusicService {
     }
 
     private static String joinArtists(JsonNode artists) {
-        if (artists == null || !artists.isArray() || artists.isEmpty()) {
+        if (!artists.isArray() || artists.isEmpty()) {
             return "未知歌手";
         }
         StringBuilder sb = new StringBuilder();
@@ -823,6 +676,13 @@ public class DiscoverMusicService {
         return fallback;
     }
 
+    private static String normalizePicUrl(String picUrl) {
+        if (picUrl.contains("?")) {
+            return picUrl;
+        }
+        return picUrl + "?param=300y300";
+    }
+
     private static String sanitizeFilename(String artist, String title, String ext) {
         String base = (artist + " - " + title).replaceAll("[\\\\/:*?\"<>|]", "_");
         if (base.length() > 200) {
@@ -838,10 +698,9 @@ public class DiscoverMusicService {
         try {
             Files.deleteIfExists(path);
         } catch (IOException ignored) {
+            // ignore
         }
     }
 
     private record UrlInfo(String url, String ext, String mimeType, String quality) {}
-
-    private record LyricBundle(String lrc, String tlyric, String roma, String yrc) {}
 }

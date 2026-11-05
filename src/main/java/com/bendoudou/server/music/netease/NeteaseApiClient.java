@@ -35,14 +35,46 @@ public class NeteaseApiClient {
                 .build();
     }
 
+    /**
+     * 与 AIMATEX-MUSIC 相同的云搜语义（type=1 单曲）。
+     * 本站出口优先走 /api/cloudsearch/pc；失败再回退 music 同款 weapi cloudsearch。
+     */
     public JsonNode searchSongs(String keyword, int limit, int offset) throws IOException {
+        int safeLimit = Math.min(Math.max(limit, 1), 50);
+        int safeOffset = Math.max(offset, 0);
+        String qs = "s=" + urlEncode(keyword == null ? "" : keyword)
+                + "&type=1"
+                + "&limit=" + safeLimit
+                + "&offset=" + safeOffset
+                + "&total=true";
+        IOException primaryErr = null;
+        try {
+            JsonNode pc = getJson("/api/cloudsearch/pc?" + qs);
+            if (hasSearchHits(pc) || pc.path("code").asInt(200) == 200) {
+                return pc;
+            }
+        } catch (IOException e) {
+            primaryErr = e;
+        }
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("s", keyword);
         body.put("type", 1);
-        body.put("limit", Math.min(Math.max(limit, 1), 50));
-        body.put("offset", Math.max(offset, 0));
+        body.put("limit", safeLimit);
+        body.put("offset", safeOffset);
         body.put("csrf_token", csrf());
-        return postWeapi("/weapi/cloudsearch/get/web", objectMapper.writeValueAsString(body));
+        try {
+            return postWeapi("/weapi/cloudsearch/get/web", objectMapper.writeValueAsString(body));
+        } catch (IOException fallback) {
+            if (primaryErr != null) {
+                throw new IOException(primaryErr.getMessage() + "; weapi fallback: " + fallback.getMessage(), primaryErr);
+            }
+            throw fallback;
+        }
+    }
+
+    private static boolean hasSearchHits(JsonNode root) {
+        JsonNode songs = root.path("result").path("songs");
+        return songs.isArray() && !songs.isEmpty();
     }
 
     public JsonNode songDetail(long songId) throws IOException {
@@ -77,14 +109,25 @@ public class NeteaseApiClient {
         body.put("id", songId);
         body.put("lv", -1);
         body.put("tv", -1);
-        body.put("rv", -1);
-        body.put("yv", -1);
         body.put("csrf_token", csrf());
         return postWeapi("/weapi/song/lyric", objectMapper.writeValueAsString(body));
     }
 
     private String csrf() {
         return props.getCsrf() == null ? "" : props.getCsrf();
+    }
+
+    private JsonNode getJson(String pathAndQuery) throws IOException {
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(BASE + pathAndQuery))
+                .timeout(Duration.ofSeconds(30))
+                .header("Referer", BASE + "/")
+                .header("Origin", BASE)
+                .header("User-Agent", props.getUserAgent())
+                .header("Cookie", buildCookieHeader())
+                .GET()
+                .build();
+        return send(request);
     }
 
     private JsonNode postWeapi(String path, String plainJson) throws IOException {
@@ -102,6 +145,10 @@ public class NeteaseApiClient {
                 .header("Cookie", buildCookieHeader())
                 .POST(HttpRequest.BodyPublishers.ofString(body))
                 .build();
+        return send(request);
+    }
+
+    private JsonNode send(HttpRequest request) throws IOException {
         HttpResponse<String> response;
         try {
             response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());

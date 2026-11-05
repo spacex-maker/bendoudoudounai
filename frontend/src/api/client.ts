@@ -50,7 +50,7 @@ export class ApiHttpError extends Error {
 export const I18N_LOAD_FAILED = "__I18N_LOAD_FAILED__";
 
 /** 产线 API 域名（浏览器走 443/80，无端口；服务端反代到后端由运维配置） */
-const PROD_API_ORIGIN = "https://music-api.aimatex.com";
+const PROD_API_ORIGIN = "https://bendoudou-api.aimatex.com";
 /** 本地开发后端（不走 Vite 代理，直接请求） */
 const DEV_API_ORIGIN = "http://127.0.0.1:8882";
 
