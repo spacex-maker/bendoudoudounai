@@ -96,7 +96,7 @@ export function MomentsAmbientLyrics({ elevated = false }: Props) {
         playerBarExpanded
           ? "pb-[max(22rem,env(safe-area-inset-bottom))] sm:pb-[max(24rem,env(safe-area-inset-bottom))]"
           : "pb-[max(4.5rem,env(safe-area-inset-bottom))] sm:pb-[max(5rem,env(safe-area-inset-bottom))]",
-        elevated ? "z-[125]" : "z-[45]"
+        elevated ? "z-[120]" : "z-[45]"
       )}
       aria-hidden
     >

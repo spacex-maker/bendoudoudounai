@@ -119,7 +119,7 @@ export function MomentsSoundtrackDock({
   return (
     <div
       ref={rootRef}
-      className="pointer-events-none fixed bottom-4 right-4 z-50 flex w-[min(22rem,calc(100vw-1.5rem))] flex-col items-end gap-2 sm:bottom-6 sm:right-6"
+      className="pointer-events-none fixed bottom-4 right-4 z-[135] flex w-[min(22rem,calc(100vw-1.5rem))] flex-col items-end gap-2 sm:bottom-6 sm:right-6"
     >
       {playerBarExpanded ? (
         <div className="pointer-events-auto w-full overflow-hidden rounded-3xl border border-white/10 bg-zinc-950/92 text-zinc-100 shadow-[0_24px_64px_rgba(0,0,0,0.45)] backdrop-blur-2xl">
@@ -162,29 +162,38 @@ export function MomentsSoundtrackDock({
 
           <div className="space-y-3 px-3.5 pb-3.5 pt-3">
             <div className="space-y-1.5">
-              <div className="group relative flex h-5 items-center">
+              <div className="group relative flex h-7 touch-none items-center">
                 <input
                   type="range"
-                  className="music-progress-range absolute z-10 h-full w-full cursor-pointer opacity-0"
+                  className="absolute inset-0 z-20 h-full w-full cursor-pointer opacity-[0.01] disabled:cursor-not-allowed"
                   min={0}
                   max={barMax > 0 ? barMax : 0}
                   step={0.05}
-                  value={Math.min(playPos, barMax || playPos)}
+                  value={barMax > 0 ? Math.min(playPos, barMax) : 0}
                   disabled={!hasTrack || barMax <= 0}
                   aria-label={t("player.ariaProgress", { defaultValue: "播放进度" })}
-                  onPointerDown={() => setScrubbing(true)}
+                  onPointerDown={(e) => {
+                    e.stopPropagation();
+                    setScrubbing(true);
+                  }}
                   onChange={(e) => applySeek(Number(e.target.value))}
+                  onInput={(e) => applySeek(Number((e.target as HTMLInputElement).value))}
                 />
-                <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-zinc-700/55">
+                <div className="relative h-2 w-full overflow-hidden rounded-full bg-zinc-700/80 ring-1 ring-white/10 transition-all group-hover:h-2.5">
                   <div
-                    className="absolute left-0 top-0 h-full rounded-full bg-gradient-to-r from-rose-400 to-pink-300"
-                    style={{ width: `${progressPercent}%` }}
+                    className="absolute left-0 top-0 z-[1] h-full rounded-full bg-gradient-to-r from-rose-400 via-pink-400 to-rose-300"
+                    style={{ width: `${Number.isFinite(progressPercent) ? progressPercent : 0}%` }}
                   />
                 </div>
+                <div
+                  className="pointer-events-none absolute z-[2] h-3.5 w-3.5 -ml-[7px] rounded-full border-2 border-white/90 bg-rose-400 shadow-[0_0_10px_rgba(251,113,133,0.55)]"
+                  style={{ left: `${Number.isFinite(progressPercent) ? progressPercent : 0}%` }}
+                  aria-hidden
+                />
               </div>
-              <div className="flex justify-between text-[10px] tabular-nums tracking-wide text-zinc-500">
+              <div className="flex justify-between text-[11px] font-medium tabular-nums tracking-wide text-zinc-300">
                 <span>{formatTime(playPos)}</span>
-                <span>{formatTime(barMax)}</span>
+                <span className="text-zinc-500">{formatTime(barMax)}</span>
               </div>
             </div>
 
