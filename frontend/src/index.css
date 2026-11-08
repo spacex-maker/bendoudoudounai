@@ -799,13 +799,21 @@
   }
 }
 
-/* 片刻幻灯启动时：整页轻微虚化（影院层用 backdrop-blur；进场过渡也靠这层） */
+/* 片刻幻灯启动时：整页轻微虚化，预热阶段渐进过渡 */
+.moments-page > * {
+  transition:
+    filter 2.1s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 2.1s cubic-bezier(0.22, 1, 0.36, 1);
+  transform-origin: center top;
+}
 .moments-page--cinematic-blur > *:not([data-cinematic-portal]) {
   filter: blur(2.5px);
   transform: scale(1.01);
-  transform-origin: center top;
 }
 @media (prefers-reduced-motion: reduce) {
+  .moments-page > * {
+    transition: none !important;
+  }
   .moments-page--cinematic-blur > *:not([data-cinematic-portal]) {
     filter: none;
     transform: none;

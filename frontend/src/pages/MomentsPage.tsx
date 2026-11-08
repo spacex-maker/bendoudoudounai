@@ -31,7 +31,7 @@ type Mood = NonNullable<MomentListQuery["mood"]>;
 /** 停留多久后进入影院幻灯（毫秒） */
 const CINEMATIC_IDLE_MS = 11000;
 /** 幻灯开始前 1.6s 轻提示首张 */
-const CINEMATIC_WINDUP_MS = 1600;
+const CINEMATIC_WINDUP_MS = 2200;
 
 export function MomentsPage() {
   const { t } = useTranslation();
@@ -267,7 +267,7 @@ export function MomentsPage() {
   return (
     <div
       className={clsx(
-        "relative min-h-dvh w-full bg-theme-home transition-[filter] duration-700 ease-out",
+        "moments-page relative min-h-dvh w-full bg-theme-home",
         (cinematic || cinematicWindup) && "moments-page--cinematic-blur"
       )}
     >
@@ -293,10 +293,17 @@ export function MomentsPage() {
                   {t("moments.manage")}
                 </Link>
               ) : null}
-              {items.length >= 2 && !cinematic ? (
+              {items.length >= 2 && !cinematic && !cinematicWindup ? (
                 <button
                   type="button"
-                  onClick={() => setCinematic(true)}
+                  onClick={() => {
+                    setCinematicWindup(true);
+                    window.clearTimeout(windupTimerRef.current);
+                    windupTimerRef.current = window.setTimeout(() => {
+                      setCinematicWindup(false);
+                      setCinematic(true);
+                    }, CINEMATIC_WINDUP_MS);
+                  }}
                   className="rounded-full border border-stone-200/80 bg-white/55 px-3.5 py-1.5 text-xs text-stone-600 transition hover:-translate-y-0.5 hover:bg-white hover:text-warm-700 hover:shadow-sm active:translate-y-0"
                 >
                   {t("moments.slideshowStart")}

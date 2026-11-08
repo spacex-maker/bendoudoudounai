@@ -15,6 +15,9 @@ type Props = {
 const HOLD_MS = 6000;
 /** 渐显/渐隐：约 2.8s；仅用透明度，避免 blur 造成卡顿 */
 const FADE_MS = 2800;
+/** 影院层整页进场 / 退场 */
+const ENTER_MS = 1400;
+const EXIT_MS = 900;
 
 function photoSrc(p: MomentPhotoDto) {
   return p.largeUrl || p.publicUrl || p.thumbUrl || "";
@@ -60,6 +63,8 @@ export function MomentsCinematic({ items, active, onDismiss, onOpenIndex }: Prop
   /** 上一张仍叠在下层渐隐；key 用 photo.id，避免把正在显示的图拆掉重挂导致闪一下 */
   const [outgoingIndex, setOutgoingIndex] = useState<number | null>(null);
   const advancingRef = useRef(false);
+  const [mounted, setMounted] = useState(false);
+  const [revealed, setRevealed] = useState(false);
 
   const safeItems = useMemo(() => items.filter((x) => !!(x.largeUrl || x.publicUrl || x.thumbUrl)), [items]);
   const len = Math.max(1, safeItems.length);
@@ -71,6 +76,25 @@ export function MomentsCinematic({ items, active, onDismiss, onOpenIndex }: Prop
     setIndex(0);
     setOutgoingIndex(null);
     advancingRef.current = false;
+  }, [active, safeItems.length]);
+
+  // 整页进场 / 退场：先挂载再淡入，退出先淡出再卸载
+  useEffect(() => {
+    if (active && safeItems.length >= 2) {
+      setMounted(true);
+      setRevealed(false);
+      let raf2 = 0;
+      const raf1 = window.requestAnimationFrame(() => {
+        raf2 = window.requestAnimationFrame(() => setRevealed(true));
+      });
+      return () => {
+        window.cancelAnimationFrame(raf1);
+        window.cancelAnimationFrame(raf2);
+      };
+    }
+    setRevealed(false);
+    const timer = window.setTimeout(() => setMounted(false), EXIT_MS);
+    return () => window.clearTimeout(timer);
   }, [active, safeItems.length]);
 
   // 预热当前 + 后两张，切图时不必再等网络解码
@@ -102,7 +126,7 @@ export function MomentsCinematic({ items, active, onDismiss, onOpenIndex }: Prop
         setIndex(nextIndex);
         advancingRef.current = false;
       })();
-    }, FADE_MS + HOLD_MS);
+    }, FADE_MS + HOLD_MS + (index === 0 ? ENTER_MS : 0));
     return () => {
       cancelled = true;
       window.clearTimeout(timer);
@@ -140,7 +164,7 @@ export function MomentsCinematic({ items, active, onDismiss, onOpenIndex }: Prop
     };
   }, [active, onDismiss]);
 
-  if (!active || !current || safeItems.length < 2) return null;
+  if (!mounted || !current || safeItems.length < 2) return null;
 
   const openCurrent = (e: { stopPropagation: () => void }) => {
     e.stopPropagation();
@@ -157,9 +181,14 @@ export function MomentsCinematic({ items, active, onDismiss, onOpenIndex }: Prop
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[110] flex items-center justify-center overflow-hidden bg-stone-950/72 backdrop-blur-[7px] backdrop-saturate-125 supports-[backdrop-filter]:bg-stone-950/62"
+      className={clsx(
+        "moments-cinematic-root fixed inset-0 z-[110] flex items-center justify-center overflow-hidden",
+        "bg-stone-950/72 backdrop-blur-[7px] backdrop-saturate-125 supports-[backdrop-filter]:bg-stone-950/62",
+        revealed ? "moments-cinematic-root--in" : "moments-cinematic-root--out"
+      )}
       role="presentation"
       aria-label={t("moments.slideshowAria")}
+      data-cinematic-portal
     >
       <div
         className="pointer-events-none absolute inset-0 opacity-40 transition-[background] duration-[2800ms] ease-out"
@@ -181,7 +210,12 @@ export function MomentsCinematic({ items, active, onDismiss, onOpenIndex }: Prop
 
       <div className="pointer-events-none relative z-[5] flex h-full w-full items-center justify-center px-6 py-16 sm:px-12">
         {/* 固定舞台尺寸，避免不同比例切图时整页回流闪一下 */}
-        <div className="relative h-[min(88dvh,920px)] w-[min(94vw,1100px)]">
+        <div
+          className={clsx(
+            "moments-cinematic-stage relative h-[min(88dvh,920px)] w-[min(94vw,1100px)]",
+            revealed ? "moments-cinematic-stage--in" : "moments-cinematic-stage--out"
+          )}
+        >
           {layers.map(({ item, role }) => (
             <div
               key={item.id}
@@ -237,6 +271,37 @@ export function MomentsCinematic({ items, active, onDismiss, onOpenIndex }: Prop
       </div>
 
       <style>{`
+        .moments-cinematic-root {
+          opacity: 0;
+          transition:
+            opacity ${ENTER_MS}ms cubic-bezier(0.22, 1, 0.36, 1),
+            backdrop-filter ${ENTER_MS}ms cubic-bezier(0.22, 1, 0.36, 1);
+          will-change: opacity;
+        }
+        .moments-cinematic-root--in {
+          opacity: 1;
+        }
+        .moments-cinematic-root--out {
+          opacity: 0;
+          transition-duration: ${EXIT_MS}ms;
+        }
+        .moments-cinematic-stage {
+          transform: scale(0.94) translateY(10px);
+          opacity: 0.35;
+          transition:
+            transform ${ENTER_MS}ms cubic-bezier(0.22, 1, 0.36, 1),
+            opacity ${ENTER_MS}ms cubic-bezier(0.22, 1, 0.36, 1);
+          will-change: transform, opacity;
+        }
+        .moments-cinematic-stage--in {
+          transform: scale(1) translateY(0);
+          opacity: 1;
+        }
+        .moments-cinematic-stage--out {
+          transform: scale(0.97) translateY(6px);
+          opacity: 0;
+          transition-duration: ${EXIT_MS}ms;
+        }
         .moments-xfade {
           will-change: opacity;
         }
@@ -273,6 +338,15 @@ export function MomentsCinematic({ items, active, onDismiss, onOpenIndex }: Prop
           display: block;
         }
         @media (prefers-reduced-motion: reduce) {
+          .moments-cinematic-root,
+          .moments-cinematic-stage {
+            transition: none !important;
+          }
+          .moments-cinematic-root--in,
+          .moments-cinematic-stage--in {
+            opacity: 1 !important;
+            transform: none !important;
+          }
           .moments-xfade--in,
           .moments-xfade--out,
           .moments-kenburns,
