@@ -958,7 +958,7 @@
     "lyricEffectLabel": "歌詞エフェクト",
     "lyricEffectFade": "文整体のフェード",
     "lyricEffectTypewriter": "一文字ずつ",
-    "slideshowStart": "スライドショー",
+    "slideshowStart": "スライド再生",
     "slideshowAria": "ひとときスライドショー",
     "slideshowOpen": "拡大表示",
     "slideshowHint": "{{current}} / {{total}} · タップで終了／拡大",
@@ -978,6 +978,8 @@
     "countdownSec": "秒",
     "countdownMusic": "終了と同時にセレクト曲が流れます",
     "countdownStartNow": "いますぐ始める",
-    "countdownCancel": "まだ見ない"
+    "countdownCancel": "まだ見ない",
+    "slideshowStop": "スライド終了",
+    "slideshowWithMusic": "スライド再生 · BGM同時"
   }
 }

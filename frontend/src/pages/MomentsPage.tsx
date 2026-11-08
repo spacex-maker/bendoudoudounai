@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
-import { ChevronLeft, ChevronRight, Crop, Loader2, Music2, Play, Trash2, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Crop, Images, Loader2, Trash2, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import clsx from "clsx";
 import {
@@ -53,13 +53,10 @@ export function MomentsPage() {
   const [cropping, setCropping] = useState<MomentPhotoDto | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [facets, setFacets] = useState<MomentColorFacetDto[]>([]);
-  const [soundtrackPrompt, setSoundtrackPrompt] = useState(false);
   const [soundtrackReady, setSoundtrackReady] = useState(false);
   const [cinematic, setCinematic] = useState(false);
   const [countdownOpen, setCountdownOpen] = useState(false);
-  const { setQueue, selectTrack, setPlayMode, playing, queue } = useMusicPlayer();
-  const playingRef = useRef(playing);
-  playingRef.current = playing;
+  const { setQueue, selectTrack, setPlayMode, setPlaying, queue } = useMusicPlayer();
   const idleTimerRef = useRef(0);
   const cancelCooldownUntilRef = useRef(0);
 
@@ -89,9 +86,8 @@ export function MomentsPage() {
         setQueue(tracks);
         setPlayMode("shuffle");
         const pick = tracks[Math.floor(Math.random() * tracks.length)]!;
-        // 先选曲不强制开播；倒计时结束 / 用户点引导时再播放
+        // 只预选曲目；真正开播与幻灯同步
         selectTrack(pick, false);
-        if (!cancelled) setSoundtrackPrompt(true);
       })
       .catch(() => undefined);
     return () => {
@@ -100,10 +96,6 @@ export function MomentsPage() {
     // 仅进入片刻页时拉一次精选曲目
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  useEffect(() => {
-    if (playing) setSoundtrackPrompt(false);
-  }, [playing]);
 
   const loadFirst = useCallback(async () => {
     setLoading(true);
@@ -183,9 +175,14 @@ export function MomentsPage() {
       const pick = list[Math.floor(Math.random() * list.length)]!;
       selectTrack(pick, true);
     }
-    setSoundtrackPrompt(false);
     setCinematic(true);
   }, [queue, selectTrack]);
+
+  const stopCinematic = useCallback(() => {
+    setCinematic(false);
+    setCountdownOpen(false);
+    setPlaying(false);
+  }, [setPlaying]);
   const cancelCountdown = useCallback(() => {
     setCountdownOpen(false);
     cancelCooldownUntilRef.current = Date.now() + CINEMATIC_CANCEL_COOLDOWN_MS;
@@ -310,52 +307,27 @@ export function MomentsPage() {
                   {t("moments.manage")}
                 </Link>
               ) : null}
-              {items.length >= 2 && !cinematic && !countdownOpen ? (
+              {items.length >= 2 ? (
                 <button
                   type="button"
-                  onClick={() => openCountdown()}
-                  className="rounded-full border border-stone-200/80 bg-white/55 px-3.5 py-1.5 text-xs text-stone-600 transition hover:-translate-y-0.5 hover:bg-white hover:text-warm-700 hover:shadow-sm active:translate-y-0"
+                  onClick={() => {
+                    if (cinematic) stopCinematic();
+                    else if (countdownOpen) cancelCountdown();
+                    else openCountdown();
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-rose-200/80 bg-white/70 px-3.5 py-1.5 text-xs text-warm-700 shadow-sm transition hover:-translate-y-0.5 hover:bg-white hover:shadow-md active:translate-y-0"
                 >
-                  {t("moments.slideshowStart")}
+                  <Images className="h-3.5 w-3.5" aria-hidden />
+                  {cinematic
+                    ? t("moments.slideshowStop")
+                    : countdownOpen
+                      ? t("moments.countdownCancel")
+                      : t("moments.slideshowStart")}
                 </button>
               ) : null}
             </div>
           </div>
         </header>
-
-        {soundtrackReady && soundtrackPrompt ? (
-          <button
-            type="button"
-            onClick={() => {
-              const pick = queue[Math.floor(Math.random() * Math.max(1, queue.length))];
-              if (pick) selectTrack(pick, true);
-              setSoundtrackPrompt(false);
-            }}
-            className="moments-soundtrack-guide group relative mb-7 flex w-full items-center gap-4 overflow-hidden rounded-[1.75rem] px-4 py-4 text-left transition duration-500 hover:-translate-y-0.5 active:translate-y-0 sm:mb-8 sm:gap-5 sm:px-6 sm:py-5"
-          >
-            <span className="moments-soundtrack-guide__wash pointer-events-none absolute inset-0" aria-hidden />
-            <span className="moments-soundtrack-guide__glow pointer-events-none absolute -left-10 top-1/2 h-40 w-40 -translate-y-1/2 rounded-full" aria-hidden />
-            <span className="moments-soundtrack-guide__glow2 pointer-events-none absolute -right-8 bottom-0 h-32 w-32 rounded-full" aria-hidden />
-            <span className="moments-soundtrack-guide__play relative flex h-14 w-14 shrink-0 items-center justify-center rounded-full text-white transition duration-500 group-hover:scale-105 sm:h-16 sm:w-16">
-              <Play className="h-6 w-6 fill-current sm:h-7 sm:w-7" aria-hidden />
-            </span>
-            <span className="relative min-w-0 flex-1">
-              <span className="moments-soundtrack-guide__kicker flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.22em]">
-                <Music2 className="h-3.5 w-3.5" aria-hidden />
-                {t("moments.soundtrackTitle")}
-              </span>
-              <span className="moments-soundtrack-guide__title mt-1 block font-display text-xl sm:text-2xl">
-                {t("moments.playSoundtrackTitle")}
-              </span>
-              <span className="moments-soundtrack-guide__hint mt-1 block text-sm leading-relaxed">
-                {t("moments.playSoundtrackHint")}
-              </span>
-            </span>
-            <span className="moments-soundtrack-guide__cta relative hidden shrink-0 rounded-full px-5 py-2.5 text-sm font-medium text-white sm:inline-flex">
-              {t("moments.playSoundtrack")}
-            </span>
-          </button>
-        ) : null}
 
         <section
           className="moments-palette-stage relative mb-10 overflow-hidden rounded-[2rem] border border-white/60 bg-white/45 p-5 shadow-[0_24px_60px_rgba(41,37,36,0.07)] backdrop-blur-sm sm:p-7 lg:p-8"
@@ -518,7 +490,7 @@ export function MomentsPage() {
       <MomentsCinematic
         items={items}
         active={cinematic && lightbox == null && !cropping}
-        onDismiss={() => setCinematic(false)}
+        onDismiss={stopCinematic}
         onOpenIndex={setLightbox}
       />
 
@@ -644,6 +616,25 @@ export function MomentsPage() {
             setCropping(null);
           }}
         />
+      ) : null}
+
+
+      {items.length >= 2 && !countdownOpen ? (
+        <button
+          type="button"
+          onClick={() => {
+            if (cinematic) stopCinematic();
+            else openCountdown();
+          }}
+          className="moments-cinematic-fab pointer-events-auto fixed bottom-4 left-4 z-[125] inline-flex items-center gap-2 rounded-full border border-white/70 bg-white/80 px-4 py-2.5 text-sm font-medium text-warm-700 shadow-[0_12px_32px_rgba(148,62,72,0.18)] backdrop-blur-md transition hover:-translate-y-0.5 hover:bg-white hover:shadow-[0_16px_36px_rgba(148,62,72,0.24)] active:translate-y-0 sm:bottom-6 sm:left-6"
+          aria-label={cinematic ? t("moments.slideshowStop") : t("moments.slideshowStart")}
+          title={soundtrackReady ? t("moments.slideshowWithMusic") : t("moments.slideshowStart")}
+        >
+          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-rose-500 to-rose-600 text-white shadow-sm">
+            <Images className="h-4 w-4" aria-hidden />
+          </span>
+          {cinematic ? t("moments.slideshowStop") : t("moments.slideshowStart")}
+        </button>
       ) : null}
 
       <ConfirmModal

@@ -958,7 +958,7 @@
     "lyricEffectLabel": "歌词特效",
     "lyricEffectFade": "整句淡入淡出",
     "lyricEffectTypewriter": "逐字显隐",
-    "slideshowStart": "幻灯片",
+    "slideshowStart": "滚动播放",
     "slideshowAria": "片刻幻灯片放映",
     "slideshowOpen": "查看大图",
     "slideshowHint": "{{current}} / {{total}} · 轻触退出或看大图",
@@ -978,6 +978,8 @@
     "countdownSec": "秒",
     "countdownMusic": "到点后同步响起片刻精选",
     "countdownStartNow": "立刻开始",
-    "countdownCancel": "先随便看看"
+    "countdownCancel": "先随便看看",
+    "slideshowStop": "结束滚动",
+    "slideshowWithMusic": "滚动播放 · 同步配乐"
   }
 }
