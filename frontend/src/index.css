@@ -798,3 +798,16 @@
     animation: none !important;
   }
 }
+
+/* 片刻幻灯启动时：整页轻微虚化（影院层用 backdrop-blur；进场过渡也靠这层） */
+.moments-page--cinematic-blur > *:not([data-cinematic-portal]) {
+  filter: blur(2.5px);
+  transform: scale(1.01);
+  transform-origin: center top;
+}
+@media (prefers-reduced-motion: reduce) {
+  .moments-page--cinematic-blur > *:not([data-cinematic-portal]) {
+    filter: none;
+    transform: none;
+  }
+}

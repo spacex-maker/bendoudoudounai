@@ -263,7 +263,12 @@ export function MomentsPage() {
   ];
 
   return (
-    <div className="relative min-h-dvh w-full bg-theme-home">
+    <div
+      className={clsx(
+        "relative min-h-dvh w-full bg-theme-home transition-[filter] duration-700 ease-out",
+        (cinematic || cinematicWindup) && "moments-page--cinematic-blur"
+      )}
+    >
       <SiteHeader />
       <main className="relative z-10 mx-auto max-w-6xl px-4 pb-16 pt-28 sm:px-6 sm:pt-32">
         <header className="mb-6 max-w-xl sm:mb-8">

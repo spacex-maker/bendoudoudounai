@@ -157,7 +157,7 @@ export function MomentsCinematic({ items, active, onDismiss, onOpenIndex }: Prop
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[110] flex items-center justify-center overflow-hidden bg-stone-950/92"
+      className="fixed inset-0 z-[110] flex items-center justify-center overflow-hidden bg-stone-950/72 backdrop-blur-[7px] backdrop-saturate-125 supports-[backdrop-filter]:bg-stone-950/62"
       role="presentation"
       aria-label={t("moments.slideshowAria")}
     >
