@@ -124,19 +124,21 @@ export function MomentsSoundtrackDock({
       {playerBarExpanded ? (
         <div className="pointer-events-auto w-full overflow-hidden rounded-3xl border border-white/10 bg-zinc-950/92 text-zinc-100 shadow-[0_24px_64px_rgba(0,0,0,0.45)] backdrop-blur-2xl">
           <div className="flex items-start gap-3 border-b border-white/[0.06] p-3.5">
-            <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-2xl bg-zinc-800 ring-1 ring-white/10">
+            <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-full bg-zinc-800 ring-1 ring-white/10 [clip-path:circle(50%)]">
               {coverSrc ? (
                 <img
                   src={coverSrc}
                   alt=""
-                  className="h-full w-full animate-[spin_14s_linear_infinite] object-cover"
+                  className="h-full w-full rounded-full object-cover animate-[spin_14s_linear_infinite]"
                   style={{ animationPlayState: playing ? "running" : "paused" }}
+                  draggable={false}
                 />
               ) : (
-                <div className="flex h-full w-full items-center justify-center text-zinc-500">
+                <div className="flex h-full w-full items-center justify-center rounded-full text-zinc-500">
                   <Music2 className="h-5 w-5" />
                 </div>
               )}
+              <div className="pointer-events-none absolute inset-0 m-auto h-3.5 w-3.5 rounded-full border border-zinc-700/50 bg-zinc-950 shadow-inner" />
             </div>
             <div className="min-w-0 flex-1 pt-0.5">
               <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-rose-300/80">
@@ -319,7 +321,7 @@ export function MomentsSoundtrackDock({
         <button
           type="button"
           onClick={() => setPlayerBarExpanded(true)}
-          className="relative h-9 w-9 shrink-0 overflow-hidden rounded-full border-0 bg-zinc-800 p-0 ring-1 ring-white/10 appearance-none"
+          className="relative h-9 w-9 shrink-0 overflow-hidden rounded-full border-0 bg-zinc-800 p-0 ring-1 ring-white/10 appearance-none [clip-path:circle(50%)]"
           aria-label={t("moments.soundtrackExpand")}
           title={t("moments.soundtrackExpand")}
         >
@@ -327,15 +329,16 @@ export function MomentsSoundtrackDock({
             <img
               src={coverSrc}
               alt=""
-              className="h-full w-full animate-[spin_12s_linear_infinite] object-cover"
+              className="h-full w-full rounded-full object-cover animate-[spin_12s_linear_infinite]"
               style={{ animationPlayState: playing ? "running" : "paused" }}
+              draggable={false}
             />
           ) : (
-            <div className="flex h-full w-full items-center justify-center text-zinc-500">
+            <div className="flex h-full w-full items-center justify-center rounded-full text-zinc-500">
               <Music2 className="h-4 w-4" />
             </div>
           )}
-          <div className="absolute inset-0 m-auto h-2.5 w-2.5 rounded-full border border-zinc-700/40 bg-zinc-900" />
+          <div className="pointer-events-none absolute inset-0 m-auto h-2.5 w-2.5 rounded-full border border-zinc-700/40 bg-zinc-900" />
         </button>
 
         <button

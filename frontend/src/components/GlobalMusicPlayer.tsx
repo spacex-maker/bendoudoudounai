@@ -252,21 +252,22 @@ export function GlobalMusicPlayer() {
             <button
               type="button"
               onClick={openMusicPlayerView}
-              className="relative h-9 w-9 shrink-0 overflow-hidden rounded-full border-0 bg-zinc-800 p-0 ring-1 ring-white/10 appearance-none"
+              className="relative h-9 w-9 shrink-0 overflow-hidden rounded-full border-0 bg-zinc-800 p-0 ring-1 ring-white/10 appearance-none [clip-path:circle(50%)]"
             >
               {coverSrc ? (
                 <img
                   src={coverSrc}
                   alt=""
-                  className="h-full w-full animate-[spin_12s_linear_infinite] object-cover"
+                  className="h-full w-full rounded-full object-cover animate-[spin_12s_linear_infinite]"
                   style={{ animationPlayState: playing ? "running" : "paused" }}
+                  draggable={false}
                 />
               ) : (
-                <div className="flex h-full w-full items-center justify-center text-zinc-500">
+                <div className="flex h-full w-full items-center justify-center rounded-full text-zinc-500">
                   <Music2 className="h-4 w-4" />
                 </div>
               )}
-              <div className="absolute inset-0 m-auto h-2.5 w-2.5 rounded-full border border-zinc-700/40 bg-zinc-900" />
+              <div className="pointer-events-none absolute inset-0 m-auto h-2.5 w-2.5 rounded-full border border-zinc-700/40 bg-zinc-900" />
             </button>
             <button
               type="button"
