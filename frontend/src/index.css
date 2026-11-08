@@ -829,3 +829,36 @@
     animation: none !important;
   }
 }
+
+
+/* moments soundtrack frosted gray glass
+ * Must stay denser than the pink Moments page, otherwise backdrop blur reads pink. */
+.moments-soundtrack-panel {
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(39, 39, 42, 0.86);
+  box-shadow:
+    0 24px 64px rgba(0, 0, 0, 0.42),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  -webkit-backdrop-filter: blur(28px) saturate(1.05);
+  backdrop-filter: blur(28px) saturate(1.05);
+}
+@supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  .moments-soundtrack-panel {
+    background: rgba(39, 39, 42, 0.72);
+  }
+}
+
+.moments-soundtrack-pill {
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(24, 24, 27, 0.82);
+  box-shadow:
+    0 12px 32px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  -webkit-backdrop-filter: blur(20px) saturate(1.05);
+  backdrop-filter: blur(20px) saturate(1.05);
+}
+@supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  .moments-soundtrack-pill {
+    background: rgba(24, 24, 27, 0.68);
+  }
+}

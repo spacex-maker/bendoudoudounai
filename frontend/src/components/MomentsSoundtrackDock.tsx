@@ -124,7 +124,7 @@ export function MomentsSoundtrackDock({
       className="pointer-events-none fixed bottom-4 right-4 z-[135] flex w-[min(22rem,calc(100vw-1.5rem))] flex-col items-end gap-2 sm:bottom-6 sm:right-6"
     >
       {playerBarExpanded ? (
-        <div className="pointer-events-auto w-full overflow-hidden rounded-3xl border border-white/18 bg-zinc-950/42 text-zinc-100 shadow-[0_24px_64px_rgba(0,0,0,0.38)] backdrop-blur-2xl backdrop-saturate-150 supports-[backdrop-filter]:bg-zinc-950/38">
+        <div className="moments-soundtrack-panel pointer-events-auto w-full overflow-hidden rounded-3xl text-zinc-100">
           <div className="flex items-start gap-3 border-b border-white/[0.06] p-3.5">
             <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-full bg-zinc-800 ring-1 ring-white/10 [clip-path:circle(50%)]">
               {coverSrc ? (
@@ -348,7 +348,7 @@ export function MomentsSoundtrackDock({
         </div>
       ) : null}
 
-      <div className="pointer-events-auto flex items-center gap-1.5 rounded-full border border-white/15 bg-zinc-900/45 px-1.5 py-1.5 shadow-xl ring-1 ring-white/10 backdrop-blur-xl backdrop-saturate-150 supports-[backdrop-filter]:bg-zinc-900/35">
+      <div className="moments-soundtrack-pill pointer-events-auto flex items-center gap-1.5 rounded-full px-1.5 py-1.5">
         <button
           type="button"
           onClick={() => setPlayerBarExpanded(true)}
