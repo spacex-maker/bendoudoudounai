@@ -84,7 +84,16 @@ export function GlobalMusicPlayer() {
     }
     a.src = audioObjectUrl;
     a.load();
-    if (playing) void a.play().catch(() => setPlaying(false));
+    if (!playing) return;
+    const tryPlay = () => {
+      void a.play().catch(() => setPlaying(false));
+    };
+    if (a.readyState >= 2) {
+      tryPlay();
+      return;
+    }
+    a.addEventListener("canplay", tryPlay, { once: true });
+    return () => a.removeEventListener("canplay", tryPlay);
   }, [audioObjectUrl, currentTrack?.id]);
 
   useEffect(() => {

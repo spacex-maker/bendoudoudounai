@@ -54,7 +54,7 @@ export function MomentsPage() {
   const [facets, setFacets] = useState<MomentColorFacetDto[]>([]);
   const [cinematic, setCinematic] = useState(false);
   const [countdownOpen, setCountdownOpen] = useState(false);
-  const { setQueue, selectTrack, setPlayMode, setPlaying, queue } = useMusicPlayer();
+  const { setQueue, selectTrack, setPlayMode, setPlaying, queue, currentTrack, audioRef } = useMusicPlayer();
   const idleTimerRef = useRef(0);
   const cancelCooldownUntilRef = useRef(0);
 
@@ -165,31 +165,59 @@ export function MomentsPage() {
     };
   }, [lightbox, items.length, cropping]);
 
+  const ensureMomentsMusic = useCallback(
+    (restart = false) => {
+      const list = queue;
+      const pick =
+        (currentTrack && list.some((t) => t.id === currentTrack.id) ? currentTrack : null) ??
+        (list.length > 0 ? list[Math.floor(Math.random() * list.length)]! : currentTrack);
+      if (!pick) return;
+      selectTrack(pick, true);
+      // 倒计时结束后可能已无手势；若先前在点击时已解锁，这里仍可续播/重播
+      window.setTimeout(() => {
+        const a = audioRef.current;
+        if (!a) return;
+        if (restart) {
+          try {
+            a.currentTime = 0;
+          } catch {
+            /* ignore */
+          }
+        }
+        void a.play().then(() => setPlaying(true)).catch(() => {
+          /* 仍无手势时由右下角坞补点 */
+        });
+      }, 40);
+    },
+    [queue, currentTrack, selectTrack, audioRef, setPlaying]
+  );
+
   const beginCinematicWithMusic = useCallback(() => {
     setCountdownOpen(false);
-    const list = queue;
-    if (list.length > 0) {
-      const pick = list[Math.floor(Math.random() * list.length)]!;
-      selectTrack(pick, true);
-    }
     setCinematic(true);
-  }, [queue, selectTrack]);
+    // 与画面同步：从曲头重播
+    ensureMomentsMusic(true);
+  }, [ensureMomentsMusic]);
 
   const stopCinematic = useCallback(() => {
     setCinematic(false);
     setCountdownOpen(false);
     setPlaying(false);
   }, [setPlaying]);
+
   const cancelCountdown = useCallback(() => {
     setCountdownOpen(false);
+    setPlaying(false);
     cancelCooldownUntilRef.current = Date.now() + CINEMATIC_CANCEL_COOLDOWN_MS;
-  }, []);
+  }, [setPlaying]);
 
   const openCountdown = useCallback(() => {
     if (cinematic || countdownOpen) return;
     if (items.length < 2) return;
+    // 必须在用户点击手势里先 play，否则倒计时归零时会被浏览器拦截
+    ensureMomentsMusic(false);
     setCountdownOpen(true);
-  }, [cinematic, countdownOpen, items.length]);
+  }, [cinematic, countdownOpen, items.length, ensureMomentsMusic]);
 
   // 停留一段时间后弹出可取消倒计时；交互则重置计时（倒计时进行中不打断）
   useEffect(() => {
