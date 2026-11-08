@@ -45,7 +45,7 @@ export function MomentsAmbientLyrics({ elevated = false }: Props) {
       setPhase("out");
       swapTimerRef.current = window.setTimeout(
         () => setShown(null),
-        reduceMotion ? 0 : 420
+        reduceMotion ? 0 : 520
       );
       return () => window.clearTimeout(swapTimerRef.current);
     }
@@ -55,7 +55,7 @@ export function MomentsAmbientLyrics({ elevated = false }: Props) {
         setPhase("in");
         enterTimerRef.current = window.setTimeout(
           () => setPhase("hold"),
-          reduceMotion ? 0 : 700
+          reduceMotion ? 0 : 900
         );
       }
       return () => window.clearTimeout(enterTimerRef.current);
@@ -66,7 +66,7 @@ export function MomentsAmbientLyrics({ elevated = false }: Props) {
       setPhase("in");
       enterTimerRef.current = window.setTimeout(
         () => setPhase("hold"),
-        reduceMotion ? 0 : 700
+        reduceMotion ? 0 : 900
       );
     };
 
@@ -76,7 +76,7 @@ export function MomentsAmbientLyrics({ elevated = false }: Props) {
     }
 
     setPhase("out");
-    swapTimerRef.current = window.setTimeout(commit, reduceMotion ? 0 : 280);
+    swapTimerRef.current = window.setTimeout(commit, reduceMotion ? 0 : 420);
     return () => {
       window.clearTimeout(swapTimerRef.current);
       window.clearTimeout(enterTimerRef.current);
@@ -102,14 +102,14 @@ export function MomentsAmbientLyrics({ elevated = false }: Props) {
     >
       <div
         className={clsx(
-          "moments-ambient-lyric-veil absolute inset-x-0 bottom-0 h-36 sm:h-44",
+          "moments-ambient-lyric-veil absolute inset-x-0 bottom-0 h-44 sm:h-56",
           elevated ? "moments-ambient-lyric-veil--dark" : "moments-ambient-lyric-veil--light"
         )}
       />
       <p
         key={shown ?? ""}
         className={clsx(
-          "moments-ambient-lyric relative max-w-[min(36rem,92vw)] text-center font-display text-[clamp(1.05rem,2.8vw,1.55rem)] leading-relaxed tracking-[0.04em]",
+          "moments-ambient-lyric relative max-w-[min(42rem,94vw)] text-center font-display text-[clamp(1.35rem,3.8vw,2.2rem)] leading-snug tracking-[0.05em]",
           elevated ? "moments-ambient-lyric--dark" : "moments-ambient-lyric--light",
           reduceMotion && "moments-ambient-lyric--static",
           !reduceMotion && phase === "in" && "moments-ambient-lyric--enter",
