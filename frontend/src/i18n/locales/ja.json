@@ -917,7 +917,7 @@
   },
   "moments": {
     "title": "ひととき",
-    "sub": "残っているいくつかの画面。",
+    "sub": "残っているいくつかの画面を、色でゆっくり。",
     "empty": "まだ何もありません。",
     "emptyFilter": "この色調の写真はまだありません。",
     "loadMore": "もっと見る",
@@ -949,7 +949,7 @@
     "cropApply": "切り抜きを適用",
     "cropFailed": "切り抜きの保存に失敗しました",
     "cropLoadFailed": "切り抜き用の画像を読み込めません",
-    "playSoundtrack": "タップしてBGMを再生",
+    "playSoundtrack": "再生する",
     "soundtrackTitle": "ひとときセレクト",
     "soundtrackExpand": "プレーヤーを開く",
     "soundtrackCollapse": "プレーヤーを閉じる",
@@ -961,6 +961,15 @@
     "slideshowStart": "スライドショー",
     "slideshowAria": "ひとときスライドショー",
     "slideshowOpen": "拡大表示",
-    "slideshowHint": "{{current}} / {{total}} · タップで終了／拡大"
+    "slideshowHint": "{{current}} / {{total}} · タップで終了／拡大",
+    "paletteStageLabel": "色でめぐる",
+    "paletteStageHint": "色塊や色輪を選ぶと、近い色の写真が集まります",
+    "wheelAria": "色相で絞り込み",
+    "wheelHint": "色輪で近い色調を選ぶ",
+    "wheelHue": "色相 約 {{hue}}°",
+    "wheelClear": "色相をクリア",
+    "wheelCenterHint": "中央をタップで解除",
+    "playSoundtrackTitle": "この画面にBGMを添える",
+    "playSoundtrackHint": "ひとときセレクトの準備ができました。タップすると画面に寄り添って流れます。"
   }
 }

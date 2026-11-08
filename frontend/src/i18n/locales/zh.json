@@ -917,7 +917,7 @@
   },
   "moments": {
     "title": "片刻",
-    "sub": "留下的一些画面。",
+    "sub": "留下的一些画面，按色彩慢慢翻。",
     "empty": "这里还空着。",
     "emptyFilter": "这个色调下还没有画面。",
     "loadMore": "加载更多",
@@ -949,7 +949,7 @@
     "cropApply": "应用裁剪",
     "cropFailed": "裁剪上传失败",
     "cropLoadFailed": "无法加载原图进行裁剪",
-    "playSoundtrack": "轻触播放背景音乐",
+    "playSoundtrack": "开始播放",
     "soundtrackTitle": "片刻精选",
     "soundtrackExpand": "展开播放器",
     "soundtrackCollapse": "收起播放器",
@@ -961,6 +961,15 @@
     "slideshowStart": "幻灯片",
     "slideshowAria": "片刻幻灯片放映",
     "slideshowOpen": "查看大图",
-    "slideshowHint": "{{current}} / {{total}} · 轻触退出或看大图"
+    "slideshowHint": "{{current}} / {{total}} · 轻触退出或看大图",
+    "paletteStageLabel": "按色彩漫游",
+    "paletteStageHint": "点选色块或色轮，相近的画面会聚到一起",
+    "wheelAria": "色轮筛选",
+    "wheelHint": "点色轮筛选相近色调",
+    "wheelHue": "色相约 {{hue}}°",
+    "wheelClear": "清除色相",
+    "wheelCenterHint": "点中心可清空",
+    "playSoundtrackTitle": "为这些画面配上音乐",
+    "playSoundtrackHint": "片刻精选已就绪。轻触即可伴随画面播放——浏览器需要你点一下才会出声。"
   }
 }

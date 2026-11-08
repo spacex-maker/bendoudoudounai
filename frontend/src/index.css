@@ -811,3 +811,21 @@
     transform: none;
   }
 }
+
+
+/* moments soundtrack guide */
+.moments-palette-stage {
+  background-color: rgba(255, 247, 244, 0.55);
+}
+.moments-soundtrack-guide__glow {
+  animation: momentsSoundtrackGlow 2.8s ease-in-out infinite;
+}
+@keyframes momentsSoundtrackGlow {
+  0%, 100% { opacity: 0.45; transform: translateY(-50%) scale(1); }
+  50% { opacity: 0.9; transform: translateY(-50%) scale(1.12); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .moments-soundtrack-guide__glow {
+    animation: none !important;
+  }
+}

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
-import { ChevronLeft, ChevronRight, Crop, Loader2, Trash2, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Crop, Loader2, Music2, Play, Trash2, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import clsx from "clsx";
 import {
@@ -83,13 +83,15 @@ export function MomentsPage() {
       .then((tracks) => {
         if (cancelled || !tracks.length) return;
         setSoundtrackReady(true);
+        setSoundtrackPrompt(true);
         setQueue(tracks);
         setPlayMode("shuffle");
         const pick = tracks[Math.floor(Math.random() * tracks.length)]!;
         selectTrack(pick, true);
+        // autoplay may succeed; playing effect clears the guide
         window.setTimeout(() => {
-          if (!cancelled && !playingRef.current) setSoundtrackPrompt(true);
-        }, 900);
+          if (!cancelled && playingRef.current) setSoundtrackPrompt(false);
+        }, 700);
       })
       .catch(() => undefined);
     return () => {
@@ -270,69 +272,112 @@ export function MomentsPage() {
       )}
     >
       <SiteHeader />
-      <main className="relative z-10 mx-auto max-w-6xl px-4 pb-16 pt-28 sm:px-6 sm:pt-32">
-        <header className="mb-6 max-w-xl sm:mb-8">
-          <h1 className="font-display text-3xl text-warm-600 transition-transform duration-500 hover:translate-x-0.5 sm:text-4xl">
-            {t("moments.title")}
-          </h1>
-          <p className="mt-2 text-sm leading-relaxed text-stone-600/85 sm:text-base">{t("moments.sub")}</p>
-          <div className="mt-3 flex flex-wrap items-center gap-3">
-            {isAdmin ? (
-              <Link
-                to="/admin/moments"
-                className="inline-block text-xs text-rose-500/80 underline-offset-4 transition hover:text-rose-600 hover:underline"
-              >
-                {t("moments.manage")}
-              </Link>
-            ) : null}
-            {soundtrackReady && soundtrackPrompt ? (
-              <button
-                type="button"
-                onClick={() => {
-                  const pick = queue[Math.floor(Math.random() * Math.max(1, queue.length))];
-                  if (pick) selectTrack(pick, true);
-                  setSoundtrackPrompt(false);
-                }}
-                className="rounded-full border border-rose-200/70 bg-white/70 px-3 py-1 text-xs text-warm-600 shadow-sm transition hover:-translate-y-0.5 hover:bg-white hover:shadow-md active:translate-y-0"
-              >
-                {t("moments.playSoundtrack")}
-              </button>
-            ) : null}
-            {items.length >= 2 && !cinematic ? (
-              <button
-                type="button"
-                onClick={() => setCinematic(true)}
-                className="rounded-full border border-stone-200/80 bg-white/50 px-3 py-1 text-xs text-stone-600 transition hover:-translate-y-0.5 hover:bg-white hover:text-warm-700 hover:shadow-sm active:translate-y-0"
-              >
-                {t("moments.slideshowStart")}
-              </button>
-            ) : null}
+      <main className="relative z-10 mx-auto max-w-6xl px-4 pb-20 pt-28 sm:px-6 sm:pt-32">
+        <header className="mb-7 sm:mb-9">
+          <div className="max-w-2xl">
+            <p className="font-display text-[11px] font-semibold uppercase tracking-[0.28em] text-rose-500/75">
+              {t("moments.paletteStageLabel")}
+            </p>
+            <h1 className="mt-2 font-display text-[clamp(2.35rem,7vw,3.5rem)] leading-[1.08] tracking-tight text-warm-700">
+              {t("moments.title")}
+            </h1>
+            <p className="mt-3 max-w-xl text-sm leading-relaxed text-stone-600/85 sm:text-base">
+              {t("moments.sub")}
+            </p>
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              {isAdmin ? (
+                <Link
+                  to="/admin/moments"
+                  className="inline-block text-xs text-rose-500/80 underline-offset-4 transition hover:text-rose-600 hover:underline"
+                >
+                  {t("moments.manage")}
+                </Link>
+              ) : null}
+              {items.length >= 2 && !cinematic ? (
+                <button
+                  type="button"
+                  onClick={() => setCinematic(true)}
+                  className="rounded-full border border-stone-200/80 bg-white/55 px-3.5 py-1.5 text-xs text-stone-600 transition hover:-translate-y-0.5 hover:bg-white hover:text-warm-700 hover:shadow-sm active:translate-y-0"
+                >
+                  {t("moments.slideshowStart")}
+                </button>
+              ) : null}
+            </div>
           </div>
         </header>
 
-        <section className="mb-8 space-y-5 rounded-2xl border border-white/50 bg-white/35 p-4 backdrop-blur-sm transition duration-500 hover:border-rose-100/70 hover:bg-white/45 hover:shadow-[0_12px_40px_rgba(41,37,36,0.06)] sm:p-5">
-          <MomentsHueSwatches
-            facets={facets}
-            activeHue={hue}
-            activeNeutral={mood === "neutral"}
-            onSelectHue={(h) => {
-              setHue(h);
-              setMood(null);
-              setSort("hue");
+        {soundtrackReady && soundtrackPrompt ? (
+          <button
+            type="button"
+            onClick={() => {
+              const pick = queue[Math.floor(Math.random() * Math.max(1, queue.length))];
+              if (pick) selectTrack(pick, true);
+              setSoundtrackPrompt(false);
             }}
-            onSelectNeutral={() => {
-              setHue(null);
-              setMood("neutral");
-              setSort("newest");
-            }}
-            onClear={() => {
-              setHue(null);
-              setMood(null);
-            }}
+            className="moments-soundtrack-guide group relative mb-7 flex w-full items-center gap-4 overflow-hidden rounded-[1.75rem] border border-rose-200/70 px-4 py-4 text-left shadow-[0_18px_50px_rgba(190,60,90,0.14)] transition duration-500 hover:-translate-y-0.5 hover:shadow-[0_22px_56px_rgba(190,60,90,0.2)] active:translate-y-0 sm:mb-8 sm:gap-5 sm:px-6 sm:py-5"
+          >
+            <span
+              className="pointer-events-none absolute inset-0 bg-gradient-to-r from-rose-100/95 via-white/90 to-amber-50/80"
+              aria-hidden
+            />
+            <span
+              className="pointer-events-none absolute -left-10 top-1/2 h-40 w-40 -translate-y-1/2 rounded-full bg-rose-300/30 blur-3xl moments-soundtrack-guide__glow"
+              aria-hidden
+            />
+            <span
+              className="pointer-events-none absolute -right-8 bottom-0 h-32 w-32 rounded-full bg-amber-200/35 blur-3xl"
+              aria-hidden
+            />
+            <span className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-rose-500 to-rose-600 text-white shadow-[0_10px_28px_rgba(225,29,72,0.35)] transition duration-500 group-hover:scale-105 sm:h-16 sm:w-16">
+              <Play className="h-6 w-6 fill-current sm:h-7 sm:w-7" aria-hidden />
+            </span>
+            <span className="relative min-w-0 flex-1">
+              <span className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-rose-500/80">
+                <Music2 className="h-3.5 w-3.5" aria-hidden />
+                {t("moments.soundtrackTitle")}
+              </span>
+              <span className="mt-1 block font-display text-xl text-warm-800 sm:text-2xl">
+                {t("moments.playSoundtrackTitle")}
+              </span>
+              <span className="mt-1 block text-sm leading-relaxed text-stone-600/90">
+                {t("moments.playSoundtrackHint")}
+              </span>
+            </span>
+            <span className="relative hidden shrink-0 rounded-full bg-warm-700 px-5 py-2.5 text-sm font-medium text-white shadow-sm transition group-hover:bg-warm-800 sm:inline-flex">
+              {t("moments.playSoundtrack")}
+            </span>
+          </button>
+        ) : null}
+
+        <section
+          className="moments-palette-stage relative mb-10 overflow-hidden rounded-[2rem] border border-white/60 bg-white/45 p-5 shadow-[0_24px_60px_rgba(41,37,36,0.07)] backdrop-blur-sm sm:p-7 lg:p-8"
+          style={
+            hue != null
+              ? {
+                  background: `linear-gradient(135deg, hsla(${hue}, 55%, 96%, 0.92) 0%, rgba(255,247,244,0.88) 48%, hsla(${(hue + 40) % 360}, 40%, 95%, 0.85) 100%)`,
+                }
+              : undefined
+          }
+        >
+          <div
+            className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_20%_20%,rgba(255,255,255,0.55),transparent_45%),radial-gradient(ellipse_at_90%_10%,rgba(255,190,210,0.22),transparent_40%)]"
+            aria-hidden
           />
-          <div className="flex flex-col gap-4 border-t border-white/40 pt-4 sm:flex-row sm:items-center sm:justify-between">
+          <div
+            className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full opacity-50 blur-3xl"
+            style={{
+              background:
+                hue != null
+                  ? `hsla(${hue}, 70%, 65%, 0.35)`
+                  : "rgba(255, 170, 190, 0.28)",
+            }}
+            aria-hidden
+          />
+
+          <div className="relative grid gap-8 lg:grid-cols-[auto_minmax(0,1fr)] lg:items-center lg:gap-10">
             <MomentsColorWheel
               hue={hue}
+              size="lg"
               onChange={(h) => {
                 setHue(h);
                 if (h != null) {
@@ -341,50 +386,77 @@ export function MomentsPage() {
                 }
               }}
             />
-            <div className="flex min-w-0 flex-1 flex-col gap-3">
-              <div className="flex flex-wrap gap-1.5">
-                {moods.map((m) => (
+
+            <div className="min-w-0 space-y-6">
+              <MomentsHueSwatches
+                facets={facets}
+                activeHue={hue}
+                activeNeutral={mood === "neutral"}
+                onSelectHue={(h) => {
+                  setHue(h);
+                  setMood(null);
+                  setSort("hue");
+                }}
+                onSelectNeutral={() => {
+                  setHue(null);
+                  setMood("neutral");
+                  setSort("newest");
+                }}
+                onClear={() => {
+                  setHue(null);
+                  setMood(null);
+                }}
+              />
+
+              <div className="flex flex-col gap-4 border-t border-white/50 pt-5 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex flex-wrap gap-2">
+                  {moods.map((m) => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => {
+                        setMood((cur) => (cur === m.id ? null : m.id));
+                        if (m.id === "warm" || m.id === "cool" || m.id === "neutral") setHue(null);
+                      }}
+                      className={clsx(
+                        "rounded-full px-3.5 py-1.5 text-xs transition duration-300 sm:text-sm",
+                        "hover:-translate-y-0.5 hover:shadow-sm active:translate-y-0 active:scale-95",
+                        mood === m.id
+                          ? "bg-warm-600 text-white shadow-sm"
+                          : "bg-white/65 text-stone-600 ring-1 ring-stone-200/70 hover:bg-white"
+                      )}
+                    >
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex flex-wrap items-center gap-2 text-xs text-stone-500 sm:text-sm">
+                  <span>{t("moments.sortLabel")}</span>
                   <button
-                    key={m.id}
                     type="button"
-                    onClick={() => {
-                      setMood((cur) => (cur === m.id ? null : m.id));
-                      if (m.id === "warm" || m.id === "cool" || m.id === "neutral") setHue(null);
-                    }}
                     className={clsx(
-                      "rounded-full px-3 py-1 text-xs transition duration-300",
-                      "hover:-translate-y-0.5 hover:shadow-sm active:translate-y-0 active:scale-95",
-                      mood === m.id
-                        ? "bg-warm-600 text-white shadow-sm"
-                        : "bg-white/55 text-stone-600 ring-1 ring-stone-200/80 hover:bg-white/90"
+                      "rounded-full px-3 py-1.5 transition duration-300 hover:-translate-y-0.5 active:translate-y-0 active:scale-95",
+                      sort === "newest"
+                        ? "bg-stone-800 text-white"
+                        : "bg-white/65 ring-1 ring-stone-200/70 hover:bg-white"
                     )}
+                    onClick={() => setSort("newest")}
                   >
-                    {m.label}
+                    {t("moments.sortNewest")}
                   </button>
-                ))}
-              </div>
-              <div className="flex flex-wrap items-center gap-2 text-xs text-stone-500">
-                <span>{t("moments.sortLabel")}</span>
-                <button
-                  type="button"
-                  className={clsx(
-                    "rounded-full px-2.5 py-1 transition duration-300 hover:-translate-y-0.5 active:translate-y-0 active:scale-95",
-                    sort === "newest" ? "bg-stone-800 text-white" : "bg-white/55 ring-1 ring-stone-200/80 hover:bg-white"
-                  )}
-                  onClick={() => setSort("newest")}
-                >
-                  {t("moments.sortNewest")}
-                </button>
-                <button
-                  type="button"
-                  className={clsx(
-                    "rounded-full px-2.5 py-1 transition duration-300 hover:-translate-y-0.5 active:translate-y-0 active:scale-95",
-                    sort === "hue" ? "bg-stone-800 text-white" : "bg-white/55 ring-1 ring-stone-200/80 hover:bg-white"
-                  )}
-                  onClick={() => setSort("hue")}
-                >
-                  {t("moments.sortHue")}
-                </button>
+                  <button
+                    type="button"
+                    className={clsx(
+                      "rounded-full px-3 py-1.5 transition duration-300 hover:-translate-y-0.5 active:translate-y-0 active:scale-95",
+                      sort === "hue"
+                        ? "bg-stone-800 text-white"
+                        : "bg-white/65 ring-1 ring-stone-200/70 hover:bg-white"
+                    )}
+                    onClick={() => setSort("hue")}
+                  >
+                    {t("moments.sortHue")}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
