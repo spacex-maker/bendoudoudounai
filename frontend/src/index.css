@@ -610,11 +610,67 @@
   }
 }
 
+.moments-ambient-lyric__char {
+  display: inline-block;
+  white-space: pre;
+}
+.moments-ambient-lyric--type-in .moments-ambient-lyric__char {
+  opacity: 0;
+  transform: translateY(0.35em) scale(0.92);
+  filter: blur(3px);
+  animation: momentsLyricCharIn 0.42s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation-delay: calc(var(--i) * 58ms);
+}
+.moments-ambient-lyric--type-hold .moments-ambient-lyric__char {
+  opacity: 0.96;
+  animation: momentsLyricCharBreathe 4.8s ease-in-out infinite;
+  animation-delay: calc(var(--i) * 40ms);
+}
+.moments-ambient-lyric--type-out .moments-ambient-lyric__char {
+  opacity: 1;
+  animation: momentsLyricCharOut 0.34s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  animation-delay: calc(var(--i) * 42ms);
+}
+@keyframes momentsLyricCharIn {
+  from {
+    opacity: 0;
+    transform: translateY(0.4em) scale(0.9);
+    filter: blur(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+@keyframes momentsLyricCharOut {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-0.45em) scale(1.06);
+    filter: blur(4px);
+  }
+}
+@keyframes momentsLyricCharBreathe {
+  0%, 100% { opacity: 0.84; transform: translateY(0); }
+  50% { opacity: 1; transform: translateY(-1px); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .moments-ambient-lyric--enter,
   .moments-ambient-lyric--breathe,
-  .moments-ambient-lyric--leave {
+  .moments-ambient-lyric--leave,
+  .moments-ambient-lyric--type-in .moments-ambient-lyric__char,
+  .moments-ambient-lyric--type-hold .moments-ambient-lyric__char,
+  .moments-ambient-lyric--type-out .moments-ambient-lyric__char {
     animation: none !important;
+    opacity: 0.9 !important;
+    transform: none !important;
+    filter: none !important;
   }
 }
 

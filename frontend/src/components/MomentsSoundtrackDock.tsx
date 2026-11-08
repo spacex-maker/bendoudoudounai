@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import { coverDisplayUrl } from "../api/client";
-import { useMusicPlayer } from "../music/MusicPlayerContext";
+import { useMusicPlayer, type MomentsLyricEffect } from "../music/MusicPlayerContext";
 
 function formatTime(t: number) {
   if (!Number.isFinite(t) || t < 0) return "0:00";
@@ -58,6 +58,8 @@ export function MomentsSoundtrackDock({
     coverSrc,
     playerBarExpanded,
     setPlayerBarExpanded,
+    momentsLyricEffect,
+    setMomentsLyricEffect,
   } = useMusicPlayer();
 
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -122,7 +124,7 @@ export function MomentsSoundtrackDock({
       className="pointer-events-none fixed bottom-4 right-4 z-[135] flex w-[min(22rem,calc(100vw-1.5rem))] flex-col items-end gap-2 sm:bottom-6 sm:right-6"
     >
       {playerBarExpanded ? (
-        <div className="pointer-events-auto w-full overflow-hidden rounded-3xl border border-white/10 bg-zinc-950/92 text-zinc-100 shadow-[0_24px_64px_rgba(0,0,0,0.45)] backdrop-blur-2xl">
+        <div className="pointer-events-auto w-full overflow-hidden rounded-3xl border border-white/18 bg-zinc-950/42 text-zinc-100 shadow-[0_24px_64px_rgba(0,0,0,0.38)] backdrop-blur-2xl backdrop-saturate-150 supports-[backdrop-filter]:bg-zinc-950/38">
           <div className="flex items-start gap-3 border-b border-white/[0.06] p-3.5">
             <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-full bg-zinc-800 ring-1 ring-white/10 [clip-path:circle(50%)]">
               {coverSrc ? (
@@ -265,6 +267,35 @@ export function MomentsSoundtrackDock({
               </div>
             </div>
 
+            <div className="space-y-1.5">
+              <p className="px-0.5 text-[10px] font-medium uppercase tracking-[0.14em] text-zinc-500">
+                {t("moments.lyricEffectLabel")}
+              </p>
+              <div className="grid grid-cols-2 gap-1.5">
+                {(
+                  [
+                    { key: "fade" as MomentsLyricEffect, label: t("moments.lyricEffectFade") },
+                    { key: "typewriter" as MomentsLyricEffect, label: t("moments.lyricEffectTypewriter") },
+                  ] as const
+                ).map((opt) => (
+                  <button
+                    key={opt.key}
+                    type="button"
+                    className={clsx(
+                      "rounded-2xl px-2.5 py-2 text-[11px] transition",
+                      momentsLyricEffect === opt.key
+                        ? "bg-rose-500/25 text-rose-100 ring-1 ring-rose-300/35"
+                        : "bg-white/[0.06] text-zinc-400 ring-1 ring-white/10 hover:bg-white/[0.1] hover:text-zinc-200"
+                    )}
+                    onClick={() => setMomentsLyricEffect(opt.key)}
+                    aria-pressed={momentsLyricEffect === opt.key}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div className="max-h-52 overflow-y-auto overscroll-contain pr-0.5 custom-scrollbar">
               {tracks.length === 0 ? (
                 <p className="px-1 py-3 text-center text-xs text-zinc-500">
@@ -317,7 +348,7 @@ export function MomentsSoundtrackDock({
         </div>
       ) : null}
 
-      <div className="pointer-events-auto flex items-center gap-1.5 rounded-full bg-zinc-900/95 px-1.5 py-1.5 shadow-xl ring-1 ring-white/10 backdrop-blur-xl">
+      <div className="pointer-events-auto flex items-center gap-1.5 rounded-full border border-white/15 bg-zinc-900/45 px-1.5 py-1.5 shadow-xl ring-1 ring-white/10 backdrop-blur-xl backdrop-saturate-150 supports-[backdrop-filter]:bg-zinc-900/35">
         <button
           type="button"
           onClick={() => setPlayerBarExpanded(true)}

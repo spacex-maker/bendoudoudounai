@@ -248,7 +248,7 @@ export function GlobalMusicPlayer() {
       {/* Other pages: mini pill */}
       {!isOnMusicPage && !isOnMomentsPage && hasTrack && (
         <div className="pointer-events-none fixed bottom-4 right-4 z-50 sm:bottom-6">
-          <div className="pointer-events-auto flex items-center gap-1.5 rounded-full bg-zinc-900/95 px-1.5 py-1.5 shadow-xl ring-1 ring-white/10 backdrop-blur-xl">
+          <div className="pointer-events-auto flex items-center gap-1.5 rounded-full border border-white/15 bg-zinc-900/45 px-1.5 py-1.5 shadow-xl ring-1 ring-white/10 backdrop-blur-xl backdrop-saturate-150 supports-[backdrop-filter]:bg-zinc-900/35">
             <button
               type="button"
               onClick={openMusicPlayerView}

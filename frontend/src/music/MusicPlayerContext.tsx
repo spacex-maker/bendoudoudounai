@@ -14,9 +14,23 @@ import {
 import { coverDisplayUrl, type MusicTrackDto } from "../api/client";
 
 export type PlayMode = "single" | "list" | "shuffle";
+/** 片刻氛围歌词切换特效 */
+export type MomentsLyricEffect = "fade" | "typewriter";
 
 const PLAY_MODE_KEY = "bendoudou_play_mode";
+const MOMENTS_LYRIC_EFFECT_KEY = "bendoudou_moments_lyric_effect";
 const VOLUME_KEY = "bendoudou_volume";
+
+
+function readStoredMomentsLyricEffect(): MomentsLyricEffect {
+  try {
+    const v = localStorage.getItem(MOMENTS_LYRIC_EFFECT_KEY);
+    if (v === "fade" || v === "typewriter") return v;
+  } catch {
+    /* ignore */
+  }
+  return "fade";
+}
 
 function readStoredPlayMode(): PlayMode {
   try {
@@ -58,6 +72,8 @@ type MusicPlayerContextValue = {
   coverSrc: string | null;
   immersiveLyricsOpen: boolean;
   setImmersiveLyricsOpen: (open: boolean) => void;
+  momentsLyricEffect: MomentsLyricEffect;
+  setMomentsLyricEffect: Dispatch<SetStateAction<MomentsLyricEffect>>;
 };
 
 const MusicPlayerContext = createContext<MusicPlayerContextValue | null>(null);
@@ -92,6 +108,7 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
   });
 
   const [playMode, setPlayMode] = useState<PlayMode>(() => readStoredPlayMode());
+  const [momentsLyricEffect, setMomentsLyricEffect] = useState<MomentsLyricEffect>(() => readStoredMomentsLyricEffect());
 
   useEffect(() => {
     try { localStorage.setItem(VOLUME_KEY, String(volume)); } catch { /* ignore */ }
@@ -100,6 +117,10 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     try { localStorage.setItem(PLAY_MODE_KEY, playMode); } catch { /* ignore */ }
   }, [playMode]);
+
+  useEffect(() => {
+    try { localStorage.setItem(MOMENTS_LYRIC_EFFECT_KEY, momentsLyricEffect); } catch { /* ignore */ }
+  }, [momentsLyricEffect]);
 
   // Refs for stable callbacks that need current values without deps
   const currentIdRef = useRef<number | null>(null);
@@ -232,6 +253,8 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
     coverSrc,
     immersiveLyricsOpen,
     setImmersiveLyricsOpen,
+    momentsLyricEffect,
+    setMomentsLyricEffect,
   };
 
   return (
