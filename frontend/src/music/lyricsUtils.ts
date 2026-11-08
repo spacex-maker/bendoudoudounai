@@ -103,6 +103,15 @@ export function getActiveLyricText(lines: LyricLine[], timeSec: number): string 
   return lines[idx]!.text;
 }
 
+/** 当前句的下一句文案；没有下一句返回 null */
+export function getNextLyricText(lines: LyricLine[], timeSec: number): string | null {
+  if (lines.length === 0) return null;
+  const idx = findActiveIndex(lines, Math.max(0, timeSec) * 1000);
+  if (idx < 0 || idx >= lines.length - 1) return null;
+  const next = lines[idx + 1]!.text.trim();
+  return next ? next : null;
+}
+
 export function getActiveDisplayLyric(
   lines: LyricDisplayLine[],
   timeSec: number

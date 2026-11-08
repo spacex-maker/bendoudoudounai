@@ -530,6 +530,23 @@
   font-weight: 560;
   will-change: opacity, transform, filter, letter-spacing;
 }
+.moments-ambient-lyric-next {
+  font-weight: 500;
+  opacity: 0;
+  animation: momentsLyricNextIn 0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+.moments-ambient-lyric-next--light {
+  color: rgba(98, 40, 54, 0.38);
+  text-shadow: 0 0 12px rgba(255, 255, 255, 0.55);
+}
+.moments-ambient-lyric-next--dark {
+  color: rgba(255, 244, 248, 0.34);
+  text-shadow: 0 0 14px rgba(255, 150, 180, 0.18);
+}
+@keyframes momentsLyricNextIn {
+  from { opacity: 0; transform: translateY(6px); filter: blur(3px); }
+  to { opacity: 1; transform: translateY(0); filter: blur(0); }
+}
 .moments-ambient-lyric--light {
   color: rgba(98, 40, 54, 0.94);
   text-shadow:
@@ -666,11 +683,15 @@
   .moments-ambient-lyric--leave,
   .moments-ambient-lyric--type-in .moments-ambient-lyric__char,
   .moments-ambient-lyric--type-hold .moments-ambient-lyric__char,
-  .moments-ambient-lyric--type-out .moments-ambient-lyric__char {
+  .moments-ambient-lyric--type-out .moments-ambient-lyric__char,
+  .moments-ambient-lyric-next {
     animation: none !important;
     opacity: 0.9 !important;
     transform: none !important;
     filter: none !important;
+  }
+  .moments-ambient-lyric-next {
+    opacity: 0.4 !important;
   }
 }
 

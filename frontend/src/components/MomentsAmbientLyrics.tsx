@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import clsx from "clsx";
 import { useMusicPlayer } from "../music/MusicPlayerContext";
 import { useSyncedLyrics } from "../music/useSyncedLyrics";
-import { getActiveLyricText } from "../music/lyricsUtils";
+import { getActiveLyricText, getNextLyricText } from "../music/lyricsUtils";
 
 type Props = {
   /** 深色叠层（灯箱 / 影院）时改用浅色字 */
@@ -26,6 +26,11 @@ export function MomentsAmbientLyrics({ elevated = false }: Props) {
     if (!currentTrack?.hasLyrics || lines.length === 0) return null;
     return getActiveLyricText(lines, playPos);
   }, [currentTrack?.hasLyrics, lines, playPos]);
+
+  const nextLine = useMemo(() => {
+    if (!currentTrack?.hasLyrics || lines.length === 0 || !playing) return null;
+    return getNextLyricText(lines, playPos);
+  }, [currentTrack?.hasLyrics, lines, playPos, playing]);
 
   const [mounted, setMounted] = useState(false);
   const [reduceMotion, setReduceMotion] = useState(false);
@@ -121,32 +126,45 @@ export function MomentsAmbientLyrics({ elevated = false }: Props) {
           elevated ? "moments-ambient-lyric-veil--dark" : "moments-ambient-lyric-veil--light"
         )}
       />
-      <p
-        key={`${momentsLyricEffect}-${shown ?? ""}`}
-        className={clsx(
-          "moments-ambient-lyric relative max-w-[min(42rem,94vw)] text-center font-display text-[clamp(1.35rem,3.8vw,2.2rem)] leading-snug tracking-[0.05em]",
-          elevated ? "moments-ambient-lyric--dark" : "moments-ambient-lyric--light",
-          reduceMotion && "moments-ambient-lyric--static",
-          !isTypewriter && !reduceMotion && phase === "in" && "moments-ambient-lyric--enter",
-          !isTypewriter && !reduceMotion && phase === "hold" && "moments-ambient-lyric--breathe",
-          !isTypewriter && !reduceMotion && phase === "out" && "moments-ambient-lyric--leave",
-          isTypewriter && phase === "in" && "moments-ambient-lyric--type-in",
-          isTypewriter && phase === "hold" && "moments-ambient-lyric--type-hold",
-          isTypewriter && phase === "out" && "moments-ambient-lyric--type-out"
-        )}
-      >
-        {isTypewriter
-          ? chars.map((ch, i) => (
-              <span
-                key={`${i}-${ch}`}
-                className="moments-ambient-lyric__char"
-                style={{ ["--i" as string]: String(i), ["--n" as string]: String(Math.max(chars.length - 1, 1)) }}
-              >
-                {ch === " " ? "\u00a0" : ch}
-              </span>
-            ))
-          : shown}
-      </p>
+      <div className="relative flex max-w-[min(42rem,94vw)] flex-col items-center gap-2.5 sm:gap-3">
+        <p
+          key={`${momentsLyricEffect}-${shown ?? ""}`}
+          className={clsx(
+            "moments-ambient-lyric m-0 text-center font-display text-[clamp(1.35rem,3.8vw,2.2rem)] leading-snug tracking-[0.05em]",
+            elevated ? "moments-ambient-lyric--dark" : "moments-ambient-lyric--light",
+            reduceMotion && "moments-ambient-lyric--static",
+            !isTypewriter && !reduceMotion && phase === "in" && "moments-ambient-lyric--enter",
+            !isTypewriter && !reduceMotion && phase === "hold" && "moments-ambient-lyric--breathe",
+            !isTypewriter && !reduceMotion && phase === "out" && "moments-ambient-lyric--leave",
+            isTypewriter && phase === "in" && "moments-ambient-lyric--type-in",
+            isTypewriter && phase === "hold" && "moments-ambient-lyric--type-hold",
+            isTypewriter && phase === "out" && "moments-ambient-lyric--type-out"
+          )}
+        >
+          {isTypewriter
+            ? chars.map((ch, i) => (
+                <span
+                  key={`${i}-${ch}`}
+                  className="moments-ambient-lyric__char"
+                  style={{ ["--i" as string]: String(i), ["--n" as string]: String(Math.max(chars.length - 1, 1)) }}
+                >
+                  {ch === " " ? "\u00a0" : ch}
+                </span>
+              ))
+            : shown}
+        </p>
+        {nextLine && shown ? (
+          <p
+            key={`next-${nextLine}`}
+            className={clsx(
+              "moments-ambient-lyric-next m-0 max-w-full text-center font-display text-[clamp(0.95rem,2.6vw,1.25rem)] leading-snug tracking-[0.04em]",
+              elevated ? "moments-ambient-lyric-next--dark" : "moments-ambient-lyric-next--light"
+            )}
+          >
+            {nextLine}
+          </p>
+        ) : null}
+      </div>
     </div>,
     document.body
   );
