@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { ChevronLeft, ChevronRight, Crop, Loader2, Play, Square, Trash2, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -380,29 +380,20 @@ export function MomentsPage() {
         </header>
 
         <section
-          className="moments-palette-stage relative mb-10 overflow-hidden rounded-[2rem] border border-white/60 bg-white/45 p-5 shadow-[0_24px_60px_rgba(41,37,36,0.07)] backdrop-blur-sm sm:p-7 lg:p-8"
+          className={clsx(
+            "moments-palette-stage relative mb-10 overflow-hidden rounded-[1.75rem] p-5 sm:p-7 lg:p-8",
+            hue != null && "moments-palette-stage--tinted"
+          )}
           style={
             hue != null
-              ? {
-                  background: `linear-gradient(135deg, hsla(${hue}, 55%, 96%, 0.92) 0%, rgba(255,247,244,0.88) 48%, hsla(${(hue + 40) % 360}, 40%, 95%, 0.85) 100%)`,
-                }
+              ? ({ ["--moments-hue" as string]: String(hue) } as CSSProperties)
               : undefined
           }
         >
-          <div
-            className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_20%_20%,rgba(255,255,255,0.55),transparent_45%),radial-gradient(ellipse_at_90%_10%,rgba(255,190,210,0.22),transparent_40%)]"
-            aria-hidden
-          />
-          <div
-            className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full opacity-50 blur-3xl"
-            style={{
-              background:
-                hue != null
-                  ? `hsla(${hue}, 70%, 65%, 0.35)`
-                  : "rgba(255, 170, 190, 0.28)",
-            }}
-            aria-hidden
-          />
+          <div className="moments-palette-stage__sheen pointer-events-none absolute inset-0" aria-hidden />
+          {hue != null ? (
+            <div className="moments-palette-stage__accent pointer-events-none absolute inset-y-4 left-0 w-1 rounded-full" aria-hidden />
+          ) : null}
 
           <div className="relative grid gap-8 lg:grid-cols-[auto_minmax(0,1fr)] lg:items-center lg:gap-10">
             <MomentsColorWheel
