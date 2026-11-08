@@ -12,9 +12,9 @@ type Props = {
 };
 
 /** 停留略长，给慢交叉淡入留呼吸感 */
-const HOLD_MS = 5600;
-/** 渐显/渐隐：约 1.7s，比原先 0.9s 更慢更柔 */
-const FADE_MS = 1700;
+const HOLD_MS = 6000;
+/** 渐显：约 2.8s，起手更慢；渐隐同步 */
+const FADE_MS = 2800;
 
 function photoSrc(p: MomentPhotoDto) {
   return p.largeUrl || p.publicUrl || p.thumbUrl || "";
@@ -106,7 +106,7 @@ export function MomentsCinematic({ items, active, onDismiss, onOpenIndex }: Prop
       aria-label={t("moments.slideshowAria")}
     >
       <div
-        className="pointer-events-none absolute inset-0 opacity-40 transition-[background] duration-[1700ms] ease-out"
+        className="pointer-events-none absolute inset-0 opacity-40 transition-[background] duration-[2800ms] ease-out"
         style={{
           background:
             current.dominantHue == null
@@ -188,17 +188,18 @@ export function MomentsCinematic({ items, active, onDismiss, onOpenIndex }: Prop
           will-change: opacity, filter;
         }
         .moments-xfade--in {
-          animation: moments-cross-in ${FADE_MS}ms cubic-bezier(0.22, 1, 0.36, 1) both;
+          animation: moments-cross-in ${FADE_MS}ms cubic-bezier(0.45, 0.05, 0.25, 1) both;
         }
         .moments-xfade--out {
           animation: moments-cross-out ${FADE_MS}ms cubic-bezier(0.4, 0, 0.2, 1) both;
         }
         .moments-cinematic-caption {
-          animation: moments-cap-in ${Math.round(FADE_MS * 0.85)}ms cubic-bezier(0.22, 1, 0.36, 1) both;
+          animation: moments-cap-in ${Math.round(FADE_MS * 0.9)}ms cubic-bezier(0.45, 0.05, 0.25, 1) both;
         }
         @keyframes moments-cross-in {
-          from { opacity: 0; filter: blur(5px); }
-          to { opacity: 1; filter: blur(0); }
+          0% { opacity: 0; filter: blur(8px); }
+          35% { opacity: 0.22; filter: blur(5px); }
+          100% { opacity: 1; filter: blur(0); }
         }
         @keyframes moments-cross-out {
           from { opacity: 1; filter: blur(0); }
