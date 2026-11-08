@@ -331,36 +331,27 @@ export function MomentsPage() {
               if (pick) selectTrack(pick, true);
               setSoundtrackPrompt(false);
             }}
-            className="moments-soundtrack-guide group relative mb-7 flex w-full items-center gap-4 overflow-hidden rounded-[1.75rem] border border-rose-200/70 px-4 py-4 text-left shadow-[0_18px_50px_rgba(190,60,90,0.14)] transition duration-500 hover:-translate-y-0.5 hover:shadow-[0_22px_56px_rgba(190,60,90,0.2)] active:translate-y-0 sm:mb-8 sm:gap-5 sm:px-6 sm:py-5"
+            className="moments-soundtrack-guide group relative mb-7 flex w-full items-center gap-4 overflow-hidden rounded-[1.75rem] px-4 py-4 text-left transition duration-500 hover:-translate-y-0.5 active:translate-y-0 sm:mb-8 sm:gap-5 sm:px-6 sm:py-5"
           >
-            <span
-              className="pointer-events-none absolute inset-0 bg-gradient-to-r from-rose-100/95 via-white/90 to-amber-50/80"
-              aria-hidden
-            />
-            <span
-              className="pointer-events-none absolute -left-10 top-1/2 h-40 w-40 -translate-y-1/2 rounded-full bg-rose-300/30 blur-3xl moments-soundtrack-guide__glow"
-              aria-hidden
-            />
-            <span
-              className="pointer-events-none absolute -right-8 bottom-0 h-32 w-32 rounded-full bg-amber-200/35 blur-3xl"
-              aria-hidden
-            />
-            <span className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-rose-500 to-rose-600 text-white shadow-[0_10px_28px_rgba(225,29,72,0.35)] transition duration-500 group-hover:scale-105 sm:h-16 sm:w-16">
+            <span className="moments-soundtrack-guide__wash pointer-events-none absolute inset-0" aria-hidden />
+            <span className="moments-soundtrack-guide__glow pointer-events-none absolute -left-10 top-1/2 h-40 w-40 -translate-y-1/2 rounded-full" aria-hidden />
+            <span className="moments-soundtrack-guide__glow2 pointer-events-none absolute -right-8 bottom-0 h-32 w-32 rounded-full" aria-hidden />
+            <span className="moments-soundtrack-guide__play relative flex h-14 w-14 shrink-0 items-center justify-center rounded-full text-white transition duration-500 group-hover:scale-105 sm:h-16 sm:w-16">
               <Play className="h-6 w-6 fill-current sm:h-7 sm:w-7" aria-hidden />
             </span>
             <span className="relative min-w-0 flex-1">
-              <span className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-rose-500/80">
+              <span className="moments-soundtrack-guide__kicker flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.22em]">
                 <Music2 className="h-3.5 w-3.5" aria-hidden />
                 {t("moments.soundtrackTitle")}
               </span>
-              <span className="mt-1 block font-display text-xl text-warm-800 sm:text-2xl">
+              <span className="moments-soundtrack-guide__title mt-1 block font-display text-xl sm:text-2xl">
                 {t("moments.playSoundtrackTitle")}
               </span>
-              <span className="mt-1 block text-sm leading-relaxed text-stone-600/90">
+              <span className="moments-soundtrack-guide__hint mt-1 block text-sm leading-relaxed">
                 {t("moments.playSoundtrackHint")}
               </span>
             </span>
-            <span className="relative hidden shrink-0 rounded-full bg-warm-700 px-5 py-2.5 text-sm font-medium text-white shadow-sm transition group-hover:bg-warm-800 sm:inline-flex">
+            <span className="moments-soundtrack-guide__cta relative hidden shrink-0 rounded-full px-5 py-2.5 text-sm font-medium text-white sm:inline-flex">
               {t("moments.playSoundtrack")}
             </span>
           </button>
