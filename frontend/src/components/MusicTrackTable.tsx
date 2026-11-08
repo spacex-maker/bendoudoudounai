@@ -351,7 +351,7 @@ export function MusicTrackTable({
               className={clsx(
                 "cursor-default border-t border-netease-line/50 transition",
                 currentId === tr.id && playing
-                  ? "bg-[linear-gradient(90deg,rgba(244,63,94,0.26)_0%,rgba(244,63,94,0.12)_38%,rgba(255,255,255,0.02)_100%)] animate-pulse"
+                  ? "bg-[linear-gradient(90deg,rgba(244,63,94,0.22)_0%,rgba(244,63,94,0.10)_38%,rgba(255,255,255,0.02)_100%)] ring-1 ring-inset ring-rose-400/20"
                   : currentId === tr.id
                     ? "bg-red-900/45"
                     : "hover:bg-white/14"

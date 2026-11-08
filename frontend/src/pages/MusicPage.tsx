@@ -707,14 +707,26 @@ export function MusicPage() {
     if (currentId == null) return;
     const matched = tracks.find((x) => x.id === currentId);
     if (!matched) return;
-    setCurrentTrack((prev) => (prev?.id === matched.id ? { ...prev, ...matched } : matched));
+    setCurrentTrack((prev) => {
+      if (!prev || prev.id !== matched.id) return matched;
+      // 同曲仅元数据微调时保留引用，减少列表/播放器联动重绘
+      if (
+        prev.playCount === matched.playCount &&
+        prev.hearted === matched.hearted &&
+        prev.title === matched.title &&
+        prev.artist === matched.artist
+      ) {
+        return prev;
+      }
+      return { ...prev, ...matched };
+    });
   }, [tracks, currentId]);
 
   const setCurrentTrackIdFromList = useCallback((id: number) => {
     setCurrentId(id);
     const matched = filtered.find((x) => x.id === id);
     if (matched) {
-      setCurrentTrack((prev) => (prev?.id === matched.id ? { ...prev, ...matched } : matched));
+      setCurrentTrack((prev) => (prev?.id === matched.id ? prev : matched));
     }
   }, [filtered]);
 
@@ -725,7 +737,12 @@ export function MusicPage() {
   const showDiscoverPanel = isDiscoverCatalog && mobileView === "list";
   const showListModule = !isDiscoverCatalog && activeNav !== "fm" && mobileView === "list";
 
+  // 仅当曲目顺序/集合变化时同步队列，避免播放次数等字段更新导致列表体感「整表刷新」
+  const queueSignatureRef = useRef("");
   useEffect(() => {
+    const signature = filtered.map((x) => x.id).join(",");
+    if (signature === queueSignatureRef.current) return;
+    queueSignatureRef.current = signature;
     setQueue(filtered);
   }, [filtered, setQueue]);
 
