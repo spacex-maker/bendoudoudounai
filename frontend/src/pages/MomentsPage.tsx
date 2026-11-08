@@ -165,39 +165,48 @@ export function MomentsPage() {
     };
   }, [lightbox, items.length, cropping]);
 
-  const ensureMomentsMusic = useCallback(
-    (restart = false) => {
-      const list = queue;
-      const pick =
-        (currentTrack && list.some((t) => t.id === currentTrack.id) ? currentTrack : null) ??
-        (list.length > 0 ? list[Math.floor(Math.random() * list.length)]! : currentTrack);
-      if (!pick) return;
-      selectTrack(pick, true);
-      // 倒计时结束后可能已无手势；若先前在点击时已解锁，这里仍可续播/重播
-      window.setTimeout(() => {
-        const a = audioRef.current;
-        if (!a) return;
-        if (restart) {
+  const pickMomentsTrack = useCallback(() => {
+    const list = queue;
+    if (currentTrack && (list.length === 0 || list.some((t) => t.id === currentTrack.id))) {
+      return currentTrack;
+    }
+    if (list.length > 0) return list[Math.floor(Math.random() * list.length)]!;
+    return currentTrack;
+  }, [queue, currentTrack]);
+
+  /** 点击手势里静音解锁音频，真正开播只在进影院时发生一次 */
+  const unlockMomentsAudio = useCallback(() => {
+    const pick = pickMomentsTrack();
+    if (!pick) return;
+    selectTrack(pick, false);
+    window.setTimeout(() => {
+      const a = audioRef.current;
+      if (!a) return;
+      const wasMuted = a.muted;
+      a.muted = true;
+      void a
+        .play()
+        .then(() => {
+          a.pause();
           try {
             a.currentTime = 0;
           } catch {
             /* ignore */
           }
-        }
-        void a.play().then(() => setPlaying(true)).catch(() => {
-          /* 仍无手势时由右下角坞补点 */
+          a.muted = wasMuted;
+        })
+        .catch(() => {
+          a.muted = wasMuted;
         });
-      }, 40);
-    },
-    [queue, currentTrack, selectTrack, audioRef, setPlaying]
-  );
+    }, 60);
+  }, [pickMomentsTrack, selectTrack, audioRef]);
 
   const beginCinematicWithMusic = useCallback(() => {
     setCountdownOpen(false);
     setCinematic(true);
-    // 与画面同步：从曲头重播
-    ensureMomentsMusic(true);
-  }, [ensureMomentsMusic]);
+    const pick = pickMomentsTrack();
+    if (pick) selectTrack(pick, true);
+  }, [pickMomentsTrack, selectTrack]);
 
   const stopCinematic = useCallback(() => {
     setCinematic(false);
@@ -214,10 +223,9 @@ export function MomentsPage() {
   const openCountdown = useCallback(() => {
     if (cinematic || countdownOpen) return;
     if (items.length < 2) return;
-    // 必须在用户点击手势里先 play，否则倒计时归零时会被浏览器拦截
-    ensureMomentsMusic(false);
+    unlockMomentsAudio();
     setCountdownOpen(true);
-  }, [cinematic, countdownOpen, items.length, ensureMomentsMusic]);
+  }, [cinematic, countdownOpen, items.length, unlockMomentsAudio]);
 
   // 停留一段时间后弹出可取消倒计时；交互则重置计时（倒计时进行中不打断）
   useEffect(() => {
