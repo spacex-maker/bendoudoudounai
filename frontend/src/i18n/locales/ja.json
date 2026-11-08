@@ -970,6 +970,14 @@
     "wheelClear": "色相をクリア",
     "wheelCenterHint": "中央をタップで解除",
     "playSoundtrackTitle": "この画面にBGMを添える",
-    "playSoundtrackHint": "ひとときセレクトの準備ができました。タップすると画面に寄り添って流れます。"
+    "playSoundtrackHint": "ひとときセレクトの準備ができました。タップすると画面に寄り添って流れます。",
+    "countdownAria": "ひとときスライドのカウントダウン",
+    "countdownKicker": "ひととき · スライド",
+    "countdownTitle": "画面がゆっくり始まります",
+    "countdownHint": "カウントが終わると、スライドとBGMが一緒に始まります。キャンセルしてゆっくり眺めても大丈夫。",
+    "countdownSec": "秒",
+    "countdownMusic": "終了と同時にセレクト曲が流れます",
+    "countdownStartNow": "いますぐ始める",
+    "countdownCancel": "まだ見ない"
   }
 }

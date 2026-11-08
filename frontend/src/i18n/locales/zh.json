@@ -970,6 +970,14 @@
     "wheelClear": "清除色相",
     "wheelCenterHint": "点中心可清空",
     "playSoundtrackTitle": "为这些画面配上音乐",
-    "playSoundtrackHint": "片刻精选已就绪。轻触即可伴随画面播放——浏览器需要你点一下才会出声。"
+    "playSoundtrackHint": "片刻精选已就绪。轻触即可伴随画面播放——浏览器需要你点一下才会出声。",
+    "countdownAria": "片刻幻灯倒计时",
+    "countdownKicker": "片刻 · 幻灯",
+    "countdownTitle": "画面即将缓缓展开",
+    "countdownHint": "倒计时结束后，幻灯与配乐会一起开始。也可先取消，慢慢翻。",
+    "countdownSec": "秒",
+    "countdownMusic": "到点后同步响起片刻精选",
+    "countdownStartNow": "立刻开始",
+    "countdownCancel": "先随便看看"
   }
 }

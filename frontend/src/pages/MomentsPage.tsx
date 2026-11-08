@@ -18,6 +18,7 @@ import { useAuthedUser } from "../auth/AuthContext";
 import { ConfirmModal } from "../components/ConfirmModal";
 import { MomentsAmbientLyrics } from "../components/MomentsAmbientLyrics";
 import { MomentsCinematic } from "../components/MomentsCinematic";
+import { MomentsCinematicCountdown } from "../components/MomentsCinematicCountdown";
 import { MomentsColorWheel } from "../components/MomentsColorWheel";
 import { MomentsCropModal } from "../components/MomentsCropModal";
 import { MomentsHueSwatches } from "../components/MomentsHueSwatches";
@@ -28,10 +29,12 @@ import { parsePaletteJson } from "../moments/colorExtract";
 
 type Mood = NonNullable<MomentListQuery["mood"]>;
 
-/** 停留多久后进入影院幻灯（毫秒） */
-const CINEMATIC_IDLE_MS = 11000;
-/** 幻灯开始前 1.6s 轻提示首张 */
-const CINEMATIC_WINDUP_MS = 2200;
+/** 停留多久后弹出幻灯倒计时（毫秒） */
+const CINEMATIC_IDLE_MS = 9000;
+/** 倒计时秒数 */
+const CINEMATIC_COUNTDOWN_SEC = 5;
+/** 用户取消后，多久内不再自动弹出（毫秒） */
+const CINEMATIC_CANCEL_COOLDOWN_MS = 45000;
 
 export function MomentsPage() {
   const { t } = useTranslation();
@@ -53,12 +56,12 @@ export function MomentsPage() {
   const [soundtrackPrompt, setSoundtrackPrompt] = useState(false);
   const [soundtrackReady, setSoundtrackReady] = useState(false);
   const [cinematic, setCinematic] = useState(false);
-  const [cinematicWindup, setCinematicWindup] = useState(false);
+  const [countdownOpen, setCountdownOpen] = useState(false);
   const { setQueue, selectTrack, setPlayMode, playing, queue } = useMusicPlayer();
   const playingRef = useRef(playing);
   playingRef.current = playing;
   const idleTimerRef = useRef(0);
-  const windupTimerRef = useRef(0);
+  const cancelCooldownUntilRef = useRef(0);
 
   const queryBase = useCallback(
     (): MomentListQuery => ({
@@ -83,15 +86,12 @@ export function MomentsPage() {
       .then((tracks) => {
         if (cancelled || !tracks.length) return;
         setSoundtrackReady(true);
-        setSoundtrackPrompt(true);
         setQueue(tracks);
         setPlayMode("shuffle");
         const pick = tracks[Math.floor(Math.random() * tracks.length)]!;
-        selectTrack(pick, true);
-        // autoplay may succeed; playing effect clears the guide
-        window.setTimeout(() => {
-          if (!cancelled && playingRef.current) setSoundtrackPrompt(false);
-        }, 700);
+        // 先选曲不强制开播；倒计时结束 / 用户点引导时再播放
+        selectTrack(pick, false);
+        if (!cancelled) setSoundtrackPrompt(true);
       })
       .catch(() => undefined);
     return () => {
@@ -176,11 +176,33 @@ export function MomentsPage() {
     };
   }, [lightbox, items.length, cropping]);
 
-  // 停留一段时间后进入影院幻灯；交互则重置计时
+  const beginCinematicWithMusic = useCallback(() => {
+    setCountdownOpen(false);
+    const list = queue;
+    if (list.length > 0) {
+      const pick = list[Math.floor(Math.random() * list.length)]!;
+      selectTrack(pick, true);
+    }
+    setSoundtrackPrompt(false);
+    setCinematic(true);
+  }, [queue, selectTrack]);
+  const cancelCountdown = useCallback(() => {
+    setCountdownOpen(false);
+    cancelCooldownUntilRef.current = Date.now() + CINEMATIC_CANCEL_COOLDOWN_MS;
+  }, []);
+
+  const openCountdown = useCallback(() => {
+    if (cinematic || countdownOpen) return;
+    if (items.length < 2) return;
+    setCountdownOpen(true);
+  }, [cinematic, countdownOpen, items.length]);
+
+  // 停留一段时间后弹出可取消倒计时；交互则重置计时（倒计时进行中不打断）
   useEffect(() => {
     const canRun =
       !loading &&
       !cinematic &&
+      !countdownOpen &&
       lightbox == null &&
       !cropping &&
       !deleteOpen &&
@@ -190,8 +212,6 @@ export function MomentsPage() {
 
     const clearTimers = () => {
       window.clearTimeout(idleTimerRef.current);
-      window.clearTimeout(windupTimerRef.current);
-      setCinematicWindup(false);
     };
 
     if (!canRun) {
@@ -201,22 +221,19 @@ export function MomentsPage() {
 
     const arm = () => {
       clearTimers();
+      const coolLeft = cancelCooldownUntilRef.current - Date.now();
+      const delay = Math.max(CINEMATIC_IDLE_MS, coolLeft > 0 ? coolLeft : CINEMATIC_IDLE_MS);
       idleTimerRef.current = window.setTimeout(() => {
-        setCinematicWindup(true);
-        windupTimerRef.current = window.setTimeout(() => {
-          setCinematicWindup(false);
-          setCinematic(true);
-        }, CINEMATIC_WINDUP_MS);
-      }, CINEMATIC_IDLE_MS);
+        setCountdownOpen(true);
+      }, delay);
     };
 
     const bump = () => {
-      if (cinematic) return;
+      if (cinematic || countdownOpen) return;
       arm();
     };
 
     arm();
-    // 不用 pointermove：鼠标微抖会永远掐死幻灯
     window.addEventListener("pointerdown", bump, { passive: true });
     window.addEventListener("wheel", bump, { passive: true });
     window.addEventListener("keydown", bump);
@@ -228,7 +245,7 @@ export function MomentsPage() {
       window.removeEventListener("keydown", bump);
       window.removeEventListener("scroll", bump, true);
     };
-  }, [loading, cinematic, lightbox, cropping, deleteOpen, items.length]);
+  }, [loading, cinematic, countdownOpen, lightbox, cropping, deleteOpen, items.length]);
 
   const active = lightbox != null ? items[lightbox] : null;
 
@@ -268,7 +285,7 @@ export function MomentsPage() {
     <div
       className={clsx(
         "moments-page relative min-h-dvh w-full bg-theme-home",
-        (cinematic || cinematicWindup) && "moments-page--cinematic-blur"
+        (cinematic || countdownOpen) && "moments-page--cinematic-blur"
       )}
     >
       <SiteHeader />
@@ -293,17 +310,10 @@ export function MomentsPage() {
                   {t("moments.manage")}
                 </Link>
               ) : null}
-              {items.length >= 2 && !cinematic && !cinematicWindup ? (
+              {items.length >= 2 && !cinematic && !countdownOpen ? (
                 <button
                   type="button"
-                  onClick={() => {
-                    setCinematicWindup(true);
-                    window.clearTimeout(windupTimerRef.current);
-                    windupTimerRef.current = window.setTimeout(() => {
-                      setCinematicWindup(false);
-                      setCinematic(true);
-                    }, CINEMATIC_WINDUP_MS);
-                  }}
+                  onClick={() => openCountdown()}
                   className="rounded-full border border-stone-200/80 bg-white/55 px-3.5 py-1.5 text-xs text-stone-600 transition hover:-translate-y-0.5 hover:bg-white hover:text-warm-700 hover:shadow-sm active:translate-y-0"
                 >
                   {t("moments.slideshowStart")}
@@ -485,7 +495,7 @@ export function MomentsPage() {
             <MomentsMasonry
               items={items}
               onOpen={setLightbox}
-              spotlightId={cinematicWindup ? items[0]?.id ?? null : null}
+              spotlightId={countdownOpen ? items[0]?.id ?? null : null}
             />
             {!last ? (
               <div ref={sentinelRef} className="mt-8 flex justify-center py-2">
@@ -504,7 +514,15 @@ export function MomentsPage() {
         )}
       </main>
 
-      <MomentsAmbientLyrics elevated={cinematic || lightbox != null} />
+      <MomentsAmbientLyrics elevated={cinematic || countdownOpen || lightbox != null} />
+
+      <MomentsCinematicCountdown
+        open={countdownOpen && lightbox == null && !cropping}
+        seconds={CINEMATIC_COUNTDOWN_SEC}
+        onComplete={beginCinematicWithMusic}
+        onCancel={cancelCountdown}
+        onStartNow={beginCinematicWithMusic}
+      />
 
       <MomentsCinematic
         items={items}
