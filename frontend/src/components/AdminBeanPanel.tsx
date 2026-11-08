@@ -21,6 +21,18 @@ const ACTION_LABELS: Record<string, string> = {
   PLAYLIST_CREATE: "创建歌单",
 };
 
+function formatBeanTime(ms: number) {
+  if (!Number.isFinite(ms) || ms <= 0) return "\u2014";
+  return new Date(ms).toLocaleString("zh-CN", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+}
 export function AdminBeanPanel() {
   const [tab, setTab] = useState<"rules" | "levels" | "records">("rules");
   const [rules, setRules] = useState<BeanRuleDto[]>([]);
@@ -277,6 +289,7 @@ export function AdminBeanPanel() {
           <table className="w-full text-sm">
             <thead className="sticky top-0 z-10 bg-zinc-900/95 backdrop-blur-sm">
               <tr className="border-b border-zinc-800/60">
+                <th className="px-4 py-2 text-left font-medium text-zinc-400">时间</th>
                 <th className="px-4 py-2 text-left font-medium text-zinc-400">ID</th>
                 <th className="px-4 py-2 text-left font-medium text-zinc-400">用户</th>
                 <th className="px-4 py-2 text-left font-medium text-zinc-400">动作类型</th>
@@ -287,13 +300,18 @@ export function AdminBeanPanel() {
             <tbody>
               {tx.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-zinc-600">
+                  <td colSpan={6} className="px-4 py-8 text-center text-zinc-600">
                     暂无流水记录
                   </td>
                 </tr>
               ) : (
                 tx.map((row) => (
                   <tr key={row.id} className="border-b border-zinc-800/30 last:border-0 hover:bg-zinc-800/30">
+                    <td className="px-4 py-2.5 whitespace-nowrap text-zinc-400 tabular-nums">
+                      <time dateTime={new Date(row.createdAtMillis).toISOString()}>
+                        {formatBeanTime(row.createdAtMillis)}
+                      </time>
+                    </td>
                     <td className="px-4 py-2.5 text-zinc-400">#{row.id}</td>
                     <td className="px-4 py-2.5 text-zinc-300">
                       <div className="flex flex-col">
