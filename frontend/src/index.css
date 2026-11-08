@@ -949,3 +949,97 @@
     opacity: 1 !important;
   }
 }
+
+
+/* moments roll play button — solid colors, always readable */
+.moments-roll-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  border: 0;
+  border-radius: 9999px;
+  color: #ffffff;
+  background: linear-gradient(145deg, #f43f5e 0%, #e11d48 100%);
+  box-shadow:
+    0 10px 24px rgba(225, 29, 72, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  transition:
+    transform 0.25s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.25s ease,
+    background 0.25s ease,
+    filter 0.25s ease;
+}
+.moments-roll-btn:hover {
+  transform: translateY(-2px);
+  filter: brightness(1.04);
+  box-shadow:
+    0 14px 30px rgba(225, 29, 72, 0.34),
+    inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+.moments-roll-btn:active {
+  transform: translateY(0);
+  filter: brightness(0.98);
+}
+.moments-roll-btn--header {
+  padding: 0.4rem 0.9rem 0.4rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+}
+.moments-roll-btn--fab {
+  position: fixed;
+  left: 1rem;
+  bottom: 1rem;
+  z-index: 125;
+  padding: 0.55rem 1.05rem 0.55rem 0.55rem;
+  font-size: 0.875rem;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  pointer-events: auto;
+}
+@media (min-width: 640px) {
+  .moments-roll-btn--fab {
+    left: 1.5rem;
+    bottom: 1.5rem;
+  }
+}
+.moments-roll-btn__icon {
+  display: inline-flex;
+  height: 2rem;
+  width: 2rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+}
+.moments-roll-btn__label {
+  color: #ffffff;
+  padding-right: 0.25rem;
+}
+.moments-roll-btn--stop {
+  background: linear-gradient(145deg, #57534e 0%, #292524 100%);
+  box-shadow:
+    0 10px 24px rgba(28, 25, 23, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+.moments-roll-btn--stop:hover {
+  box-shadow:
+    0 14px 30px rgba(28, 25, 23, 0.42),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14);
+}
+.moments-roll-btn--cancel {
+  background: linear-gradient(145deg, #a8a29e 0%, #78716c 100%);
+  box-shadow:
+    0 8px 18px rgba(68, 64, 60, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+@media (prefers-reduced-motion: reduce) {
+  .moments-roll-btn {
+    transition: none !important;
+  }
+  .moments-roll-btn:hover,
+  .moments-roll-btn:active {
+    transform: none !important;
+  }
+}

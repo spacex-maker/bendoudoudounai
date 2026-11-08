@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
-import { ChevronLeft, ChevronRight, Crop, Images, Loader2, Trash2, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Crop, Loader2, Play, Square, Trash2, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import clsx from "clsx";
 import {
@@ -315,9 +315,17 @@ export function MomentsPage() {
                     else if (countdownOpen) cancelCountdown();
                     else openCountdown();
                   }}
-                  className="inline-flex items-center gap-1.5 rounded-full border border-rose-200/80 bg-white/70 px-3.5 py-1.5 text-xs text-warm-700 shadow-sm transition hover:-translate-y-0.5 hover:bg-white hover:shadow-md active:translate-y-0"
+                  className={clsx(
+                    "moments-roll-btn moments-roll-btn--header",
+                    cinematic && "moments-roll-btn--stop",
+                    countdownOpen && !cinematic && "moments-roll-btn--cancel"
+                  )}
                 >
-                  <Images className="h-3.5 w-3.5" aria-hidden />
+                  {cinematic ? (
+                    <Square className="h-3 w-3 fill-current" aria-hidden />
+                  ) : (
+                    <Play className="h-3.5 w-3.5 fill-current" aria-hidden />
+                  )}
                   {cinematic
                     ? t("moments.slideshowStop")
                     : countdownOpen
@@ -626,14 +634,23 @@ export function MomentsPage() {
             if (cinematic) stopCinematic();
             else openCountdown();
           }}
-          className="moments-cinematic-fab pointer-events-auto fixed bottom-4 left-4 z-[125] inline-flex items-center gap-2 rounded-full border border-white/70 bg-white/80 px-4 py-2.5 text-sm font-medium text-warm-700 shadow-[0_12px_32px_rgba(148,62,72,0.18)] backdrop-blur-md transition hover:-translate-y-0.5 hover:bg-white hover:shadow-[0_16px_36px_rgba(148,62,72,0.24)] active:translate-y-0 sm:bottom-6 sm:left-6"
+          className={clsx(
+            "moments-roll-btn moments-roll-btn--fab",
+            cinematic && "moments-roll-btn--stop"
+          )}
           aria-label={cinematic ? t("moments.slideshowStop") : t("moments.slideshowStart")}
           title={soundtrackReady ? t("moments.slideshowWithMusic") : t("moments.slideshowStart")}
         >
-          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-rose-500 to-rose-600 text-white shadow-sm">
-            <Images className="h-4 w-4" aria-hidden />
+          <span className="moments-roll-btn__icon" aria-hidden>
+            {cinematic ? (
+              <Square className="h-3.5 w-3.5 fill-current" />
+            ) : (
+              <Play className="h-4 w-4 fill-current" />
+            )}
           </span>
-          {cinematic ? t("moments.slideshowStop") : t("moments.slideshowStart")}
+          <span className="moments-roll-btn__label">
+            {cinematic ? t("moments.slideshowStop") : t("moments.slideshowStart")}
+          </span>
         </button>
       ) : null}
 
