@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import clsx from "clsx";
 import { useTranslation } from "react-i18next";
@@ -13,11 +13,41 @@ type Props = {
 
 /** 停留略长，给慢交叉淡入留呼吸感 */
 const HOLD_MS = 6000;
-/** 渐显：约 2.8s，起手更慢；渐隐同步 */
+/** 渐显/渐隐：约 2.8s；仅用透明度，避免 blur 造成卡顿 */
 const FADE_MS = 2800;
 
 function photoSrc(p: MomentPhotoDto) {
   return p.largeUrl || p.publicUrl || p.thumbUrl || "";
+}
+
+function preloadDecoded(src: string): Promise<void> {
+  if (!src) return Promise.resolve();
+  return new Promise((resolve) => {
+    const im = new Image();
+    let settled = false;
+    const done = () => {
+      if (settled) return;
+      settled = true;
+      resolve();
+    };
+    im.onload = () => {
+      if (typeof im.decode === "function") {
+        im.decode().then(done).catch(done);
+      } else {
+        done();
+      }
+    };
+    im.onerror = done;
+    im.decoding = "async";
+    im.src = src;
+    if (im.complete && im.naturalWidth > 0) {
+      if (typeof im.decode === "function") {
+        im.decode().then(done).catch(done);
+      } else {
+        done();
+      }
+    }
+  });
 }
 
 /**
@@ -27,8 +57,9 @@ function photoSrc(p: MomentPhotoDto) {
 export function MomentsCinematic({ items, active, onDismiss, onOpenIndex }: Props) {
   const { t } = useTranslation();
   const [index, setIndex] = useState(0);
-  /** 上一张仍叠在下层渐隐，实现真正的交叉溶解（不再先黑屏再淡入） */
+  /** 上一张仍叠在下层渐隐；key 用 photo.id，避免把正在显示的图拆掉重挂导致闪一下 */
   const [outgoingIndex, setOutgoingIndex] = useState<number | null>(null);
+  const advancingRef = useRef(false);
 
   const safeItems = useMemo(() => items.filter((x) => !!(x.largeUrl || x.publicUrl || x.thumbUrl)), [items]);
   const len = Math.max(1, safeItems.length);
@@ -39,22 +70,44 @@ export function MomentsCinematic({ items, active, onDismiss, onOpenIndex }: Prop
     if (!active || safeItems.length < 2) return;
     setIndex(0);
     setOutgoingIndex(null);
+    advancingRef.current = false;
   }, [active, safeItems.length]);
+
+  // 预热当前 + 后两张，切图时不必再等网络解码
+  useEffect(() => {
+    if (!active || safeItems.length < 2) return;
+    const targets = [0, 1, 2].map((offset) => {
+      const item = safeItems[(index + offset) % safeItems.length];
+      return item ? photoSrc(item) : "";
+    });
+    void Promise.all(targets.map((src) => preloadDecoded(src)));
+  }, [active, index, safeItems]);
 
   useEffect(() => {
     if (!active || safeItems.length < 2) return;
     let cancelled = false;
-    // 先等本张慢淡入结束，再完整停留 HOLD，最后才切下一张交叉溶解
     const timer = window.setTimeout(() => {
-      if (cancelled) return;
-      setOutgoingIndex(index);
-      setIndex((i) => (i + 1) % safeItems.length);
+      void (async () => {
+        if (cancelled || advancingRef.current) return;
+        advancingRef.current = true;
+        const nextIndex = (index + 1) % safeItems.length;
+        const next = safeItems[nextIndex];
+        // 下一张解码完成后再开交叉淡变，避免淡入过程中图片突然蹦出来
+        await preloadDecoded(next ? photoSrc(next) : "");
+        if (cancelled) {
+          advancingRef.current = false;
+          return;
+        }
+        setOutgoingIndex(index);
+        setIndex(nextIndex);
+        advancingRef.current = false;
+      })();
     }, FADE_MS + HOLD_MS);
     return () => {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [active, index, safeItems.length]);
+  }, [active, index, safeItems]);
 
   useEffect(() => {
     if (outgoingIndex == null) return;
@@ -96,8 +149,11 @@ export function MomentsCinematic({ items, active, onDismiss, onOpenIndex }: Prop
     if (realIndex >= 0) onOpenIndex(realIndex);
   };
 
-  const frameClass =
-    "overflow-hidden rounded-2xl shadow-[0_30px_80px_rgba(0,0,0,0.45)] ring-1 ring-white/10 sm:rounded-3xl";
+  const layers: Array<{ item: MomentPhotoDto; role: "in" | "out" }> = [];
+  if (outgoing && outgoing.id !== current.id) {
+    layers.push({ item: outgoing, role: "out" });
+  }
+  layers.push({ item: current, role: "in" });
 
   return createPortal(
     <div
@@ -124,32 +180,29 @@ export function MomentsCinematic({ items, active, onDismiss, onOpenIndex }: Prop
       />
 
       <div className="pointer-events-none relative z-[5] flex h-full w-full items-center justify-center px-6 py-16 sm:px-12">
-        <div className="relative max-h-[min(88dvh,920px)] max-w-[min(94vw,1100px)]">
-          {outgoing ? (
+        {/* 固定舞台尺寸，避免不同比例切图时整页回流闪一下 */}
+        <div className="relative h-[min(88dvh,920px)] w-[min(94vw,1100px)]">
+          {layers.map(({ item, role }) => (
             <div
-              key={`out-${outgoing.id}-${outgoingIndex}`}
-              className={clsx("moments-xfade moments-xfade--out absolute inset-0 z-[1]", frameClass)}
-              aria-hidden
+              key={item.id}
+              className={clsx(
+                "moments-xfade absolute inset-0 flex items-center justify-center",
+                role === "in" ? "moments-xfade--in z-[2]" : "moments-xfade--out z-[1]"
+              )}
+              aria-hidden={role === "out"}
             >
               <img
-                src={photoSrc(outgoing)}
-                alt=""
+                src={photoSrc(item)}
+                alt={role === "in" ? item.caption || "" : ""}
                 draggable={false}
-                className="h-full w-full object-contain"
+                decoding="async"
+                className={clsx(
+                  "moments-cinematic-frame moments-kenburns max-h-full max-w-full object-contain",
+                  "rounded-2xl shadow-[0_30px_80px_rgba(0,0,0,0.45)] ring-1 ring-white/10 sm:rounded-3xl"
+                )}
               />
             </div>
-          ) : null}
-          <div
-            key={`in-${current.id}-${index}`}
-            className={clsx("moments-xfade moments-xfade--in relative z-[2]", frameClass)}
-          >
-            <img
-              src={photoSrc(current)}
-              alt={current.caption || ""}
-              draggable={false}
-              className="moments-kenburns max-h-[min(88dvh,920px)] max-w-[min(94vw,1100px)] object-contain"
-            />
-          </div>
+          ))}
         </div>
       </div>
 
@@ -185,7 +238,7 @@ export function MomentsCinematic({ items, active, onDismiss, onOpenIndex }: Prop
 
       <style>{`
         .moments-xfade {
-          will-change: opacity, filter;
+          will-change: opacity;
         }
         .moments-xfade--in {
           animation: moments-cross-in ${FADE_MS}ms cubic-bezier(0.45, 0.05, 0.25, 1) both;
@@ -196,14 +249,14 @@ export function MomentsCinematic({ items, active, onDismiss, onOpenIndex }: Prop
         .moments-cinematic-caption {
           animation: moments-cap-in ${Math.round(FADE_MS * 0.9)}ms cubic-bezier(0.45, 0.05, 0.25, 1) both;
         }
+        /* 只用透明度交叉溶解：blur 在大图上会掉帧并闪一下 */
         @keyframes moments-cross-in {
-          0% { opacity: 0; filter: blur(8px); }
-          35% { opacity: 0.22; filter: blur(5px); }
-          100% { opacity: 1; filter: blur(0); }
+          0% { opacity: 0; }
+          100% { opacity: 1; }
         }
         @keyframes moments-cross-out {
-          from { opacity: 1; filter: blur(0); }
-          to { opacity: 0; filter: blur(7px); }
+          from { opacity: 1; }
+          to { opacity: 0; }
         }
         @keyframes moments-cap-in {
           from { opacity: 0; transform: translateY(6px); }
@@ -211,7 +264,7 @@ export function MomentsCinematic({ items, active, onDismiss, onOpenIndex }: Prop
         }
         @keyframes moments-kenburns {
           from { transform: scale(1.02); }
-          to { transform: scale(1.1); }
+          to { transform: scale(1.08); }
         }
         .moments-kenburns {
           animation: moments-kenburns ${HOLD_MS + FADE_MS}ms linear forwards;
@@ -226,7 +279,6 @@ export function MomentsCinematic({ items, active, onDismiss, onOpenIndex }: Prop
           .moments-cinematic-caption {
             animation: none !important;
             opacity: 1;
-            filter: none;
             transform: none;
           }
           .moments-xfade--out { opacity: 0; }
