@@ -212,6 +212,8 @@
     "momentsTitle": "片刻",
     "momentsSub": "留下的一些画面，慢慢翻就好。",
     "momentsCta": "进入片刻",
+    "momentsLoading": "温柔展开中…",
+    "momentsLoadingHint": "一帧一帧，慢慢出现",
     "devDiaryKicker": "小站随记",
     "devDiaryTitle": "开发日记",
     "devDiarySub": "记录站点的每一次心动更新——不是冷冰冰的 Changelog，而是我们为小站与彼此写下的一小段轨迹。点进去读更新，也欢迎有心的你申请成为开发者，一起把爱的足迹写清楚。",

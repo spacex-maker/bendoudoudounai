@@ -631,3 +631,114 @@
 .music-player-play-btn:disabled {
   opacity: 0.4;
 }
+
+/* Home moments romantic loader */
+.home-moments-loader__glow {
+  background:
+    radial-gradient(ellipse 70% 55% at 50% 35%, rgba(255, 182, 205, 0.35), transparent 62%),
+    radial-gradient(ellipse 50% 40% at 20% 80%, rgba(255, 220, 180, 0.22), transparent 55%),
+    radial-gradient(ellipse 45% 35% at 85% 70%, rgba(255, 200, 220, 0.2), transparent 50%);
+}
+.home-moments-loader__petal {
+  --i: 0;
+  position: absolute;
+  left: calc(12% + (var(--i) * 14%));
+  bottom: -8%;
+  width: 10px;
+  height: 14px;
+  border-radius: 70% 70% 65% 65%;
+  background: linear-gradient(160deg, rgba(251, 113, 133, 0.55), rgba(253, 186, 116, 0.35));
+  opacity: 0;
+  animation: homeMomentsPetal 5.6s ease-in-out infinite;
+  animation-delay: calc(var(--i) * 0.55s);
+  transform-origin: center bottom;
+}
+.home-moments-loader__petal--static {
+  animation: none;
+  opacity: 0.35;
+  bottom: 18%;
+}
+.home-moments-loader__stack {
+  animation: homeMomentsStackFloat 3.6s ease-in-out infinite;
+}
+.home-moments-loader__stack--static {
+  animation: none;
+}
+.home-moments-loader__card {
+  position: absolute;
+  inset: 18% 14%;
+  border-radius: 1rem;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.95), rgba(255, 236, 242, 0.75)),
+    linear-gradient(180deg, #fda4af 0%, #fb7185 100%);
+  background-size: 100% 100%, 100% 42%;
+  background-repeat: no-repeat;
+  background-position: center, center 70%;
+  box-shadow:
+    0 12px 28px rgba(190, 80, 110, 0.16),
+    0 0 0 1px rgba(255, 255, 255, 0.7);
+}
+.home-moments-loader__card--a {
+  transform: rotate(-10deg) translate(-6%, 4%);
+  opacity: 0.55;
+  animation: homeMomentsCardA 3.2s ease-in-out infinite;
+}
+.home-moments-loader__card--b {
+  transform: rotate(7deg) translate(8%, -2%);
+  opacity: 0.7;
+  animation: homeMomentsCardB 3.2s ease-in-out infinite;
+}
+.home-moments-loader__card--c {
+  inset: 14% 16%;
+  animation: homeMomentsCardC 2.4s ease-in-out infinite;
+}
+.home-moments-loader__bloom {
+  position: absolute;
+  inset: 28%;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.85) 0%, rgba(251, 113, 133, 0.28) 45%, transparent 70%);
+  animation: homeMomentsBloom 2.2s ease-in-out infinite;
+}
+.home-moments-tile--enter {
+  animation: homeMomentsTileIn 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes homeMomentsPetal {
+  0% { opacity: 0; transform: translateY(0) rotate(0deg) scale(0.8); }
+  15% { opacity: 0.7; }
+  100% { opacity: 0; transform: translateY(-120%) rotate(28deg) scale(1); }
+}
+@keyframes homeMomentsStackFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+@keyframes homeMomentsCardA {
+  0%, 100% { transform: rotate(-10deg) translate(-6%, 4%); }
+  50% { transform: rotate(-14deg) translate(-8%, 2%); }
+}
+@keyframes homeMomentsCardB {
+  0%, 100% { transform: rotate(7deg) translate(8%, -2%); }
+  50% { transform: rotate(11deg) translate(10%, -4%); }
+}
+@keyframes homeMomentsCardC {
+  0%, 100% { transform: scale(1); filter: brightness(1); }
+  50% { transform: scale(1.03); filter: brightness(1.04); }
+}
+@keyframes homeMomentsBloom {
+  0%, 100% { opacity: 0.45; transform: scale(0.92); }
+  50% { opacity: 0.9; transform: scale(1.08); }
+}
+@keyframes homeMomentsTileIn {
+  from { opacity: 0; transform: translateY(14px) scale(0.98); filter: blur(4px); }
+  to { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .home-moments-loader__petal,
+  .home-moments-loader__stack,
+  .home-moments-loader__card--a,
+  .home-moments-loader__card--b,
+  .home-moments-loader__card--c,
+  .home-moments-loader__bloom,
+  .home-moments-tile--enter {
+    animation: none !important;
+  }
+}

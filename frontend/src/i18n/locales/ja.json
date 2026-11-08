@@ -212,6 +212,8 @@
     "momentsTitle": "ひととき",
     "momentsSub": "残っているいくつかの画面を、ゆっくり。",
     "momentsCta": "ひとときへ",
+    "momentsLoading": "ゆっくり開いています…",
+    "momentsLoadingHint": "いち枚ずつ、ゆっくりと",
     "devDiaryKicker": "日記",
     "devDiaryTitle": "開発日記",
     "devDiarySub": "リリースのノートというより、小さな「好き」の足跡。更新を綴り、一緒に歩いてくれる方は開発者も募っています。",
