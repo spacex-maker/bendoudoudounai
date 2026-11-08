@@ -302,7 +302,7 @@ export function MusicPlayerBar({
               </div>
               <button
                 type="button"
-                className="h-10 w-10 shrink-0 flex items-center justify-center rounded-full bg-white text-black shadow-lg transition active:scale-95 disabled:opacity-30 disabled:active:scale-100"
+                className="music-player-play-btn h-10 w-10 shrink-0 flex items-center justify-center rounded-full transition active:scale-95 disabled:active:scale-100"
                 onClick={onTogglePlay}
                 disabled={!hasTrack}
               >
@@ -406,9 +406,8 @@ export function MusicPlayerBar({
             <button
               type="button"
               className={clsx(
-                "flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full text-white shadow-xl transition-all duration-300",
-                "bg-gradient-to-br from-rose-500 to-red-600 ring-1 ring-white/20 shadow-red-900/30",
-                "hover:scale-105 hover:brightness-110 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100 disabled:hover:brightness-100"
+                "music-player-play-btn flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full transition-all duration-300",
+                "hover:scale-105 hover:brightness-110 active:scale-95 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:brightness-100"
               )}
               onClick={onTogglePlay}
               disabled={!hasTrack}

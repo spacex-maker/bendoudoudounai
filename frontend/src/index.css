@@ -609,3 +609,17 @@
     animation: none !important;
   }
 }
+
+/* Brand accents — unlayered so they beat Tailwind button preflight */
+.music-player-play-btn {
+  background-image: linear-gradient(to bottom right, #f43f5e, #dc2626) !important;
+  background-color: #e11d48 !important;
+  color: #fff !important;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.2),
+    0 10px 15px -3px rgba(127, 29, 29, 0.3),
+    0 4px 6px -4px rgba(127, 29, 29, 0.3) !important;
+}
+.music-player-play-btn:disabled {
+  opacity: 0.4;
+}

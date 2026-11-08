@@ -635,7 +635,7 @@ export function ImmersiveLyricsStage({ onOpenHistoryPanel }: Props) {
                 </button>
                 <button
                   type="button"
-                  className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-rose-500 to-red-600 text-white shadow-lg shadow-red-900/30 ring-1 ring-white/15 transition hover:brightness-110 disabled:opacity-40 sm:h-12 sm:w-12"
+                  className="music-player-play-btn flex h-11 w-11 items-center justify-center rounded-full transition hover:brightness-110 sm:h-12 sm:w-12"
                   onClick={() => hasTrack && setPlaying((p) => !p)}
                   disabled={!hasTrack}
                   aria-label={playing ? t("vinyl.pause") : t("vinyl.play")}
