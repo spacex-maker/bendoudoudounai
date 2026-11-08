@@ -54,7 +54,7 @@ export function MomentsPage() {
   const [facets, setFacets] = useState<MomentColorFacetDto[]>([]);
   const [cinematic, setCinematic] = useState(false);
   const [countdownOpen, setCountdownOpen] = useState(false);
-  const { setQueue, selectTrack, setPlayMode, setPlaying, queue, currentTrack, audioRef } = useMusicPlayer();
+  const { setQueue, selectTrack, setPlayMode, playing, queue, currentTrack, audioRef } = useMusicPlayer();
   const idleTimerRef = useRef(0);
   const cancelCooldownUntilRef = useRef(0);
 
@@ -174,14 +174,15 @@ export function MomentsPage() {
     return currentTrack;
   }, [queue, currentTrack]);
 
-  /** 点击手势里静音解锁音频，真正开播只在进影院时发生一次 */
+  /** 未在播放时：点击手势里静音解锁，供倒计时结束后开播；已在播则不动 */
   const unlockMomentsAudio = useCallback(() => {
+    if (playing) return;
     const pick = pickMomentsTrack();
     if (!pick) return;
     selectTrack(pick, false);
     window.setTimeout(() => {
       const a = audioRef.current;
-      if (!a) return;
+      if (!a || !a.paused && a.currentTime > 0) return;
       const wasMuted = a.muted;
       a.muted = true;
       void a
@@ -199,26 +200,28 @@ export function MomentsPage() {
           a.muted = wasMuted;
         });
     }, 60);
-  }, [pickMomentsTrack, selectTrack, audioRef]);
+  }, [playing, pickMomentsTrack, selectTrack, audioRef]);
 
   const beginCinematicWithMusic = useCallback(() => {
     setCountdownOpen(false);
     setCinematic(true);
-    const pick = pickMomentsTrack();
-    if (pick) selectTrack(pick, true);
-  }, [pickMomentsTrack, selectTrack]);
+    // 已在播：继续；未在播：此刻开播一次
+    if (!playing) {
+      const pick = pickMomentsTrack();
+      if (pick) selectTrack(pick, true);
+    }
+  }, [playing, pickMomentsTrack, selectTrack]);
 
   const stopCinematic = useCallback(() => {
     setCinematic(false);
     setCountdownOpen(false);
-    setPlaying(false);
-  }, [setPlaying]);
+    // 退出沉浸不打断正在播放的歌曲
+  }, []);
 
   const cancelCountdown = useCallback(() => {
     setCountdownOpen(false);
-    setPlaying(false);
     cancelCooldownUntilRef.current = Date.now() + CINEMATIC_CANCEL_COOLDOWN_MS;
-  }, [setPlaying]);
+  }, []);
 
   const openCountdown = useCallback(() => {
     if (cinematic || countdownOpen) return;
