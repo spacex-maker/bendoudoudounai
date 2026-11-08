@@ -986,6 +986,12 @@
   font-weight: 650;
   letter-spacing: 0.02em;
 }
+.moments-roll-btn--hero {
+  padding: 0.65rem 1.25rem 0.65rem 0.65rem;
+  font-size: 0.95rem;
+  font-weight: 650;
+  letter-spacing: 0.03em;
+}
 .moments-roll-btn--fab {
   position: fixed;
   left: 1rem;

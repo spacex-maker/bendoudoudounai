@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Link } from "react-router-dom";
 import { ChevronLeft, ChevronRight, Crop, Loader2, Play, Square, Trash2, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import clsx from "clsx";
@@ -53,7 +52,6 @@ export function MomentsPage() {
   const [cropping, setCropping] = useState<MomentPhotoDto | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [facets, setFacets] = useState<MomentColorFacetDto[]>([]);
-  const [soundtrackReady, setSoundtrackReady] = useState(false);
   const [cinematic, setCinematic] = useState(false);
   const [countdownOpen, setCountdownOpen] = useState(false);
   const { setQueue, selectTrack, setPlayMode, setPlaying, queue } = useMusicPlayer();
@@ -82,7 +80,6 @@ export function MomentsPage() {
     void listMomentsSoundtrack()
       .then((tracks) => {
         if (cancelled || !tracks.length) return;
-        setSoundtrackReady(true);
         setQueue(tracks);
         setPlayMode("shuffle");
         const pick = tracks[Math.floor(Math.random() * tracks.length)]!;
@@ -287,27 +284,19 @@ export function MomentsPage() {
     >
       <SiteHeader />
       <main className="relative z-10 mx-auto max-w-6xl px-4 pb-20 pt-28 sm:px-6 sm:pt-32">
-        <header className="mb-7 sm:mb-9">
-          <div className="max-w-2xl">
+        <header className="mb-8 sm:mb-10">
+          <div className="mx-auto max-w-2xl text-center">
             <p className="font-display text-[11px] font-semibold uppercase tracking-[0.28em] text-rose-500/75">
               {t("moments.paletteStageLabel")}
             </p>
             <h1 className="mt-2 font-display text-[clamp(2.35rem,7vw,3.5rem)] leading-[1.08] tracking-tight text-warm-700">
               {t("moments.title")}
             </h1>
-            <p className="mt-3 max-w-xl text-sm leading-relaxed text-stone-600/85 sm:text-base">
+            <p className="mx-auto mt-3 max-w-xl text-sm leading-relaxed text-stone-600/85 sm:text-base">
               {t("moments.sub")}
             </p>
-            <div className="mt-4 flex flex-wrap items-center gap-3">
-              {isAdmin ? (
-                <Link
-                  to="/admin/moments"
-                  className="inline-block text-xs text-rose-500/80 underline-offset-4 transition hover:text-rose-600 hover:underline"
-                >
-                  {t("moments.manage")}
-                </Link>
-              ) : null}
-              {items.length >= 2 ? (
+            {items.length >= 2 ? (
+              <div className="mt-6 flex flex-col items-center gap-2.5">
                 <button
                   type="button"
                   onClick={() => {
@@ -316,24 +305,38 @@ export function MomentsPage() {
                     else openCountdown();
                   }}
                   className={clsx(
-                    "moments-roll-btn moments-roll-btn--header",
+                    "moments-roll-btn moments-roll-btn--hero",
                     cinematic && "moments-roll-btn--stop",
                     countdownOpen && !cinematic && "moments-roll-btn--cancel"
                   )}
+                  aria-label={
+                    cinematic
+                      ? t("moments.slideshowStop")
+                      : countdownOpen
+                        ? t("moments.countdownCancel")
+                        : t("moments.slideshowStart")
+                  }
                 >
-                  {cinematic ? (
-                    <Square className="h-3 w-3 fill-current" aria-hidden />
-                  ) : (
-                    <Play className="h-3.5 w-3.5 fill-current" aria-hidden />
-                  )}
-                  {cinematic
-                    ? t("moments.slideshowStop")
-                    : countdownOpen
-                      ? t("moments.countdownCancel")
-                      : t("moments.slideshowStart")}
+                  <span className="moments-roll-btn__icon" aria-hidden>
+                    {cinematic ? (
+                      <Square className="h-3.5 w-3.5 fill-current" />
+                    ) : (
+                      <Play className="h-4 w-4 fill-current" />
+                    )}
+                  </span>
+                  <span className="moments-roll-btn__label">
+                    {cinematic
+                      ? t("moments.slideshowStop")
+                      : countdownOpen
+                        ? t("moments.countdownCancel")
+                        : t("moments.slideshowStart")}
+                  </span>
                 </button>
-              ) : null}
-            </div>
+                {!cinematic && !countdownOpen ? (
+                  <p className="text-xs text-stone-500 sm:text-sm">{t("moments.slideshowImmerseHint")}</p>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         </header>
 
@@ -626,33 +629,6 @@ export function MomentsPage() {
         />
       ) : null}
 
-
-      {items.length >= 2 && !countdownOpen ? (
-        <button
-          type="button"
-          onClick={() => {
-            if (cinematic) stopCinematic();
-            else openCountdown();
-          }}
-          className={clsx(
-            "moments-roll-btn moments-roll-btn--fab",
-            cinematic && "moments-roll-btn--stop"
-          )}
-          aria-label={cinematic ? t("moments.slideshowStop") : t("moments.slideshowStart")}
-          title={soundtrackReady ? t("moments.slideshowWithMusic") : t("moments.slideshowStart")}
-        >
-          <span className="moments-roll-btn__icon" aria-hidden>
-            {cinematic ? (
-              <Square className="h-3.5 w-3.5 fill-current" />
-            ) : (
-              <Play className="h-4 w-4 fill-current" />
-            )}
-          </span>
-          <span className="moments-roll-btn__label">
-            {cinematic ? t("moments.slideshowStop") : t("moments.slideshowStart")}
-          </span>
-        </button>
-      ) : null}
 
       <ConfirmModal
         open={deleteOpen && !!active}
