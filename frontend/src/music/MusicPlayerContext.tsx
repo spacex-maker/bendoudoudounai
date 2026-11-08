@@ -29,7 +29,7 @@ function readStoredMomentsLyricEffect(): MomentsLyricEffect {
   } catch {
     /* ignore */
   }
-  return "fade";
+  return "typewriter";
 }
 
 function readStoredPlayMode(): PlayMode {
