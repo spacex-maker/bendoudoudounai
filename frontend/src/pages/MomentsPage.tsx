@@ -481,7 +481,7 @@ export function MomentsPage() {
                 <img
                   src={active.largeUrl || active.publicUrl}
                   alt={active.caption || ""}
-                  className="max-h-full max-w-full cursor-zoom-out object-contain select-none"
+                  className="max-h-full max-w-full cursor-zoom-out rounded-2xl object-contain select-none shadow-[0_20px_60px_rgba(0,0,0,0.35)] ring-1 ring-white/10 sm:rounded-3xl"
                   draggable={false}
                   onClick={() => setLightbox(null)}
                 />

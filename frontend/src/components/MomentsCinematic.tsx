@@ -11,60 +11,60 @@ type Props = {
   onOpenIndex: (index: number) => void;
 };
 
-const HOLD_MS = 5200;
-const FADE_MS = 900;
+/** 停留略长，给慢交叉淡入留呼吸感 */
+const HOLD_MS = 5600;
+/** 渐显/渐隐：约 1.7s，比原先 0.9s 更慢更柔 */
+const FADE_MS = 1700;
+
+function photoSrc(p: MomentPhotoDto) {
+  return p.largeUrl || p.publicUrl || p.thumbUrl || "";
+}
 
 /**
- * 片刻页空闲后的影院式幻灯：全屏暗场 + Ken Burns 缓推 + 交叉淡入淡出。
+ * 片刻页空闲后的影院式幻灯：全屏暗场 + Ken Burns 缓推 + 双层交叉淡入淡出。
  * 任意指针/滚轮/键盘操作退出；点图进入手动 lightbox。
  */
 export function MomentsCinematic({ items, active, onDismiss, onOpenIndex }: Props) {
   const { t } = useTranslation();
   const [index, setIndex] = useState(0);
-  const [phase, setPhase] = useState<"in" | "hold" | "out">("in");
+  /** 上一张仍叠在下层渐隐，实现真正的交叉溶解（不再先黑屏再淡入） */
+  const [outgoingIndex, setOutgoingIndex] = useState<number | null>(null);
 
   const safeItems = useMemo(() => items.filter((x) => !!(x.largeUrl || x.publicUrl || x.thumbUrl)), [items]);
-  const current = safeItems[index % Math.max(1, safeItems.length)];
+  const len = Math.max(1, safeItems.length);
+  const current = safeItems[index % len];
+  const outgoing = outgoingIndex != null ? safeItems[outgoingIndex % len] : null;
 
   useEffect(() => {
     if (!active || safeItems.length < 2) return;
     setIndex(0);
-    setPhase("in");
+    setOutgoingIndex(null);
   }, [active, safeItems.length]);
 
   useEffect(() => {
     if (!active || safeItems.length < 2) return;
     let cancelled = false;
-    let timer = 0;
-
-    const schedule = () => {
-      if (phase === "in") {
-        timer = window.setTimeout(() => {
-          if (!cancelled) setPhase("hold");
-        }, FADE_MS);
-      } else if (phase === "hold") {
-        timer = window.setTimeout(() => {
-          if (!cancelled) setPhase("out");
-        }, HOLD_MS);
-      } else {
-        timer = window.setTimeout(() => {
-          if (cancelled) return;
-          setIndex((i) => (i + 1) % safeItems.length);
-          setPhase("in");
-        }, FADE_MS);
-      }
-    };
-    schedule();
+    // 先等本张慢淡入结束，再完整停留 HOLD，最后才切下一张交叉溶解
+    const timer = window.setTimeout(() => {
+      if (cancelled) return;
+      setOutgoingIndex(index);
+      setIndex((i) => (i + 1) % safeItems.length);
+    }, FADE_MS + HOLD_MS);
     return () => {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [active, phase, index, safeItems.length]);
+  }, [active, index, safeItems.length]);
+
+  useEffect(() => {
+    if (outgoingIndex == null) return;
+    const timer = window.setTimeout(() => setOutgoingIndex(null), FADE_MS);
+    return () => window.clearTimeout(timer);
+  }, [outgoingIndex, index]);
 
   useEffect(() => {
     if (!active) return;
     const stop = (e: Event) => {
-      // 点在「轻触看大图」时交给按钮，不立刻 dismiss 与 click 冲突
       const target = e.target as HTMLElement | null;
       if (target?.closest?.("[data-cinematic-keep]")) return;
       onDismiss();
@@ -89,8 +89,15 @@ export function MomentsCinematic({ items, active, onDismiss, onOpenIndex }: Prop
 
   if (!active || !current || safeItems.length < 2) return null;
 
-  const src = current.largeUrl || current.publicUrl || current.thumbUrl;
-  const visible = phase !== "out";
+  const openCurrent = (e: { stopPropagation: () => void }) => {
+    e.stopPropagation();
+    const realIndex = items.findIndex((x) => x.id === current.id);
+    onDismiss();
+    if (realIndex >= 0) onOpenIndex(realIndex);
+  };
+
+  const frameClass =
+    "overflow-hidden rounded-2xl shadow-[0_30px_80px_rgba(0,0,0,0.45)] ring-1 ring-white/10 sm:rounded-3xl";
 
   return createPortal(
     <div
@@ -99,7 +106,7 @@ export function MomentsCinematic({ items, active, onDismiss, onOpenIndex }: Prop
       aria-label={t("moments.slideshowAria")}
     >
       <div
-        className="pointer-events-none absolute inset-0 opacity-40"
+        className="pointer-events-none absolute inset-0 opacity-40 transition-[background] duration-[1700ms] ease-out"
         style={{
           background:
             current.dominantHue == null
@@ -113,32 +120,48 @@ export function MomentsCinematic({ items, active, onDismiss, onOpenIndex }: Prop
         data-cinematic-keep
         className="absolute inset-0 z-10 cursor-zoom-in"
         aria-label={t("moments.slideshowOpen")}
-        onClick={(e) => {
-          e.stopPropagation();
-          const realIndex = items.findIndex((x) => x.id === current.id);
-          onDismiss();
-          if (realIndex >= 0) onOpenIndex(realIndex);
-        }}
+        onClick={openCurrent}
       />
 
       <div className="pointer-events-none relative z-[5] flex h-full w-full items-center justify-center px-6 py-16 sm:px-12">
-        <img
-          key={`${current.id}-${index}-${phase === "in" ? "a" : "b"}`}
-          src={src}
-          alt={current.caption || ""}
-          draggable={false}
-          className={clsx(
-            "moments-kenburns max-h-[min(88dvh,920px)] max-w-[min(94vw,1100px)] rounded-sm object-contain shadow-[0_30px_80px_rgba(0,0,0,0.45)]",
-            visible ? "opacity-100" : "opacity-0",
-            "transition-opacity duration-[900ms] ease-[cubic-bezier(0.22,1,0.36,1)]"
-          )}
-        />
+        <div className="relative max-h-[min(88dvh,920px)] max-w-[min(94vw,1100px)]">
+          {outgoing ? (
+            <div
+              key={`out-${outgoing.id}-${outgoingIndex}`}
+              className={clsx("moments-xfade moments-xfade--out absolute inset-0 z-[1]", frameClass)}
+              aria-hidden
+            >
+              <img
+                src={photoSrc(outgoing)}
+                alt=""
+                draggable={false}
+                className="h-full w-full object-contain"
+              />
+            </div>
+          ) : null}
+          <div
+            key={`in-${current.id}-${index}`}
+            className={clsx("moments-xfade moments-xfade--in relative z-[2]", frameClass)}
+          >
+            <img
+              src={photoSrc(current)}
+              alt={current.caption || ""}
+              draggable={false}
+              className="moments-kenburns max-h-[min(88dvh,920px)] max-w-[min(94vw,1100px)] object-contain"
+            />
+          </div>
+        </div>
       </div>
 
       <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black/70 via-black/25 to-transparent px-6 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-16">
         <div className="mx-auto flex max-w-3xl flex-col items-center gap-2 text-center">
           {current.caption ? (
-            <p className="text-sm text-white/80 sm:text-base">{current.caption}</p>
+            <p
+              key={`cap-${current.id}`}
+              className="moments-cinematic-caption text-sm text-white/80 sm:text-base"
+            >
+              {current.caption}
+            </p>
           ) : null}
           <p className="text-[11px] tracking-[0.18em] text-white/45 uppercase">
             {t("moments.slideshowHint", {
@@ -151,7 +174,7 @@ export function MomentsCinematic({ items, active, onDismiss, onOpenIndex }: Prop
               <span
                 key={p.id}
                 className={clsx(
-                  "h-1 rounded-full transition-all duration-500",
+                  "h-1 rounded-full transition-all duration-700",
                   i === index % safeItems.length ? "w-5 bg-white/80" : "w-1.5 bg-white/30"
                 )}
               />
@@ -161,17 +184,51 @@ export function MomentsCinematic({ items, active, onDismiss, onOpenIndex }: Prop
       </div>
 
       <style>{`
+        .moments-xfade {
+          will-change: opacity, filter;
+        }
+        .moments-xfade--in {
+          animation: moments-cross-in ${FADE_MS}ms cubic-bezier(0.22, 1, 0.36, 1) both;
+        }
+        .moments-xfade--out {
+          animation: moments-cross-out ${FADE_MS}ms cubic-bezier(0.4, 0, 0.2, 1) both;
+        }
+        .moments-cinematic-caption {
+          animation: moments-cap-in ${Math.round(FADE_MS * 0.85)}ms cubic-bezier(0.22, 1, 0.36, 1) both;
+        }
+        @keyframes moments-cross-in {
+          from { opacity: 0; filter: blur(5px); }
+          to { opacity: 1; filter: blur(0); }
+        }
+        @keyframes moments-cross-out {
+          from { opacity: 1; filter: blur(0); }
+          to { opacity: 0; filter: blur(7px); }
+        }
+        @keyframes moments-cap-in {
+          from { opacity: 0; transform: translateY(6px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
         @keyframes moments-kenburns {
           from { transform: scale(1.02); }
-          to { transform: scale(1.12); }
+          to { transform: scale(1.1); }
         }
         .moments-kenburns {
-          animation: moments-kenburns ${HOLD_MS + FADE_MS * 2}ms linear forwards;
+          animation: moments-kenburns ${HOLD_MS + FADE_MS}ms linear forwards;
           transform-origin: 50% 45%;
-          will-change: transform, opacity;
+          will-change: transform;
+          display: block;
         }
         @media (prefers-reduced-motion: reduce) {
-          .moments-kenburns { animation: none; }
+          .moments-xfade--in,
+          .moments-xfade--out,
+          .moments-kenburns,
+          .moments-cinematic-caption {
+            animation: none !important;
+            opacity: 1;
+            filter: none;
+            transform: none;
+          }
+          .moments-xfade--out { opacity: 0; }
         }
       `}</style>
     </div>,
