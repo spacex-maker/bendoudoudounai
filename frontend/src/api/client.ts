@@ -360,6 +360,9 @@ export interface AdminUserRowDto {
   hasAvatar: boolean;
   createdAtMillis: number;
   enabled: boolean;
+  beanBalance?: number;
+  beanLevelCode?: string | null;
+  beanLevelName?: string | null;
 }
 
 export interface BeanBalanceDto {
@@ -408,7 +411,16 @@ export async function fetchAdminUsers(): Promise<AdminUserRowDto[]> {
     const r = row.role ?? "USER";
     const roles = row.roles && row.roles.length > 0 ? row.roles : [r];
     const gender = row.gender ?? "UNKNOWN";
-    return { ...row, role: r, roles, gender, enabled: row.enabled !== false };
+    return {
+      ...row,
+      role: r,
+      roles,
+      gender,
+      enabled: row.enabled !== false,
+      beanBalance: row.beanBalance ?? 0,
+      beanLevelCode: row.beanLevelCode ?? null,
+      beanLevelName: row.beanLevelName ?? null,
+    };
   });
 }
 

@@ -618,6 +618,7 @@ public class UserService {
         var eff = accountRoleService.effectiveRolesForUserId(u.getId());
         var names = eff.stream().map(UserRole::name).sorted().collect(Collectors.toList());
         var primary = AccountRoleService.primaryRoleName(eff);
+        long beanBalance = beanService.queryBalance(u.getId());
         return new AdminUserListItem(
                 u.getId(),
                 u.getEmail(),
@@ -627,7 +628,10 @@ public class UserService {
                 names,
                 StringUtils.hasText(u.getAvatarStoredRelpath()),
                 u.getCreatedAt().toEpochMilli(),
-                u.isAccountEnabled()
+                u.isAccountEnabled(),
+                beanBalance,
+                beanService.resolveLevelCode(beanBalance),
+                beanService.resolveLevelName(beanBalance)
         );
     }
 

@@ -107,6 +107,7 @@
     "colEmail": "メール",
     "colName": "表示名",
     "colRole": "ロール",
+    "colBean": "Bean値",
     "colAvatar": "アイコン",
     "colJoined": "登録日時",
     "roleUser": "ユーザー",

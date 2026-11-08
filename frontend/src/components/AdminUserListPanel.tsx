@@ -131,7 +131,7 @@ export function AdminUserListPanel() {
         ) : !rows || rows.length === 0 ? (
           <p className="p-6 text-center text-sm text-zinc-500">{t("admin.usersEmpty")}</p>
         ) : (
-          <table className="w-full min-w-[44rem] border-collapse text-left text-xs sm:text-sm">
+          <table className="w-full min-w-[52rem] border-collapse text-left text-xs sm:text-sm">
             <thead className="sticky top-0 z-10 border-b border-zinc-800 bg-zinc-900/95 backdrop-blur">
               <tr>
                 <th className="whitespace-nowrap px-3 py-2.5 font-medium text-zinc-500 sm:px-4">{t("admin.colId")}</th>
@@ -139,6 +139,7 @@ export function AdminUserListPanel() {
                   {t("admin.colUser")}
                 </th>
                 <th className="whitespace-nowrap px-3 py-2.5 font-medium text-zinc-500 sm:px-4">{t("admin.colRole")}</th>
+                <th className="whitespace-nowrap px-3 py-2.5 font-medium text-zinc-500 sm:px-4">{t("admin.colBean")}</th>
                 <th className="whitespace-nowrap px-3 py-2.5 font-medium text-zinc-500 sm:px-4">{t("admin.colStatus")}</th>
                 <th className="whitespace-nowrap px-3 py-2.5 font-medium text-zinc-500 sm:px-4">{t("admin.colJoined")}</th>
                 <th className={clsx(adminTableActionTh, "font-medium text-zinc-500")}>{t("admin.colActions")}</th>
@@ -173,6 +174,18 @@ export function AdminUserListPanel() {
                             {roleLabel(r)}
                           </span>
                         ))}
+                      </div>
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-2.5 sm:px-4">
+                      <div className="flex flex-col gap-0.5">
+                        <span className="tabular-nums font-medium text-amber-300/95">
+                          {(u.beanBalance ?? 0).toLocaleString()}
+                        </span>
+                        {u.beanLevelName || u.beanLevelCode ? (
+                          <span className="text-[10px] leading-tight text-zinc-500">
+                            {u.beanLevelName || u.beanLevelCode}
+                          </span>
+                        ) : null}
                       </div>
                     </td>
                     <td className="whitespace-nowrap px-3 py-2.5 sm:px-4">

@@ -107,6 +107,7 @@
     "colEmail": "邮箱",
     "colName": "昵称",
     "colRole": "角色",
+    "colBean": "豆值",
     "colAvatar": "头像",
     "colJoined": "注册时间",
     "roleUser": "用户",

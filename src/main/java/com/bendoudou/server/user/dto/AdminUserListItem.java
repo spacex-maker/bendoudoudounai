@@ -16,5 +16,9 @@ public record AdminUserListItem(
         List<String> roles,
         boolean hasAvatar,
         long createdAtMillis,
-        boolean enabled
+        boolean enabled,
+        /** 豆值 */
+        long beanBalance,
+        String beanLevelCode,
+        String beanLevelName
 ) {}
